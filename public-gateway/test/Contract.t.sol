@@ -9,4 +9,8 @@ contract ContractTest is Test {
     function testExample() public {
         assertTrue(true);
     }
+
+    function testExampleTwo() public {
+        assertTrue(true);
+    }
 }
