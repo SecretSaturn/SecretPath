@@ -4,6 +4,3 @@
 [submodule "public-gateway/lib/openzeppelin-contracts"]
 	path = public-gateway/lib/openzeppelin-contracts
 	url = https://github.com/openzeppelin/openzeppelin-contracts
-[submodule "public-gateway/lib/solmate"]
-	path = public-gateway/lib/solmate
-	url = https://github.com/transmissions11/solmate
