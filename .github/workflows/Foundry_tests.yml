@@ -1,5 +1,8 @@
 name: Foundry Tests
-on:  [push]
+on:
+  push:
+    paths:
+      - 'public-gateway/**'
 
 jobs:
   tests:
