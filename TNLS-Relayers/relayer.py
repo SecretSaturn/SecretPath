@@ -1,4 +1,4 @@
-'''
+"""
 Overall execution:
 
 poller:
@@ -6,7 +6,7 @@ poller:
 every N seconds:
 poll both sides for gateway transactions
 parse transactions into list of objects
-save each object somewhere? (sqlite?)
+save each object in task list
 spin up thread to handle routing each object to the right location
 
 Individual thread:
@@ -15,21 +15,28 @@ get destination network
 verify signature?
 stringify object as json
 send json string to destination network
-update sqlite db (keyed by task ID) with state of object
+"""
 
-'''
-
-from eth_interface import EthInterface, EthContract
-from scrt_interface import SCRTInterface, SCRTContract
-from base_interface import Task
-from threading import Thread
 from logging import getLogger, basicConfig, DEBUG, StreamHandler
+from threading import Thread
 from time import sleep
+from typing import Dict, Tuple
+
+from base_interface import Task, BaseContractInterface, BaseChainInterface
 
 
 class Relayer:
-    def __init__(self, dict_of_names_to_interfaces):
+    def __init__(self,
+                 dict_of_names_to_interfaces: Dict[str, Tuple[BaseChainInterface, BaseContractInterface, str, str]],
+                 num_loops=None):
+        """
+
+        Args:
+            dict_of_names_to_interfaces: Dict mapping interface names to
+            (chain_interface, contract_interface, evt_name, function_name) tuples
+        """
         self.task_list = []
+        self.task_ids_to_statuses = {}
         self.task_threads = []
         self.dict_of_names_to_interfaces = dict_of_names_to_interfaces
         basicConfig(
@@ -38,42 +45,85 @@ class Relayer:
             handlers=[StreamHandler()],
         )
         self.logger = getLogger()
+        self.num_loops = num_loops
 
         pass
 
     def poll_for_transactions(self):
-        for name, (chain_interface, contract_interface) in self.dict_of_names_to_interfaces.items():
+        """
+        Polls for transactions on all interfaces
+        Updates task list with found events
+        """
+        for name, (chain_interface, contract_interface, evt_name, _) in self.dict_of_names_to_interfaces.items():
             transactions = chain_interface.get_transactions()
             for transaction in transactions:
-                task = contract_interface.parse_event_from_txn(transaction)
-                self.task_list.append(task)
+                tasks = contract_interface.parse_event_from_txn(evt_name, transaction)
+                for task in tasks:
+                    task_id = task.task_data['task_id']
+                    self.task_ids_to_statuses[task_id] = 'Received from {}'.format(name)
+                self.task_list.extend(tasks)
 
     def route_transaction(self, task: Task):
+        """
+        Given a Task, routes it where it's supposed to go
+        Args:
+            task: the Task to be routed
+        """
+        self.logger.info('Routing task {}'.format(task))
+        if task.task_destination_network is None:
+            self.logger.warning(f'Task {task} has no destination network, not routing')
+            self.task_ids_to_statuses[task.task_data['task_id']] = 'Failed to route'
+            return
+        if task.task_destination_network not in self.dict_of_names_to_interfaces:
+            self.logger.warning(f'Network {task.task_destination_network} is unknown, not routing')
+            self.task_ids_to_statuses[task.task_data['task_id']] = 'Failed to route'
+            return
         contract_for_txn = self.dict_of_names_to_interfaces[task.task_destination_network][1]
-        function = contract_for_txn.get_function(task.task_data['function_name'])
-        contract_for_txn.call_function(function, str(task))
+        function_name = self.dict_of_names_to_interfaces[task.task_destination_network][3]
+        contract_for_txn.call_function(function_name, str(task))
+        self.task_ids_to_statuses[task.task_data['task_id']] = 'Routed to {}'.format(task.task_destination_network)
         self.logger.info('Routed {} to {}'.format(task, task.task_destination_network))
         pass
 
     def task_list_handle(self):
-        def thread_func():
-            while(len(self.task_list) > 0):
+        """
+        Spins up threads to handle each task in the task list
+
+        """
+
+        def _thread_func():
+            while len(self.task_list) > 0:
                 task = self.task_list.pop()
                 self.route_transaction(task)
-        if len(self.task_threads)<5 and len(self.task_list)>0:
-            thread = Thread(target=thread_func)
+
+        if len(self.task_threads) < 5 and len(self.task_list) > 0:
+            thread = Thread(target=_thread_func)
             thread.start()
             self.task_threads.append(thread)
         self.task_threads = [thread_live for thread_live in self.task_threads if thread_live.is_alive()]
+
     def run(self):
+        """
+        Runs the central relayer event loop:
+        poll for transactions,
+        log them,
+        handle transactions
+        sleep
+
+        """
         self.logger.info('Starting relayer')
-        while True:
+        loops_run = 0
+        while (self.num_loops is not None and loops_run < self.num_loops) or self.num_loops is None:
             self.poll_for_transactions()
             self.logger.info('Polled for transactions, now have {} remaining'.format(len(self.task_list)))
             self.task_list_handle()
-            self.logger.info('handled transactions')
+            loops_run += 1
             sleep(5)
         pass
+
+    def __str__(self):
+        return f'Tasks to be handled: {[str(task) for task in self.task_list]}, ' \
+               f'Status of all tasks: {self.task_ids_to_statuses}'
 
 
 if __name__ == '__main__':

@@ -1,0 +1,7 @@
+fake_contract_bad:
+  contract_address: "Fake_address"
+  contract_schema: "Fake_schema"
+  private_key: "Fake_key"
+  wallet_address: "Fake_wallet"
+  event_name: "Fake_event"
+  function_name: "Fake_function"
