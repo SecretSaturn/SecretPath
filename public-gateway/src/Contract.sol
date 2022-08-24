@@ -136,7 +136,7 @@ contract Gateway {
 
     }
 
-    /// @notice  Get the encoded hash of the inputs for signing
+    /// @notice Get the encoded hash of the inputs for signing
     /// @param _routeInput Route name
     /// @param _verificationAddressInput Address corresponding to the route
     function getRouteHash(
@@ -152,13 +152,17 @@ contract Gateway {
 
     /// @notice Pre-Execution
     /// @param _handle handle for routing
-    /// @param _contractAddress contract address for routing
-    /// @param _inputs inputs provided for the execution
-    /// @param _callback callback for the sorce destination
-    /// @param _signature signature of params
+    /// @param _userAddress The address of the sender
+    /// @param _sourceNetwork Source network of the message
+    /// @param _routingInfo Where to go one pulled into the next gateway
+    /// @param routingInfoSignature callback for the sorce destination
+    /// @param _payload Payload (data + routing_info + user_address)
+    /// @param _payloadSignature Payload Signature
+    /// @param _packetSignature Signature of the whole above packet
+    /// @param _taskId TaskID for the message
     function preExecution() public  {
-        // is the signature just for the inputs or any other data attached to it ?
-        // what is a _handle ?
+       
+
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -172,8 +176,9 @@ contract Gateway {
     /// @param _sourceNetwork
     function postExecution() public {
 
-        
+
     }
+
 
 
 
