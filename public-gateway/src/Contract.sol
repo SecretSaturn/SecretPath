@@ -2,12 +2,37 @@
 pragma solidity ^0.8.10;
 
 import "openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol";
+import "openzeppelin-contracts/contracts/utils/Counters.sol";
 
 contract Gateway {
 
 
     /// @notice thrown when the signature is invalid
     error InvalidSignature();
+
+    /// @notice Structured task for presistence
+    /// @param callbackAddress contract address for callback
+    /// @param callbackSelector function selector for computed callback 
+    /// @param userAddress The address of the sender
+    /// @param sourceNetwork Source network of the message
+    /// @param routingInfo Where to go one pulled into the next gateway
+    /// @param completed  Task completion status
+    struct Task {
+        address callbackAddress;
+        bytes4 callbackSelector;
+        address userAddress;
+        string sourceNetwork;
+        string routingInfo;
+        bool completed;
+    }
+
+    using Counters for Counters.Counter;
+
+    Counters.Counter private taskIds;
+
+
+    /// @dev Task ID ====> Task
+    mapping(uint256=>Task) private tasks;
 
 
     /*//////////////////////////////////////////////////////////////
@@ -151,17 +176,29 @@ contract Gateway {
     //////////////////////////////////////////////////////////////*/
 
     /// @notice Pre-Execution
-    /// @param _handle handle for routing
+    /// @param _callbackAddress contract address for callback
+    /// @param _callbackSelector function selector for computed callback 
     /// @param _userAddress The address of the sender
     /// @param _sourceNetwork Source network of the message
     /// @param _routingInfo Where to go one pulled into the next gateway
-    /// @param routingInfoSignature callback for the sorce destination
-    /// @param _payload Payload (data + routing_info + user_address)
+    /// @param _routingInfoSignature Signed hash of _routingInfo
+    /// @param _payload Encrypted (data + routing_info + user_address)
     /// @param _payloadSignature Payload Signature
     /// @param _packetSignature Signature of the whole above packet
-    /// @param _taskId TaskID for the message
-    function preExecution() public  {
+    function preExecution(
+        address _callbackAddress,
+        bytes4 _callbackSelector,
+        address _userAddress,
+        string memory _sourceNetwork,
+        string memory _routingInfo,
+        bytes memory _routingInfoSignature,
+        bytes memory _payload,
+        bytes memory _payloadSignature,
+        bytes memory _packetSignature
+    ) public  {
        
+
+
 
     }
 
