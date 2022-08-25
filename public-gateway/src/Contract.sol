@@ -34,6 +34,17 @@ contract Gateway {
     /// @dev Task ID ====> Task
     mapping(uint256=>Task) private tasks;
 
+    function newTask(
+        address _callbackAddress,
+        bytes4 _callbackSelector,
+        address _userAddress,
+        string memory _sourceNetwork,
+        string memory _routingInfo,
+        bool _completed
+    ) public pure returns (Task memory) {
+        return Task(_callbackAddress, _callbackSelector, _userAddress, _sourceNetwork, _routingInfo, false);
+    }
+
 
     /*//////////////////////////////////////////////////////////////
                            Signature Utils
