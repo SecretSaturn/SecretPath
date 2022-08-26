@@ -6,9 +6,14 @@ import "openzeppelin-contracts/contracts/utils/Counters.sol";
 
 contract Gateway {
 
+    using Counters for Counters.Counter;
 
     /// @notice thrown when the signature is invalid
     error InvalidSignature();
+
+    /*//////////////////////////////////////////////////////////////
+                              Task
+    //////////////////////////////////////////////////////////////*/
 
     /// @notice Structured task for presistence
     /// @param callbackAddress contract address for callback
@@ -26,21 +31,12 @@ contract Gateway {
         bool completed;
     }
 
-    using Counters for Counters.Counter;
-
-    Counters.Counter private taskIds;
-
-
-    /// @dev Task ID ====> Task
-    mapping(uint256=>Task) private tasks;
-
     function newTask(
         address _callbackAddress,
         bytes4 _callbackSelector,
         address _userAddress,
         string memory _sourceNetwork,
-        string memory _routingInfo,
-        bool _completed
+        string memory _routingInfo
     ) public pure returns (Task memory) {
         return Task(_callbackAddress, _callbackSelector, _userAddress, _sourceNetwork, _routingInfo, false);
     }
@@ -186,6 +182,13 @@ contract Gateway {
                              Pre Execution
     //////////////////////////////////////////////////////////////*/
 
+    Counters.Counter private taskIds;
+
+    /// @dev Task ID ====> Task
+    mapping(uint256=>Task) private tasks;
+
+
+
     /// @notice Pre-Execution
     /// @param _callbackAddress contract address for callback
     /// @param _callbackSelector function selector for computed callback 
@@ -208,6 +211,13 @@ contract Gateway {
         bytes memory _packetSignature
     ) public  {
        
+         Task memory task ;
+         task = newTask(_callbackAddress, _callbackSelector, _userAddress, _sourceNetwork, _routingInfo);
+
+         taskIds.increment();
+         uint256 taskId = taskIds.current();
+         tasks[taskId] = task;
+
 
 
 
