@@ -211,14 +211,17 @@ contract Gateway {
         bytes memory _packetSignature
     ) public  {
        
-         Task memory task ;
+         // verify the signatures here
+         
+         
+         Task memory task;
          task = newTask(_callbackAddress, _callbackSelector, _userAddress, _sourceNetwork, _routingInfo);
 
          taskIds.increment();
          uint256 taskId = taskIds.current();
          tasks[taskId] = task;
 
-
+        // add an event here with the interchain message
 
 
     }
@@ -228,12 +231,26 @@ contract Gateway {
     //////////////////////////////////////////////////////////////*/
 
     /// @notice Post-Execution
-    /// @param _outputs Outputs from the private execution
-    /// @param _data task ID+input pair
-    /// @param _signature signature of params
-    /// @param _sourceNetwork
-    function postExecution() public {
+    /// @param _sourceNetwork Source network of the message
+    /// @param _routingInfo Where to go one pulled into the next gateway
+    /// @param _routingInfoSignature Signed hash of _routingInfo
+    /// @param _payload Encrypted (data + routing_info + user_address)
+    /// @param _payloadSignature Payload Signature
+    /// @param _packetSignature Signature of the whole above packet
+    /// @param _taskId TaskId for the transmission of the message
+    function postExecution(
+        string memory _sourceNetwork,
+        string memory _routingInfo,
+        bytes memory _routingInfoSignature,
+        bytes memory _payload,
+        bytes memory _payloadSignature,
+        bytes memory _packetSignature,
+        uint256 _taskId
+    ) public {
 
+        // get the verification key from the map (verify Signature??)
+        // check the inputs match task ID? & task ID is in the map?
+        // do the callback
 
     }
 
