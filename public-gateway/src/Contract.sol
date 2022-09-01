@@ -20,21 +20,21 @@ contract Gateway {
         address _userAddressLog,
         string _sourceNetworkLog,
         string _routingInfoLog,
-        Signature _routingInfoSignatureLog,
+        bytes _routingInfoSignatureLog,
         bytes _payloadLog,
         bytes32 _payloadHashLog,
-        Signature _payloadSignatureLog,
-        Signature _packetSignatureLog
+        bytes _payloadSignatureLog,
+        bytes _packetSignatureLog
     );
 
     event logCompletedTask(
         string _sourceNetworkLog,
         string _routingInfoLog,
-        Signature _routingInfoSignatureLog,
+        bytes _routingInfoSignatureLog,
         bytes _payloadLog,
         bytes32 _payloadHashLog,
-        Signature _payloadSignatureLog,
-        Signature _packetSignatureLog,
+        bytes _payloadSignatureLog,
+        bytes _packetSignatureLog,
         uint256 _taskIdLog
     );
 
@@ -76,12 +76,6 @@ contract Gateway {
                            Signature Utils
     //////////////////////////////////////////////////////////////*/
 
-    struct Signature {
-        uint8 v;
-        bytes32 r;
-        bytes32 s;
-    }
-
     /// @notice Splitting signature util for recovery
     /// @param _sig The signature
     function splitSignature(bytes memory _sig) public pure returns (bytes32 r, bytes32 s, uint8 v) {
@@ -111,10 +105,10 @@ contract Gateway {
     /// @notice Recover the signer from message hash
     /// @param _ethSignedMessageHash The message hash from getEthSignedMessageHash()
     /// @param _signature The signature that needs to be verified
-    function recoverSigner(bytes32 _ethSignedMessageHash, Signature memory _signature) public pure returns (address) {
-        // (bytes32 r, bytes32 s, uint8 v) = splitSignature(_signature);
+    function recoverSigner(bytes32 _ethSignedMessageHash, bytes memory _signature) public pure returns (address) {
+        (bytes32 r, bytes32 s, uint8 v) = splitSignature(_signature);
 
-        return ecrecover(_ethSignedMessageHash, _signature.v, _signature.r, _signature.s);
+        return ecrecover(_ethSignedMessageHash, v, r, s);
     }
 
     /// @notice Hashes the encoded message hash
@@ -165,7 +159,7 @@ contract Gateway {
     /// @param _route Route name
     /// @param _verificationAddress Address corresponding to the route
     /// @param _signature Signed hashed inputs(_route + _verificationAddress)
-    function updateRoute(string memory _route, address _verificationAddress, Signature memory _signature) public onlyOwner {
+    function updateRoute(string memory _route, address _verificationAddress, bytes memory _signature) public onlyOwner {
         bytes32 routeHash = getRouteHash(_route, _verificationAddress);
         bytes32 ethSignedMessageHash = getEthSignedMessageHash(routeHash);
 
@@ -212,11 +206,11 @@ contract Gateway {
         address _userAddress,
         string memory _sourceNetwork,
         string memory _routingInfo,
-        Signature memory _routingInfoSignature,
+        bytes memory _routingInfoSignature,
         bytes memory _payload,
         bytes32 _payloadHash,
-        Signature memory _payloadSignature,
-        Signature memory _packetSignature
+        bytes memory _payloadSignature,
+        bytes memory _packetSignature
     )
         public
     {
@@ -297,10 +291,10 @@ contract Gateway {
         address _userAddress,
         string memory _sourceNetwork,
         string memory _routingInfo,
-        Signature memory _routingInfoSignature,
+        bytes memory _routingInfoSignature,
         bytes memory _payload,
         bytes32 _payloadHash,
-        Signature memory _payloadSignature
+        bytes memory _payloadSignature
     )
         public
         pure
@@ -337,11 +331,11 @@ contract Gateway {
     function postExecution(
         string memory _sourceNetwork,
         string memory _routingInfo,
-        Signature memory _routingInfoSignature,
+        bytes memory _routingInfoSignature,
         bytes memory _payload,
         bytes32 _payloadHash,
-        Signature memory _payloadSignature,
-        Signature memory _packetSignature,
+        bytes memory _payloadSignature,
+        bytes memory _packetSignature,
         uint256 _taskId
     )
         public

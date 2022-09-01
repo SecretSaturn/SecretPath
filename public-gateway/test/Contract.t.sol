@@ -58,10 +58,10 @@ contract ContractTest is Test {
         bytes32 ethSignedMessageHash = gateway.getEthSignedMessageHash(routeHash);
 
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(5, ethSignedMessageHash);
-        Gateway.Signature memory signature = Gateway.Signature({v: v, r: r, s: s});
+        bytes memory sig = abi.encodePacked(r, s, v);
 
         vm.prank(deployer);
-        gateway.updateRoute(sampleRoute, SampleVerificationAddress, signature);
+        gateway.updateRoute(sampleRoute, SampleVerificationAddress, sig);
 
         assertEq(gateway.route("secret"), SampleVerificationAddress);
     }
@@ -81,10 +81,10 @@ contract ContractTest is Test {
         bytes32 ethSignedMessageHash = gateway.getEthSignedMessageHash(routeHash);
 
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(7, ethSignedMessageHash);
-        Gateway.Signature memory signature = Gateway.Signature({v: v, r: r, s: s});
+        bytes memory sig = abi.encodePacked(r, s, v);
 
         vm.prank(deployer);
-        gateway.updateRoute(sampleRoute, SampleVerificationAddress, signature);
+        gateway.updateRoute(sampleRoute, SampleVerificationAddress, sig);
 
         vm.expectRevert(abi.encodeWithSignature("InvalidSignature()"));
     }
@@ -104,9 +104,9 @@ contract ContractTest is Test {
         bytes32 ethSignedMessageHash = gateway.getEthSignedMessageHash(routeHash);
 
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(5, ethSignedMessageHash);
-        Gateway.Signature memory signature = Gateway.Signature({v: v, r: r, s: s});
+        bytes memory sig = abi.encodePacked(r, s, v);
 
-        gateway.updateRoute(sampleRoute, SampleVerificationAddress, signature);
+        gateway.updateRoute(sampleRoute, SampleVerificationAddress, sig);
     }
 
     function testFail_NonOwnerCannotUpdateRouteWithoutValidSignature() public {
@@ -124,8 +124,8 @@ contract ContractTest is Test {
         bytes32 ethSignedMessageHash = gateway.getEthSignedMessageHash(routeHash);
 
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(7, ethSignedMessageHash);
-        Gateway.Signature memory signature = Gateway.Signature({v: v, r: r, s: s});
+        bytes memory sig = abi.encodePacked(r, s, v);
 
-        gateway.updateRoute(sampleRoute, SampleVerificationAddress, signature);
+        gateway.updateRoute(sampleRoute, SampleVerificationAddress, sig);
     }
 }
