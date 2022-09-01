@@ -5,11 +5,38 @@ import "openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol";
 import "openzeppelin-contracts/contracts/utils/Counters.sol";
 
 contract Gateway {
-
     using Counters for Counters.Counter;
 
     /// @notice thrown when the signature is invalid
     error InvalidSignature();
+
+    /*//////////////////////////////////////////////////////////////
+                              Events
+    //////////////////////////////////////////////////////////////*/
+
+    event logNewTask(
+        address _callbackAddressLog,
+        bytes4 _callbackSelectorLog,
+        address _userAddressLog,
+        string _sourceNetworkLog,
+        string _routingInfoLog,
+        Signature _routingInfoSignatureLog,
+        bytes _payloadLog,
+        bytes32 _payloadHashLog,
+        Signature _payloadSignatureLog,
+        Signature _packetSignatureLog
+    );
+
+    event logCompletedTask(
+        string _sourceNetworkLog,
+        string _routingInfoLog,
+        Signature _routingInfoSignatureLog,
+        bytes _payloadLog,
+        bytes32 _payloadHashLog,
+        Signature _payloadSignatureLog,
+        Signature _packetSignatureLog,
+        uint256 _taskIdLog
+    );
 
     /*//////////////////////////////////////////////////////////////
                               Task
@@ -17,7 +44,7 @@ contract Gateway {
 
     /// @notice Structured task for presistence
     /// @param callbackAddress contract address for callback
-    /// @param callbackSelector function selector for computed callback 
+    /// @param callbackSelector function selector for computed callback
     /// @param userAddress The address of the sender
     /// @param sourceNetwork Source network of the message
     /// @param routingInfo Where to go one pulled into the next gateway
@@ -37,26 +64,27 @@ contract Gateway {
         address _userAddress,
         string memory _sourceNetwork,
         string memory _routingInfo
-    ) public pure returns (Task memory) {
+    )
+        public
+        pure
+        returns (Task memory)
+    {
         return Task(_callbackAddress, _callbackSelector, _userAddress, _sourceNetwork, _routingInfo, false);
     }
-
 
     /*//////////////////////////////////////////////////////////////
                            Signature Utils
     //////////////////////////////////////////////////////////////*/
 
+    struct Signature {
+        uint8 v;
+        bytes32 r;
+        bytes32 s;
+    }
+
     /// @notice Splitting signature util for recovery
     /// @param _sig The signature
-    function splitSignature(bytes memory _sig)
-        public
-        pure
-        returns (
-            bytes32 r,
-            bytes32 s,
-            uint8 v
-        )
-    {
+    function splitSignature(bytes memory _sig) public pure returns (bytes32 r, bytes32 s, uint8 v) {
         require(_sig.length == 65, "invalid signature length");
 
         assembly {
@@ -83,39 +111,27 @@ contract Gateway {
     /// @notice Recover the signer from message hash
     /// @param _ethSignedMessageHash The message hash from getEthSignedMessageHash()
     /// @param _signature The signature that needs to be verified
-    function recoverSigner(bytes32 _ethSignedMessageHash, bytes memory _signature)
-        public
-        pure
-        returns (address)
-    {
-        (bytes32 r, bytes32 s, uint8 v) = splitSignature(_signature);
+    function recoverSigner(bytes32 _ethSignedMessageHash, Signature memory _signature) public pure returns (address) {
+        // (bytes32 r, bytes32 s, uint8 v) = splitSignature(_signature);
 
-        return ecrecover(_ethSignedMessageHash, v, r, s);
+        return ecrecover(_ethSignedMessageHash, _signature.v, _signature.r, _signature.s);
     }
 
     /// @notice Hashes the encoded message hash
-    /// @param _messageHash the message hash 
-    function getEthSignedMessageHash(bytes32 _messageHash)
-        public
-        pure
-        returns (bytes32)
-    {
+    /// @param _messageHash the message hash
+    function getEthSignedMessageHash(bytes32 _messageHash) public pure returns (bytes32) {
         /*
         Signature is produced by signing a keccak256 hash with the following format:
         "\x19Ethereum Signed Message\n" + len(msg) + msg
         */
-        return
-            keccak256(
-                abi.encodePacked("\x19Ethereum Signed Message:\n32", _messageHash)
-            );
+        return keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", _messageHash));
     }
-
 
     /*//////////////////////////////////////////////////////////////
                              Constructor
     //////////////////////////////////////////////////////////////*/
 
-    address private owner;
+    address public owner;
 
     constructor() {
         owner = msg.sender;
@@ -130,7 +146,7 @@ contract Gateway {
                              Initialization
     //////////////////////////////////////////////////////////////*/
 
-    address masterVerificationAddress;
+    address public masterVerificationAddress;
 
     /// @notice Initialize the verification address
     /// @param _masterVerificationAddress The input address
@@ -142,39 +158,31 @@ contract Gateway {
                              Update Routes
     //////////////////////////////////////////////////////////////*/
 
-   /// @dev mapping of chain name string to the verification address
-   mapping (string=>address) route; 
-
+    /// @dev mapping of chain name string to the verification address
+    mapping(string => address) public route;
 
     /// @notice Updating the route
     /// @param _route Route name
     /// @param _verificationAddress Address corresponding to the route
     /// @param _signature Signed hashed inputs(_route + _verificationAddress)
-    function updateRoute(
-        string memory _route,
-        address _verificationAddress,
-        bytes memory _signature
-    ) public onlyOwner {
-        
+    function updateRoute(string memory _route, address _verificationAddress, Signature memory _signature) public onlyOwner {
         bytes32 routeHash = getRouteHash(_route, _verificationAddress);
         bytes32 ethSignedMessageHash = getEthSignedMessageHash(routeHash);
 
         bool verifySig;
         verifySig = recoverSigner(ethSignedMessageHash, _signature) == masterVerificationAddress;
 
-        if (!verifySig) revert InvalidSignature();
+        if (!verifySig) {
+            revert InvalidSignature();
+        }
 
         route[_route] = _verificationAddress;
-
     }
 
     /// @notice Get the encoded hash of the inputs for signing
     /// @param _routeInput Route name
     /// @param _verificationAddressInput Address corresponding to the route
-    function getRouteHash(
-        string memory _routeInput,
-        address _verificationAddressInput
-    ) public pure returns (bytes32) {
+    function getRouteHash(string memory _routeInput, address _verificationAddressInput) public pure returns (bytes32) {
         return keccak256(abi.encode(_routeInput, _verificationAddressInput));
     }
 
@@ -185,27 +193,11 @@ contract Gateway {
     Counters.Counter private taskIds;
 
     /// @dev Task ID ====> Task
-    mapping(uint256=>Task) private tasks;
-
-
-    event logNewTask(
-        address _callbackAddressLog,
-        bytes4 _callbackSelectorLog,
-        address _userAddressLog,
-        string  _sourceNetworkLog,
-        string  _routingInfoLog,
-        bytes  _routingInfoSignatureLog,
-        bytes  _payloadLog,
-        bytes32 _payloadHashLog,
-        bytes  _payloadSignatureLog,
-        bytes  _packetSignatureLog
-    );
-
-
+    mapping(uint256 => Task) private tasks;
 
     /// @notice Pre-Execution
     /// @param _callbackAddress contract address for callback
-    /// @param _callbackSelector function selector for computed callback 
+    /// @param _callbackSelector function selector for computed callback
     /// @param _userAddress The address of the sender
     /// @param _sourceNetwork Source network of the message
     /// @param _routingInfo Where to go one pulled into the next gateway
@@ -220,57 +212,81 @@ contract Gateway {
         address _userAddress,
         string memory _sourceNetwork,
         string memory _routingInfo,
-        bytes memory _routingInfoSignature,
+        Signature memory _routingInfoSignature,
         bytes memory _payload,
         bytes32 _payloadHash,
-        bytes memory _payloadSignature,
-        bytes memory _packetSignature
-    ) public  {
-       
-         // Route info signature verification
-         bytes32 routeInfoHash = getRouteInfoHash(_routingInfo);
-         bytes32 routeInfoEthSignedMessageHash = getEthSignedMessageHash(routeInfoHash);
+        Signature memory _payloadSignature,
+        Signature memory _packetSignature
+    )
+        public
+    {
+        bytes32 tempHash;
+        bytes32 tempSignedEthMessageHash;
+        bool verifySig;
 
-         bool verifyRouteInfoSig;
-         verifyRouteInfoSig = recoverSigner(routeInfoEthSignedMessageHash, _routingInfoSignature) == _userAddress;
+        // Route info signature verification
+        tempHash = getRouteInfoHash(_routingInfo);
+        tempSignedEthMessageHash = getEthSignedMessageHash(tempHash);
 
-         if (!verifyRouteInfoSig) revert InvalidSignature();
+        verifySig = true;
+        verifySig = recoverSigner(tempSignedEthMessageHash, _routingInfoSignature) == _userAddress;
+        if (!verifySig) {
+            revert InvalidSignature();
+        }
 
-         // Payload hash signature verification
-         bool verifyPayloadHashSig;
-         verifyPayloadHashSig = recoverSigner(_payloadHash, _payloadSignature) == _userAddress;
-         if (!verifyPayloadHashSig) revert InvalidSignature();
+        // Payload hash signature verification
+        verifySig = true;
+        verifySig = recoverSigner(_payloadHash, _payloadSignature) == _userAddress;
+        if (!verifySig) {
+            revert InvalidSignature();
+        }
 
+        // Packet signature verification
+        tempHash = getPacketHash(
+            _callbackAddress,
+            _callbackSelector,
+            _userAddress,
+            _sourceNetwork,
+            _routingInfo,
+            _routingInfoSignature,
+            _payload,
+            _payloadHash,
+            _payloadSignature
+        );
+        tempSignedEthMessageHash = getEthSignedMessageHash(tempHash);
 
-         // Packet signature verification
-         bytes32 packetHash = getPacketHash(_callbackAddress, _callbackSelector, _userAddress, _sourceNetwork, _routingInfo, _routingInfoSignature, _payload, _payloadHash, _payloadSignature);
-         bytes32 PacketEthSignedMessageHash = getEthSignedMessageHash(packetHash);
+        verifySig = true;
+        verifySig = recoverSigner(tempSignedEthMessageHash, _packetSignature) == _userAddress;
+        if (!verifySig) {
+            revert InvalidSignature();
+        }
 
-         bool verifyPacketSig;
-         verifyPacketSig = recoverSigner(PacketEthSignedMessageHash, _packetSignature) == _userAddress;
+        // Creating the task
+        Task memory task;
+        task = newTask(_callbackAddress, _callbackSelector, _userAddress, _sourceNetwork, _routingInfo);
 
-         if (!verifyPacketSig) revert InvalidSignature();
+        // Incrementing the ID and persisting the task
+        taskIds.increment();
+        uint256 taskId = taskIds.current();
+        tasks[taskId] = task;
 
-         
-         // Creating the task
-         Task memory task;
-         task = newTask(_callbackAddress, _callbackSelector, _userAddress, _sourceNetwork, _routingInfo);
-
-         taskIds.increment();
-         uint256 taskId = taskIds.current();
-         tasks[taskId] = task;
-
-         emit logNewTask(_callbackAddress, _callbackSelector, _userAddress, _sourceNetwork, _routingInfo, _routingInfoSignature, _payload, _payloadHash, _payloadSignature, _packetSignature);
-        
-
-
+        emit logNewTask(
+            _callbackAddress,
+            _callbackSelector,
+            _userAddress,
+            _sourceNetwork,
+            _routingInfo,
+            _routingInfoSignature,
+            _payload,
+            _payloadHash,
+            _payloadSignature,
+            _packetSignature
+            );
     }
 
     /// @notice Get the encoded hash of the inputs for signing
-    /// @param _routingInfo Routing Info 
-    function getRouteInfoHash(
-        string memory _routingInfo
-    ) public pure returns (bytes32) {
+    /// @param _routingInfo Routing Info
+    function getRouteInfoHash(string memory _routingInfo) public pure returns (bytes32) {
         return keccak256(abi.encode(_routingInfo));
     }
 
@@ -281,12 +297,28 @@ contract Gateway {
         address _userAddress,
         string memory _sourceNetwork,
         string memory _routingInfo,
-        bytes memory _routingInfoSignature,
+        Signature memory _routingInfoSignature,
         bytes memory _payload,
         bytes32 _payloadHash,
-        bytes memory _payloadSignature
-    ) public pure returns (bytes32) {
-        return keccak256(abi.encode(_callbackAddress, _callbackSelector,_userAddress,_sourceNetwork,_routingInfo,_routingInfoSignature,_payload,_payloadHash,_payloadSignature));
+        Signature memory _payloadSignature
+    )
+        public
+        pure
+        returns (bytes32)
+    {
+        return keccak256(
+            abi.encode(
+                _callbackAddress,
+                _callbackSelector,
+                _userAddress,
+                _sourceNetwork,
+                _routingInfo,
+                _routingInfoSignature,
+                _payload,
+                _payloadHash,
+                _payloadSignature
+            )
+        );
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -305,48 +337,42 @@ contract Gateway {
     function postExecution(
         string memory _sourceNetwork,
         string memory _routingInfo,
-        bytes memory _routingInfoSignature,
+        Signature memory _routingInfoSignature,
         bytes memory _payload,
         bytes32 _payloadHash,
-        bytes memory _payloadSignature,
-        bytes memory _packetSignature,
+        Signature memory _payloadSignature,
+        Signature memory _packetSignature,
         uint256 _taskId
-    ) public {
-
+    )
+        public
+    {
         address checkerAddress = route[_sourceNetwork];
 
         // Route info signature verification
-         bytes32 routeInfoHash = getRouteInfoHash(_routingInfo);
-         bytes32 routeInfoEthSignedMessageHash = getEthSignedMessageHash(routeInfoHash);
+        bytes32 routeInfoHash = getRouteInfoHash(_routingInfo);
+        bytes32 routeInfoEthSignedMessageHash = getEthSignedMessageHash(routeInfoHash);
 
-         bool verifyRouteInfoSig;
-         verifyRouteInfoSig = recoverSigner(routeInfoEthSignedMessageHash, _routingInfoSignature) == checkerAddress;
+        bool verifyRouteInfoSig;
+        verifyRouteInfoSig = recoverSigner(routeInfoEthSignedMessageHash, _routingInfoSignature) == checkerAddress;
 
-         if (!verifyRouteInfoSig) revert InvalidSignature();
+        if (!verifyRouteInfoSig) {
+            revert InvalidSignature();
+        }
 
+        // Payload hash signature verification
+        bool verifyPayloadHashSig;
+        verifyPayloadHashSig = recoverSigner(_payloadHash, _payloadSignature) == checkerAddress;
+        if (!verifyPayloadHashSig) {
+            revert InvalidSignature();
+        }
 
-         // Payload hash signature verification
-         bool verifyPayloadHashSig;
-         verifyPayloadHashSig = recoverSigner(_payloadHash, _payloadSignature) == checkerAddress;
-         if (!verifyPayloadHashSig) revert InvalidSignature();
-
-
-        (bool val,) = address(tasks[_taskId].callbackAddress).call(abi.encodeWithSelector(tasks[_taskId].callbackSelector,_payload));
-        require(val==true,"Callback error");
+        (bool val,) = address(tasks[_taskId].callbackAddress).call(abi.encodeWithSelector(tasks[_taskId].callbackSelector, _payload));
+        require(val == true, "Callback error");
 
         tasks[_taskId].completed = true;
 
-        // emit an crafted event 
-
-
-        
-
+        emit logCompletedTask(
+            _sourceNetwork, _routingInfo, _routingInfoSignature, _payload, _payloadHash, _payloadSignature, _packetSignature, _taskId
+            );
     }
-
-
-
-
-
-
-
 }
