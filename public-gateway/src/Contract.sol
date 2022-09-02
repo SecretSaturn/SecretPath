@@ -10,6 +10,9 @@ contract Gateway {
     /// @notice thrown when the signature is invalid
     error InvalidSignature();
 
+    /// @notice thrown when the PayloadHash is invalid
+    error InvalidPayloadHash();
+
     /*//////////////////////////////////////////////////////////////
                               Events
     //////////////////////////////////////////////////////////////*/
@@ -55,6 +58,7 @@ contract Gateway {
         address userAddress;
         string sourceNetwork;
         string routingInfo;
+        bytes32 payloadHash;
         bool completed;
     }
 
@@ -63,13 +67,14 @@ contract Gateway {
         bytes4 _callbackSelector,
         address _userAddress,
         string memory _sourceNetwork,
-        string memory _routingInfo
+        string memory _routingInfo,
+        bytes32 _payloadHash
     )
         public
         pure
         returns (Task memory)
     {
-        return Task(_callbackAddress, _callbackSelector, _userAddress, _sourceNetwork, _routingInfo, false);
+        return Task(_callbackAddress, _callbackSelector, _userAddress, _sourceNetwork, _routingInfo, _payloadHash, false);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -257,7 +262,7 @@ contract Gateway {
 
         // Creating the task
         Task memory task;
-        task = newTask(_callbackAddress, _callbackSelector, _userAddress, _sourceNetwork, _routingInfo);
+        task = newTask(_callbackAddress, _callbackSelector, _userAddress, _sourceNetwork, _routingInfo,_payloadHash);
 
         // Incrementing the ID and persisting the task
         taskIds.increment();
@@ -358,6 +363,12 @@ contract Gateway {
         verifyPayloadHashSig = recoverSigner(_payloadHash, _payloadSignature) == checkerAddress;
         if (!verifyPayloadHashSig) {
             revert InvalidSignature();
+        }
+
+        bool verifyPayloadHash;
+        verifyPayloadHash = _payloadHash == tasks[_taskId].payloadHash;
+        if(!verifyPayloadHash) {
+            revert InvalidPayloadHash();
         }
 
         (bool val,) = address(tasks[_taskId].callbackAddress).call(abi.encodeWithSelector(tasks[_taskId].callbackSelector, _payload));
