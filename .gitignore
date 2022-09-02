@@ -5,3 +5,5 @@ TNLS-Relayers/infura_api_endpoint.txt
 config.yml
 */.*
 */venv
+.vscode
+target/
