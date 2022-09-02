@@ -128,4 +128,61 @@ contract ContractTest is Test {
 
         gateway.updateRoute(sampleRoute, SampleVerificationAddress, sig);
     }
+
+    function test_PreExecution() public {
+
+        
+        // string memory _routingInfo,
+        // bytes memory _routingInfoSignature,
+    
+        // bytes32 _payloadHash,
+        // bytes memory _payloadSignature,
+        // bytes memory _packetSignatur 
+        address userAddress = vm.addr(5);
+        address callbackAddress = vm.addr(6); 
+        bytes4 callbackSelector = bytes4(abi.encodeWithSignature("transfer(address,uint256)"));
+        string memory sourceNetwork = "ethereum";
+        // encoding of "add a bunch of stuff"
+        bytes memory payload = "0x61646420612062756e6368206f66207374756666000000000000000000000000"; 
+
+        string memory sampleRoute = "secret";
+
+        // Update the route with  wrong masterVerificationKey signature
+        bytes32 routeHash = gateway.getRouteHash(sampleRoute, userAddress);
+        bytes32 ethSignedMessageHash = gateway.getEthSignedMessageHash(routeHash);
+
+        // vm.startPrank(notOwner);
+        // address tempAddress = vm.addr(5);
+        // gateway.initialize(tempAddress);
+        // vm.stopPrank();
+    }
+
+    function test_PostExecution() public {
+        // string memory _sourceNetwork,
+        // string memory _routingInfo,
+        // bytes memory _routingInfoSignature,
+        // bytes memory _payload,
+        // bytes32 _payloadHash,
+        // bytes memory _payloadSignature,
+        // bytes memory _packetSignature,
+        // uint256 _taskId
+
+        address userAddress = vm.addr(5);
+        address callbackAddress = vm.addr(6); 
+        bytes4 callbackSelector = bytes4(abi.encodeWithSignature("transfer(address,uint256)"));
+        string memory sourceNetwork = "secret";
+        // encoding of "add a bunch of stuff"
+        bytes memory payload = "0x61646420612062756e6368206f66207374756666000000000000000000000000"; 
+
+        string memory routingInfo = "ethereum";
+
+        // Update the route with  wrong masterVerificationKey signature
+        bytes32 routeHash = gateway.getRouteHash(routingInfo, userAddress);
+        bytes32 ethSignedMessageHash = gateway.getEthSignedMessageHash(routeHash);
+
+        // vm.startPrank(notOwner);
+        // address tempAddress = vm.addr(5);
+        // gateway.initialize(tempAddress);
+        // vm.stopPrank();
+    }
 }
