@@ -226,16 +226,18 @@ contract Gateway {
         // Route info signature verification
         tempHash = getRouteInfoHash(_routingInfo);
         tempSignedEthMessageHash = getEthSignedMessageHash(tempHash);
-
         verifySig = true;
         verifySig = recoverSigner(tempSignedEthMessageHash, _routingInfoSignature) == _userAddress;
+
         if (!verifySig) {
             revert InvalidSignature();
         }
 
         // Payload hash signature verification
+        tempSignedEthMessageHash = getEthSignedMessageHash(_payloadHash);
         verifySig = true;
-        verifySig = recoverSigner(_payloadHash, _payloadSignature) == _userAddress;
+        verifySig = recoverSigner(tempSignedEthMessageHash, _payloadSignature) == _userAddress;
+
         if (!verifySig) {
             revert InvalidSignature();
         }
@@ -253,7 +255,6 @@ contract Gateway {
             _payloadSignature
         );
         tempSignedEthMessageHash = getEthSignedMessageHash(tempHash);
-
         verifySig = true;
         verifySig = recoverSigner(tempSignedEthMessageHash, _packetSignature) == _userAddress;
         if (!verifySig) {
@@ -262,7 +263,7 @@ contract Gateway {
 
         // Creating the task
         Task memory task;
-        task = newTask(_callbackAddress, _callbackSelector, _userAddress, _sourceNetwork, _routingInfo,_payloadHash);
+        task = newTask(_callbackAddress, _callbackSelector, _userAddress, _sourceNetwork, _routingInfo, _payloadHash);
 
         // Incrementing the ID and persisting the task
         taskIds.increment();
@@ -287,6 +288,12 @@ contract Gateway {
     /// @param _routingInfo Routing Info
     function getRouteInfoHash(string memory _routingInfo) public pure returns (bytes32) {
         return keccak256(abi.encode(_routingInfo));
+    }
+
+    /// @notice Get the encoded hash of the inputs for signing
+    /// @param _payload Payload
+    function getPayloadHash(bytes memory _payload) public pure returns (bytes32) {
+        return keccak256(abi.encode(_payload));
     }
 
     /// @notice Get the encoded hash of the whole packet
@@ -367,7 +374,7 @@ contract Gateway {
 
         bool verifyPayloadHash;
         verifyPayloadHash = _payloadHash == tasks[_taskId].payloadHash;
-        if(!verifyPayloadHash) {
+        if (!verifyPayloadHash) {
             revert InvalidPayloadHash();
         }
 
