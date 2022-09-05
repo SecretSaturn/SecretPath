@@ -27,6 +27,16 @@ contract ContractTest is Test {
         bytes _packetSignatureLog
     );
 
+     struct TestTask {
+        address callbackAddress;
+        bytes4 callbackSelector;
+        address userAddress;
+        string sourceNetwork;
+        string routingInfo;
+        bytes32 payloadHash;
+        bool completed;
+     }
+
     function setUp() public {
         userClient = new client();
         deployer = vm.addr(3);
@@ -169,14 +179,16 @@ contract ContractTest is Test {
     }
 
     function test_PreExecution() public {
+        
         address userAddress = vm.addr(5);
         address callbackAddress = vm.addr(6);
         bytes4 callbackSelector = bytes4(abi.encodeWithSignature("transfer(address,uint256)"));
         string memory sourceNetwork = "ethereum";
-
+        
         string memory routingInfo = "secret";
         bytes memory routingInfoSig = getRoutingInfoSignature(routingInfo, 5);
 
+        // bytes32 string encoding of "add a bunch of stuff"
         bytes memory payload = "0x61646420612062756e6368206f66207374756666000000000000000000000000";
         bytes memory payloadSig = getPayloadSignature(payload, 5);
         bytes32 payloadHash = gateway.getPayloadHash(payload);
@@ -193,34 +205,58 @@ contract ContractTest is Test {
         gateway.preExecution(
             callbackAddress, callbackSelector, userAddress, sourceNetwork, routingInfo, routingInfoSig, payload, payloadHash, payloadSig, packetSig
         );
+        
+
+        (address tempCallbackAddress, , , , , ,)= gateway.tasks(1);
+        assertEq(tempCallbackAddress, callbackAddress);
+
+        (,bytes4 tempCallbackSelector , , , , ,)= gateway.tasks(1);
+        assertEq(tempCallbackSelector, callbackSelector);
+
+        (, ,address tempUserAddress , , , ,)= gateway.tasks(1);
+        assertEq(tempUserAddress, userAddress);
+
+        (, , ,string memory tempSourceNetwork , , ,)= gateway.tasks(1);
+        assertEq(tempSourceNetwork, sourceNetwork);
+
+        (, , , ,string memory tempRoutingInfo , ,)= gateway.tasks(1);
+        assertEq(tempRoutingInfo, routingInfo);
+
+        (, , , , , bytes32 tempPayloadHash ,)= gateway.tasks(1);
+        assertEq(tempPayloadHash, payloadHash);
+
+        (, , , , , ,bool tempCompleted)= gateway.tasks(1);
+        assertEq(tempCompleted, false);
+
+
     }
 
-    // function test_PostExecution() public {
-    //     // string memory _sourceNetwork,
-    //     // string memory _routingInfo,
-    //     // bytes memory _routingInfoSignature,
-    //     // bytes memory _payload,
-    //     // bytes32 _payloadHash,
-    //     // bytes memory _payloadSignature,
-    //     // bytes memory _packetSignature,
-    //     // uint256 _taskId
+    function test_PostExecution() public {
+        // string memory _sourceNetwork,
+        // string memory _routingInfo,
+        // bytes memory _routingInfoSignature,
+        // bytes memory _payload,
+        // bytes32 _payloadHash,
+        // bytes memory _payloadSignature,
+        // bytes memory _packetSignature,
+        // uint256 _taskId
 
-    //     address userAddress = vm.addr(5);
-    //     address callbackAddress = vm.addr(6);
-    //     bytes4 callbackSelector = bytes4(abi.encodeWithSignature("transfer(address,uint256)"));
-    //     string memory sourceNetwork = "secret";
-    //     // encoding of "add a bunch of stuff"
-    //     bytes memory payload = "0x61646420612062756e6368206f66207374756666000000000000000000000000";
+        address userAddress = vm.addr(5);
+        address callbackAddress = vm.addr(6);
+        bytes4 callbackSelector = bytes4(abi.encodeWithSignature("transfer(address,uint256)"));
+        string memory sourceNetwork = "secret";
+        // encoding of "add a bunch of stuff"
+        bytes memory payload = "0x61646420612062756e6368206f66207374756666000000000000000000000000";
 
-    //     string memory routingInfo = "ethereum";
+        string memory routingInfo = "ethereum";
 
-    //     // Update the route with  wrong masterVerificationKey signature
-    //     bytes32 routeHash = gateway.getRouteHash(routingInfo, userAddress);
-    //     bytes32 ethSignedMessageHash = gateway.getEthSignedMessageHash(routeHash);
+        // Update the route with  wrong masterVerificationKey signature
+        bytes32 routeHash = gateway.getRouteHash(routingInfo, userAddress);
+        bytes32 ethSignedMessageHash = gateway.getEthSignedMessageHash(routeHash);
 
-    //     // vm.startPrank(notOwner);
-    //     // address tempAddress = vm.addr(5);
-    //     // gateway.initialize(tempAddress);
-    //     // vm.stopPrank();
-    // }
+        // vm.startPrank(notOwner);
+        // address tempAddress = vm.addr(5);
+        // gateway.initialize(tempAddress);
+        // vm.stopPrank();
+    }
 }

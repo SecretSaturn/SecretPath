@@ -192,7 +192,7 @@ contract Gateway {
     Counters.Counter private taskIds;
 
     /// @dev Task ID ====> Task
-    mapping(uint256 => Task) private tasks;
+    mapping(uint256 => Task) public tasks;
 
     /// @notice Pre-Execution
     /// @param _callbackAddress contract address for callback
@@ -372,6 +372,7 @@ contract Gateway {
             revert InvalidSignature();
         }
 
+         // Payload hash verification from tasks struct
         bool verifyPayloadHash;
         verifyPayloadHash = _payloadHash == tasks[_taskId].payloadHash;
         if (!verifyPayloadHash) {
