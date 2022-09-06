@@ -25,7 +25,7 @@ class FakeChainInterface(BaseChainInterface):
         self.tx_list = tx_list
         pass
 
-    def get_transactions(self):
+    def get_transactions(self, _):
         return self.tx_list
         pass
 
@@ -45,11 +45,9 @@ class FakeChainForConfig(BaseChainInterface):
         self.__dict__ = kwargs
         pass
 
-    def get_transactions(self):
+    def get_transactions(self, _):
         pass
 
-    def create_transaction(self, _contract_function, _data):
-        pass
 
     def sign_and_send_transaction(self, _tx):
         pass
@@ -82,7 +80,7 @@ class FakeContractInterface(BaseContractInterface):
         pass
 
     def call_function(self, _function_name, *args):
-        task_dict = loads(str(args[0]))['task_data']
+        task_dict = loads(str(args[0]))
         task_result = int(task_dict['args']) + self.num_to_add
         task_id = task_dict['task_id']
         self.results[task_id] = task_result

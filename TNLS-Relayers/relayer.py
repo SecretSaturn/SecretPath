@@ -55,7 +55,7 @@ class Relayer:
         Updates task list with found events
         """
         for name, (chain_interface, contract_interface, evt_name, _) in self.dict_of_names_to_interfaces.items():
-            transactions = chain_interface.get_transactions()
+            transactions = chain_interface.get_transactions(contract_interface.address)
             for transaction in transactions:
                 tasks = contract_interface.parse_event_from_txn(evt_name, transaction)
                 for task in tasks:

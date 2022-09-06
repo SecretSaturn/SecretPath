@@ -34,7 +34,9 @@ def convert_config_file_to_dict(config_file, map_of_names_to_interfaces=None) ->
         if key not in map_of_names_to_interfaces:
             raise ValueError(f'{key} not in map of names to interfaces')
         chain_interface, contract_interface = map_of_names_to_interfaces[key]
-        initialized_chain = chain_interface(private_key=val['private_key'], address=val['wallet_address'])
+        remaining_kwargs = {key: val[key] for key in val if key not in necessary_keys}
+        initialized_chain = chain_interface(private_key=val['private_key'], address=val['wallet_address'],
+                                            **remaining_kwargs)
         initialized_contract = contract_interface(interface=initialized_chain, address=val['contract_address'],
                                                   abi=val['contract_schema'])
         config_dict[key] = (initialized_chain, initialized_contract, val['event_name'], val['function_name'])

@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - 'TNLS-Relayers/**'
+      - '.github/workflows/Python_tests.yml'
 
 
 jobs:
@@ -30,7 +31,37 @@ jobs:
         run: |
           touch infura_api_endpoint.txt
           echo "$INFURA_ENDPOINT" > infura_api_endpoint.txt
+      - name: Start LocalSecret
+        working-directory: ./TNLS-Relayers
+        run: |
+          docker pull ghcr.io/scrtlabs/localsecret
+          docker run -it -d -p 9091:9091 -p 26657:26657 -p 1317:1317 -p 5000:5000 --name localsecret ghcr.io/scrtlabs/localsecret
+          sleep 60
+
+      - name: Install secretcli
+        run: |
+          wget https://github.com/scrtlabs/SecretNetwork/releases/download/v1.3.1/secretcli-Linux
+          chmod +x secretcli-Linux
+          sudo mv secretcli-Linux /usr/local/bin/secretcli
+
+      - name: Configure Secretcli to work with localSecret
+        working-directory: ./TNLS-Relayers/relayer_tests/interface_tests
+        run: |
+          chmod +x ./configure_secretcli.sh
+          ./configure_secretcli.sh
+      - name: Upload contract to localSecret
+        working-directory: ./TNLS-Relayers/relayer_tests/interface_tests/test_scrt_contract
+        run: |
+          chmod +x ./upload_scrt_contract.sh
+          SGX_MODE=SW ./upload_scrt_contract.sh
+
+
       - name: Test with pytest
         working-directory: ./TNLS-Relayers
         run: |
           pytest
+      - name: Stop LocalSecret
+        working-directory: ./TNLS-Relayers
+        run: |
+          docker stop localsecret
+          docker rm localsecret
