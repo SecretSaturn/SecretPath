@@ -354,8 +354,7 @@ contract Gateway {
         uint256 _taskId
     )
         public
-    {   
-
+    {
         bytes32 tempHash;
         bytes32 tempSignedEthMessageHash;
         bool verifySig;
@@ -389,7 +388,7 @@ contract Gateway {
             revert InvalidSignature();
         }
 
-         // Payload hash verification from tasks struct
+        // Payload hash verification from tasks struct
         bool verifyPayloadHash;
         verifyPayloadHash = _payloadHash == tasks[_taskId].payloadHash;
         if (!verifyPayloadHash) {

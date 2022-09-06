@@ -178,11 +178,20 @@ contract ContractTest is Test {
         return packetSig;
     }
 
+    function getResultSignature(bytes memory _result, uint256 _foundryPkey) public returns (bytes memory) {
+        bytes32 resultHash = gateway.getResultHash(_result);
+        bytes32 resultEthSignedMessageHash = gateway.getEthSignedMessageHash(resultHash);
+        (uint8 v2, bytes32 r2, bytes32 s2) = vm.sign(_foundryPkey, resultEthSignedMessageHash);
+        bytes memory resultSig = abi.encodePacked(r2, s2, v2);
+
+        return resultSig;
+    }
+
     function test_PreExecution() public {
         
         address userAddress = vm.addr(5);
         address callbackAddress = vm.addr(6);
-        bytes4 callbackSelector = bytes4(abi.encodeWithSignature("transfer(address,uint256)"));
+        bytes4 callbackSelector = bytes4(abi.encodeWithSignature("callback(uint256 _taskId,bytes memory _result,bytes memory _resultSig)"));
         string memory sourceNetwork = "ethereum";
         
         string memory routingInfo = "secret";
@@ -235,7 +244,7 @@ contract ContractTest is Test {
         
         address userAddress = vm.addr(5);
         address callbackAddress = vm.addr(6);
-        bytes4 callbackSelector = bytes4(abi.encodeWithSignature("transfer(address,uint256)"));
+        bytes4 callbackSelector = bytes4(abi.encodeWithSignature("callback(uint256 _taskId,bytes memory _result,bytes memory _resultSig)"));
         string memory sourceNetwork = "ethereum";
         
         string memory routingInfo = "secret";
@@ -267,7 +276,7 @@ contract ContractTest is Test {
         
         address userAddress = vm.addr(5);
         address callbackAddress = vm.addr(6);
-        bytes4 callbackSelector = bytes4(abi.encodeWithSignature("transfer(address,uint256)"));
+        bytes4 callbackSelector = bytes4(abi.encodeWithSignature("callback(uint256 _taskId,bytes memory _result,bytes memory _resultSig)"));
         string memory sourceNetwork = "ethereum";
         
         string memory routingInfo = "secret";
@@ -299,7 +308,7 @@ contract ContractTest is Test {
         
         address userAddress = vm.addr(5);
         address callbackAddress = vm.addr(6);
-        bytes4 callbackSelector = bytes4(abi.encodeWithSignature("transfer(address,uint256)"));
+        bytes4 callbackSelector = bytes4(abi.encodeWithSignature("callback(uint256 _taskId,bytes memory _result,bytes memory _resultSig)"));
         string memory sourceNetwork = "ethereum";
         
         string memory routingInfo = "secret";
@@ -328,35 +337,32 @@ contract ContractTest is Test {
     }
 
     function test_PostExecution() public {
-        // string memory _sourceNetwork,
-        // string memory _routingInfo,
-        // bytes memory _routingInfoSignature,
-        // bytes memory _payload,
-        // bytes32 _payloadHash,
-        // bytes memory _payloadSignature,
-        // bytes memory _packetSignature,
-        // uint256 _taskId
+        
+       
+        
+        // bytes memory _result,
+        // bytes memory _resultSignature,
+        // uint256 _taskI
 
-        address userAddress = vm.addr(5);
-        address callbackAddress = vm.addr(6);
-        bytes4 callbackSelector = bytes4(abi.encodeWithSignature("transfer(address,uint256)"));
         string memory sourceNetwork = "secret";
+        uint256 taskId = 1;
+        
+        string memory routingInfo = "ethereum";
+        bytes memory routingInfoSig = getRoutingInfoSignature(routingInfo, 5);
+        
         // encoding of "add a bunch of stuff"
         bytes memory payload = "0x61646420612062756e6368206f66207374756666000000000000000000000000";
+        bytes32 payloadHash = gateway.getPayloadHash(payload);
+        bytes memory payloadSig = getPayloadSignature(payload, 5);
 
-        string memory routingInfo = "ethereum";
+        bytes memory result = "0x74686973206973206120726573756c7400000000000000000000000000000000";
+        bytes32 resultHash = gateway.getResultHash(result);
+        bytes memory resultSig = getResultSignature(result, 5);
 
-        // Update the route with  wrong masterVerificationKey signature
-        bytes32 routeHash = gateway.getRouteHash(routingInfo, userAddress);
-        bytes32 ethSignedMessageHash = gateway.getEthSignedMessageHash(routeHash);
-
-        // vm.startPrank(notOwner);
-        // address tempAddress = vm.addr(5);
-        // gateway.initialize(tempAddress);
-        // vm.stopPrank();
 
 
         // have to fix this 
 
     }
+    
 }
