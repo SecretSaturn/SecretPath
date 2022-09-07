@@ -17,15 +17,15 @@ contract ContractTest is Test {
     event logNewTask(
         uint256 task_id,
         string source_network,
+        address user_address,
         string routing_info,
-        bytes routing_info_signature,
+        string routing_code_hash,
         bytes payload,
         bytes32 payload_hash,
         bytes payload_signature,
-        bytes user_public_key,
+        bytes user_key,
         string handle,
-        bytes12 nonce,
-        bytes packet_signature
+        bytes12 nonce
     );
 
     function setUp() public {
@@ -143,6 +143,10 @@ contract ContractTest is Test {
         gateway.updateRoute(sampleRoute, SampleVerificationAddress, sig);
     }
 
+    function getPayloadHash(bytes memory _payload) public pure returns (bytes32) {
+        return keccak256(abi.encode(_payload));
+    }
+
     function getRoutingInfoSignature(string memory _routingInfo, uint256 _foundryPkey) public returns (bytes memory) {
         bytes32 routeHash = gateway.getRouteInfoHash(_routingInfo);
         bytes32 routeEthSignedMessageHash = gateway.getEthSignedMessageHash(routeHash);
@@ -153,7 +157,7 @@ contract ContractTest is Test {
     }
 
     function getPayloadSignature(bytes memory _payload, uint256 _foundryPkey) public returns (bytes memory) {
-        bytes32 payloadHash = gateway.getPayloadHash(_payload);
+        bytes32 payloadHash = getPayloadHash(_payload);
         bytes32 payloadEthSignedMessageHash = gateway.getEthSignedMessageHash(payloadHash);
         (uint8 v2, bytes32 r2, bytes32 s2) = vm.sign(_foundryPkey, payloadEthSignedMessageHash);
         bytes memory payloadSig = abi.encodePacked(r2, s2, v2);
@@ -189,23 +193,11 @@ contract ContractTest is Test {
 
         // bytes32 string encoding of "add a bunch of stuff"
         bytes memory payload = "0x61646420612062756e6368206f66207374756666000000000000000000000000";
-        bytes32 payloadHash = gateway.getPayloadHash(payload);
+        bytes32 payloadHash = getPayloadHash(payload);
+        payloadHash = gateway.getEthSignedMessageHash(payloadHash);
 
         // encoding bytes of "some public key"
         bytes memory userPublicKey = "0x736f6d65207075626c6963206b65790000000000000000000000000000000000";
-
-        bytes32 packetHash = gateway.getPacketHash(
-            vm.addr(6),
-            callbackSelector,
-            vm.addr(5),
-            userPublicKey,
-            "some kinda handle",
-            "ssssssssssss",
-            getRoutingInfoSignature(routingInfo, 5),
-            payload,
-            payloadHash,
-            getPayloadSignature(payload, 5)
-        );
 
         Util.Task memory assembledTask = Util.Task({
             callback_address: vm.addr(6),
@@ -218,28 +210,27 @@ contract ContractTest is Test {
         });
 
         Util.ExecutionInfo memory assembledInfo = Util.ExecutionInfo({
-            user_public_key: userPublicKey,
+            user_key: userPublicKey,
+            routing_code_hash:"some RoutingCodeHash",
             handle: "some kinda handle",
             nonce: "ssssssssssss",
-            routing_info_signature: getRoutingInfoSignature(routingInfo, 5),
             payload: payload,
-            payload_signature: getPayloadSignature(payload, 5),
-            packet_signature: getPacketSignature(packetHash, 5)
+            payload_signature: getPayloadSignature(payload, 5)
         });
 
         vm.expectEmit(true, true, true, true);
         emit logNewTask(
             1,
             sourceNetwork,
+            vm.addr(5),
             routingInfo,
-            getRoutingInfoSignature(routingInfo, 5),
+            "some RoutingCodeHash",
             payload,
             payloadHash,
             getPayloadSignature(payload, 5),
             userPublicKey,
             "some kinda handle",
-            "ssssssssssss",
-            getPacketSignature(packetHash, 5)
+            "ssssssssssss"
             );
         gateway.preExecution(assembledTask, assembledInfo);
 
@@ -265,60 +256,6 @@ contract ContractTest is Test {
         assertEq(tempCompleted, false);
     }
 
-    function testFail_CannotPreExecutionWithoutValidRoutingInfoSig() public {
-        // USER ADDRESS       ----->   vm.addr(5);
-        // CALLBACK ADDRESS   ----->   vm.addr(6);
-
-        bytes4 callbackSelector = bytes4(abi.encodeWithSignature("callback(uint256 _taskId,bytes memory _result,bytes memory _resultSig)"));
-        string memory sourceNetwork = "ethereum";
-
-        string memory routingInfo = "secret";
-
-        // bytes32 string encoding of "add a bunch of stuff"
-        bytes memory payload = "0x61646420612062756e6368206f66207374756666000000000000000000000000";
-        bytes32 payloadHash = gateway.getPayloadHash(payload);
-
-        // encoding bytes of "some public key"
-        bytes memory userPublicKey = "0x736f6d65207075626c6963206b65790000000000000000000000000000000000";
-
-        bytes32 packetHash = gateway.getPacketHash(
-            vm.addr(6),
-            callbackSelector,
-            vm.addr(5),
-            userPublicKey,
-            "some kinda handle",
-            "ssssssssssss",
-            getRoutingInfoSignature(routingInfo, 5),
-            payload,
-            payloadHash,
-            getPayloadSignature(payload, 5)
-        );
-
-        Util.Task memory assembledTask = Util.Task({
-            callback_address: vm.addr(6),
-            callback_selector: callbackSelector,
-            user_address: vm.addr(5),
-            source_network: sourceNetwork,
-            routing_info: routingInfo,
-            payload_hash: payloadHash,
-            completed: false
-        });
-
-        Util.ExecutionInfo memory assembledInfo = Util.ExecutionInfo({
-            user_public_key: userPublicKey,
-            handle: "some kinda handle",
-            nonce: "ssssssssssss",
-            routing_info_signature: getRoutingInfoSignature(routingInfo, 7),
-            payload: payload,
-            payload_signature: getPayloadSignature(payload, 5),
-            packet_signature: getPacketSignature(packetHash, 5)
-        });
-
-        gateway.preExecution(assembledTask, assembledInfo);
-
-        vm.expectRevert(abi.encodeWithSignature("InvalidSignature()"));
-    }
-
     function testFail_CannotPreExecutionWithoutValidPayloadSig() public {
         // USER ADDRESS       ----->   vm.addr(5);
         // CALLBACK ADDRESS   ----->   vm.addr(6);
@@ -330,23 +267,11 @@ contract ContractTest is Test {
 
         // bytes32 string encoding of "add a bunch of stuff"
         bytes memory payload = "0x61646420612062756e6368206f66207374756666000000000000000000000000";
-        bytes32 payloadHash = gateway.getPayloadHash(payload);
+        bytes32 payloadHash = getPayloadHash(payload);
+        payloadHash = gateway.getEthSignedMessageHash(payloadHash);
 
         // encoding bytes of "some public key"
         bytes memory userPublicKey = "0x736f6d65207075626c6963206b65790000000000000000000000000000000000";
-
-        bytes32 packetHash = gateway.getPacketHash(
-            vm.addr(6),
-            callbackSelector,
-            vm.addr(5),
-            userPublicKey,
-            "some kinda handle",
-            "ssssssssssss",
-            getRoutingInfoSignature(routingInfo, 5),
-            payload,
-            payloadHash,
-            getPayloadSignature(payload, 5)
-        );
 
         Util.Task memory assembledTask = Util.Task({
             callback_address: vm.addr(6),
@@ -359,73 +284,34 @@ contract ContractTest is Test {
         });
 
         Util.ExecutionInfo memory assembledInfo = Util.ExecutionInfo({
-            user_public_key: userPublicKey,
+            user_key: userPublicKey,
+            routing_code_hash:"some RoutingCodeHash",
             handle: "some kinda handle",
             nonce: "ssssssssssss",
-            routing_info_signature: getRoutingInfoSignature(routingInfo, 5),
             payload: payload,
-            payload_signature: getPayloadSignature(payload, 7),
-            packet_signature: getPacketSignature(packetHash, 5)
+            payload_signature: getPayloadSignature(payload, 7)
         });
 
-        gateway.preExecution(assembledTask, assembledInfo);
-
-        vm.expectRevert(abi.encodeWithSignature("InvalidSignature()"));
-    }
-
-    function testFail_CannotPreExecutionWithoutValidPacketSig() public {
-        // USER ADDRESS       ----->   vm.addr(5);
-        // CALLBACK ADDRESS   ----->   vm.addr(6);
-
-        bytes4 callbackSelector = bytes4(abi.encodeWithSignature("callback(uint256 _taskId,bytes memory _result,bytes memory _resultSig)"));
-        string memory sourceNetwork = "ethereum";
-
-        string memory routingInfo = "secret";
-
-        // bytes32 string encoding of "add a bunch of stuff"
-        bytes memory payload = "0x61646420612062756e6368206f66207374756666000000000000000000000000";
-        bytes32 payloadHash = gateway.getPayloadHash(payload);
-
-        // encoding bytes of "some public key"
-        bytes memory userPublicKey = "0x736f6d65207075626c6963206b65790000000000000000000000000000000000";
-
-        bytes32 packetHash = gateway.getPacketHash(
-            vm.addr(6),
-            callbackSelector,
+        vm.expectEmit(true, true, true, true);
+        emit logNewTask(
+            1,
+            sourceNetwork,
             vm.addr(5),
-            userPublicKey,
-            "some kinda handle",
-            "ssssssssssss",
-            getRoutingInfoSignature(routingInfo, 5),
+            routingInfo,
+            "some RoutingCodeHash",
             payload,
             payloadHash,
-            getPayloadSignature(payload, 5)
-        );
-
-        Util.Task memory assembledTask = Util.Task({
-            callback_address: vm.addr(6),
-            callback_selector: callbackSelector,
-            user_address: vm.addr(5),
-            source_network: sourceNetwork,
-            routing_info: routingInfo,
-            payload_hash: payloadHash,
-            completed: false
-        });
-
-        Util.ExecutionInfo memory assembledInfo = Util.ExecutionInfo({
-            user_public_key: userPublicKey,
-            handle: "some kinda handle",
-            nonce: "ssssssssssss",
-            routing_info_signature: getRoutingInfoSignature(routingInfo, 5),
-            payload: payload,
-            payload_signature: getPayloadSignature(payload, 5),
-            packet_signature: getPacketSignature(packetHash, 7)
-        });
-
+            getPayloadSignature(payload, 5),
+            userPublicKey,
+            "some kinda handle",
+            "ssssssssssss"
+            );
         gateway.preExecution(assembledTask, assembledInfo);
 
         vm.expectRevert(abi.encodeWithSignature("InvalidSignature()"));
     }
+
+    
 
     // function test_PostExecution() public {
 

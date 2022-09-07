@@ -27,18 +27,15 @@ library Util {
     /// @param user_public_key public key bytes
     /// @param handle handle for private contract
     /// @param nonce nonce for private contract
-    /// @param routing_info_signature Routing info signature
     /// @param payload Payload for computation
     /// @param payload_signature  hashed payload signature
-    /// @param packet_signature  Packet Signature contents mirroring getPacketHash()
     struct ExecutionInfo {
-        bytes user_public_key;
+        bytes user_key;
+        string routing_code_hash;
         string handle;
         bytes12 nonce;
-        bytes routing_info_signature;
         bytes payload;
         bytes payload_signature;
-        bytes packet_signature;
     }
 }
 
@@ -58,15 +55,15 @@ contract Gateway {
     event logNewTask(
         uint256 task_id,
         string source_network,
+        address user_address,
         string routing_info,
-        bytes routing_info_signature,
+        string routing_code_hash,
         bytes payload,
         bytes32 payload_hash,
         bytes payload_signature,
-        bytes user_public_key,
+        bytes user_key,
         string handle,
-        bytes12 nonce,
-        bytes packet_signature
+        bytes12 nonce
     );
 
     event logCompletedTask(
@@ -221,45 +218,12 @@ contract Gateway {
     /// @param _task Task struct
     /// @param _info ExecutionInfo struct
     function preExecution(Util.Task memory _task, Util.ExecutionInfo memory _info) public {
-        bytes32 tempHash;
-        bytes32 tempSignedEthMessageHash;
         bool verifySig;
 
-        // Route info signature verification
-        tempHash = getRouteInfoHash(_task.routing_info);
-        tempSignedEthMessageHash = getEthSignedMessageHash(tempHash);
-        verifySig = true;
-        verifySig = recoverSigner(tempSignedEthMessageHash, _info.routing_info_signature) == _task.user_address;
-
-        if (!verifySig) {
-            revert InvalidSignature();
-        }
-
         // Payload hash signature verification
-        tempSignedEthMessageHash = getEthSignedMessageHash(_task.payload_hash);
         verifySig = true;
-        verifySig = recoverSigner(tempSignedEthMessageHash, _info.payload_signature) == _task.user_address;
+        verifySig = recoverSigner(_task.payload_hash, _info.payload_signature) == _task.user_address;
 
-        if (!verifySig) {
-            revert InvalidSignature();
-        }
-
-        // Packet signature verification
-        tempHash = getPacketHash(
-            _task.callback_address,
-            _task.callback_selector,
-            _task.user_address,
-            _info.user_public_key,
-            _info.handle,
-            _info.nonce,
-            _info.routing_info_signature,
-            _info.payload,
-            _task.payload_hash,
-            _info.payload_signature
-        );
-        tempSignedEthMessageHash = getEthSignedMessageHash(tempHash);
-        verifySig = true;
-        verifySig = recoverSigner(tempSignedEthMessageHash, _info.packet_signature) == _task.user_address;
         if (!verifySig) {
             revert InvalidSignature();
         }
@@ -272,61 +236,16 @@ contract Gateway {
         emit logNewTask(
             taskId,
             _task.source_network,
+            _task.user_address,
             _task.routing_info,
-            _info.routing_info_signature,
+            _info.routing_code_hash,
             _info.payload,
             _task.payload_hash,
             _info.payload_signature,
-            _info.user_public_key,
+            _info.user_key,
             _info.handle,
-            _info.nonce,
-            _info.packet_signature
+            _info.nonce
             );
-    }
-
-    /// @notice Get the encoded hash of the inputs for signing
-    /// @param _routingInfo Routing Info
-    function getRouteInfoHash(string memory _routingInfo) public pure returns (bytes32) {
-        return keccak256(abi.encode(_routingInfo));
-    }
-
-    /// @notice Get the encoded hash of the inputs for signing
-    /// @param _payload Payload
-    function getPayloadHash(bytes memory _payload) public pure returns (bytes32) {
-        return keccak256(abi.encode(_payload));
-    }
-
-    /// @notice Get the encoded hash of the whole packet
-    function getPacketHash(
-        address _callbackAddress,
-        bytes4 _callbackSelector,
-        address _userAddress,
-        bytes memory _userPublicKey,
-        string memory _handle,
-        bytes12 _nonce,
-        bytes memory _routingInfoSignature,
-        bytes memory _payload,
-        bytes32 _payloadHash,
-        bytes memory _payloadSignature
-    )
-        public
-        pure
-        returns (bytes32)
-    {
-        return keccak256(
-            abi.encode(
-                _callbackAddress,
-                _callbackSelector,
-                _userAddress,
-                _userPublicKey,
-                _handle,
-                _nonce,
-                _routingInfoSignature,
-                _payload,
-                _payloadHash,
-                _payloadSignature
-            )
-        );
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -410,5 +329,11 @@ contract Gateway {
     /// @param _result Results
     function getResultHash(bytes memory _result) public pure returns (bytes32) {
         return keccak256(abi.encode(_result));
+    }
+
+    /// @notice Get the encoded hash of the inputs for signing
+    /// @param _routingInfo Routing Info
+    function getRouteInfoHash(string memory _routingInfo) public pure returns (bytes32) {
+        return keccak256(abi.encode(_routingInfo));
     }
 }
