@@ -4,6 +4,44 @@ pragma solidity ^0.8.10;
 import "openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol";
 import "openzeppelin-contracts/contracts/utils/Counters.sol";
 
+library Util {
+    /// @notice Structured task for presistence
+    /// @param callback_address contract address for callback
+    /// @param callback_selector function selector for computed callback
+    /// @param user_address The address of the sender
+    /// @param source_network Source network of the message
+    /// @param routing_info Where to go one pulled into the next gateway
+    /// @param payload_hash Payload hash for postExecution verification
+    /// @param completed  Task completion status
+    struct Task {
+        address callback_address;
+        bytes4 callback_selector;
+        address user_address;
+        string source_network;
+        string routing_info;
+        bytes32 payload_hash;
+        bool completed;
+    }
+
+    /// @notice Structured task for presistence
+    /// @param user_public_key public key bytes
+    /// @param handle handle for private contract
+    /// @param nonce nonce for private contract
+    /// @param routing_info_signature Routing info signature
+    /// @param payload Payload for computation
+    /// @param payload_signature  hashed payload signature
+    /// @param packet_signature  Packet Signature contents mirroring getPacketHash()
+    struct ExecutionInfo {
+        bytes user_public_key;
+        string handle;
+        bytes12 nonce;
+        bytes routing_info_signature;
+        bytes payload;
+        bytes payload_signature;
+        bytes packet_signature;
+    }
+}
+
 contract Gateway {
     using Counters for Counters.Counter;
 
@@ -18,50 +56,34 @@ contract Gateway {
     //////////////////////////////////////////////////////////////*/
 
     event logNewTask(
-        address _callbackAddressLog,
-        bytes4 _callbackSelectorLog,
-        address _userAddressLog,
-        string _sourceNetworkLog,
-        string _routingInfoLog,
-        bytes _routingInfoSignatureLog,
-        bytes _payloadLog,
-        bytes32 _payloadHashLog,
-        bytes _payloadSignatureLog,
-        bytes _packetSignatureLog
+        uint256 task_id,
+        string source_network,
+        string routing_info,
+        bytes routing_info_signature,
+        bytes payload,
+        bytes32 payload_hash,
+        bytes payload_signature,
+        bytes user_public_key,
+        string handle,
+        bytes12 nonce,
+        bytes packet_signature
     );
 
     event logCompletedTask(
-        string _sourceNetworkLog,
-        string _routingInfoLog,
-        bytes _routingInfoSignatureLog,
-        bytes _payloadLog,
-        bytes32 _payloadHashLog,
-        bytes _payloadSignatureLog,
-        bytes _resultLog,
-        bytes _resultSignatureLog,
-        uint256 _taskIdLog
+        string source_network,
+        string routing_info,
+        bytes routing_info_signature,
+        bytes payload,
+        bytes32 payload_hash,
+        bytes payload_signature,
+        bytes result,
+        bytes result_signature,
+        uint256 task_id
     );
 
     /*//////////////////////////////////////////////////////////////
                               Task
     //////////////////////////////////////////////////////////////*/
-
-    /// @notice Structured task for presistence
-    /// @param callbackAddress contract address for callback
-    /// @param callbackSelector function selector for computed callback
-    /// @param userAddress The address of the sender
-    /// @param sourceNetwork Source network of the message
-    /// @param routingInfo Where to go one pulled into the next gateway
-    /// @param completed  Task completion status
-    struct Task {
-        address callbackAddress;
-        bytes4 callbackSelector;
-        address userAddress;
-        string sourceNetwork;
-        string routingInfo;
-        bytes32 payloadHash;
-        bool completed;
-    }
 
     function newTask(
         address _callbackAddress,
@@ -73,9 +95,9 @@ contract Gateway {
     )
         public
         pure
-        returns (Task memory)
+        returns (Util.Task memory)
     {
-        return Task(_callbackAddress, _callbackSelector, _userAddress, _sourceNetwork, _routingInfo, _payloadHash, false);
+        return Util.Task(_callbackAddress, _callbackSelector, _userAddress, _sourceNetwork, _routingInfo, _payloadHash, false);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -193,51 +215,30 @@ contract Gateway {
     Counters.Counter private taskIds;
 
     /// @dev Task ID ====> Task
-    mapping(uint256 => Task) public tasks;
+    mapping(uint256 => Util.Task) public tasks;
 
     /// @notice Pre-Execution
-    /// @param _callbackAddress contract address for callback
-    /// @param _callbackSelector function selector for computed callback
-    /// @param _userAddress The address of the sender
-    /// @param _sourceNetwork Source network of the message
-    /// @param _routingInfo Where to go one pulled into the next gateway
-    /// @param _routingInfoSignature Signed hash of _routingInfo
-    /// @param _payload Encrypted (data + routing_info + user_address)
-    /// @param _payloadHash hash of _payload
-    /// @param _payloadSignature Payload Signature
-    /// @param _packetSignature Signature of the whole above packet
-    function preExecution(
-        address _callbackAddress,
-        bytes4 _callbackSelector,
-        address _userAddress,
-        string memory _sourceNetwork,
-        string memory _routingInfo,
-        bytes memory _routingInfoSignature,
-        bytes memory _payload,
-        bytes32 _payloadHash,
-        bytes memory _payloadSignature,
-        bytes memory _packetSignature
-    )
-        public
-    {
+    /// @param _task Task struct
+    /// @param _info ExecutionInfo struct
+    function preExecution(Util.Task memory _task, Util.ExecutionInfo memory _info) public {
         bytes32 tempHash;
         bytes32 tempSignedEthMessageHash;
         bool verifySig;
 
         // Route info signature verification
-        tempHash = getRouteInfoHash(_routingInfo);
+        tempHash = getRouteInfoHash(_task.routing_info);
         tempSignedEthMessageHash = getEthSignedMessageHash(tempHash);
         verifySig = true;
-        verifySig = recoverSigner(tempSignedEthMessageHash, _routingInfoSignature) == _userAddress;
+        verifySig = recoverSigner(tempSignedEthMessageHash, _info.routing_info_signature) == _task.user_address;
 
         if (!verifySig) {
             revert InvalidSignature();
         }
 
         // Payload hash signature verification
-        tempSignedEthMessageHash = getEthSignedMessageHash(_payloadHash);
+        tempSignedEthMessageHash = getEthSignedMessageHash(_task.payload_hash);
         verifySig = true;
-        verifySig = recoverSigner(tempSignedEthMessageHash, _payloadSignature) == _userAddress;
+        verifySig = recoverSigner(tempSignedEthMessageHash, _info.payload_signature) == _task.user_address;
 
         if (!verifySig) {
             revert InvalidSignature();
@@ -245,43 +246,41 @@ contract Gateway {
 
         // Packet signature verification
         tempHash = getPacketHash(
-            _callbackAddress,
-            _callbackSelector,
-            _userAddress,
-            _sourceNetwork,
-            _routingInfo,
-            _routingInfoSignature,
-            _payload,
-            _payloadHash,
-            _payloadSignature
+            _task.callback_address,
+            _task.callback_selector,
+            _task.user_address,
+            _info.user_public_key,
+            _info.handle,
+            _info.nonce,
+            _info.routing_info_signature,
+            _info.payload,
+            _task.payload_hash,
+            _info.payload_signature
         );
         tempSignedEthMessageHash = getEthSignedMessageHash(tempHash);
         verifySig = true;
-        verifySig = recoverSigner(tempSignedEthMessageHash, _packetSignature) == _userAddress;
+        verifySig = recoverSigner(tempSignedEthMessageHash, _info.packet_signature) == _task.user_address;
         if (!verifySig) {
             revert InvalidSignature();
         }
 
-        // Creating the task
-        Task memory task;
-        task = newTask(_callbackAddress, _callbackSelector, _userAddress, _sourceNetwork, _routingInfo, _payloadHash);
-
         // Incrementing the ID and persisting the task
         taskIds.increment();
         uint256 taskId = taskIds.current();
-        tasks[taskId] = task;
+        tasks[taskId] = _task;
 
         emit logNewTask(
-            _callbackAddress,
-            _callbackSelector,
-            _userAddress,
-            _sourceNetwork,
-            _routingInfo,
-            _routingInfoSignature,
-            _payload,
-            _payloadHash,
-            _payloadSignature,
-            _packetSignature
+            taskId,
+            _task.source_network,
+            _task.routing_info,
+            _info.routing_info_signature,
+            _info.payload,
+            _task.payload_hash,
+            _info.payload_signature,
+            _info.user_public_key,
+            _info.handle,
+            _info.nonce,
+            _info.packet_signature
             );
     }
 
@@ -302,8 +301,9 @@ contract Gateway {
         address _callbackAddress,
         bytes4 _callbackSelector,
         address _userAddress,
-        string memory _sourceNetwork,
-        string memory _routingInfo,
+        bytes memory _userPublicKey,
+        string memory _handle,
+        bytes12 _nonce,
         bytes memory _routingInfoSignature,
         bytes memory _payload,
         bytes32 _payloadHash,
@@ -318,8 +318,9 @@ contract Gateway {
                 _callbackAddress,
                 _callbackSelector,
                 _userAddress,
-                _sourceNetwork,
-                _routingInfo,
+                _userPublicKey,
+                _handle,
+                _nonce,
                 _routingInfoSignature,
                 _payload,
                 _payloadHash,
@@ -390,12 +391,12 @@ contract Gateway {
 
         // Payload hash verification from tasks struct
         bool verifyPayloadHash;
-        verifyPayloadHash = _payloadHash == tasks[_taskId].payloadHash;
+        verifyPayloadHash = _payloadHash == tasks[_taskId].payload_hash;
         if (!verifyPayloadHash) {
             revert InvalidPayloadHash();
         }
 
-        (bool val,) = address(tasks[_taskId].callbackAddress).call(abi.encodeWithSelector(tasks[_taskId].callbackSelector, _result));
+        (bool val,) = address(tasks[_taskId].callback_address).call(abi.encodeWithSelector(tasks[_taskId].callback_selector, _result));
         require(val == true, "Callback error");
 
         tasks[_taskId].completed = true;
