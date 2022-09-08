@@ -348,6 +348,9 @@ contract ContractTest is Test {
         });
 
         gateway.postExecution(taskId, sourceNetwork, assembledInfo);
+
+        (,,,,,, bool tempCompleted) = gateway.tasks(1);
+        assertEq(tempCompleted, true);
     }
 
     function testFail_PostExecutionWithoutMapStoredAddressSignatures() public {

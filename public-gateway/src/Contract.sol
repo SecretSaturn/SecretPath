@@ -38,6 +38,9 @@ library Util {
 
 contract Gateway {
     using Counters for Counters.Counter;
+    using Util for Util.Task;
+    using Util for Util.ExecutionInfo;
+    using Util for Util.PostExecutionInfo;
 
     /// @notice thrown when the signature is invalid
     error InvalidSignature();
