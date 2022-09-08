@@ -147,8 +147,16 @@ contract ContractTest is Test {
         return keccak256(abi.encode(_payload));
     }
 
+    function getResultHash(bytes memory _result) public pure returns (bytes32) {
+        return keccak256(abi.encode(_result));
+    }
+
+    function getRouteInfoHash(string memory _routingInfo) public pure returns (bytes32) {
+        return keccak256(abi.encode(_routingInfo));
+    }
+
     function getRoutingInfoSignature(string memory _routingInfo, uint256 _foundryPkey) public returns (bytes memory) {
-        bytes32 routeHash = gateway.getRouteInfoHash(_routingInfo);
+        bytes32 routeHash = getRouteInfoHash(_routingInfo);
         bytes32 routeEthSignedMessageHash = gateway.getEthSignedMessageHash(routeHash);
         (uint8 v1, bytes32 r1, bytes32 s1) = vm.sign(_foundryPkey, routeEthSignedMessageHash);
         bytes memory routingInfoSig = abi.encodePacked(r1, s1, v1);
@@ -174,7 +182,7 @@ contract ContractTest is Test {
     }
 
     function getResultSignature(bytes memory _result, uint256 _foundryPkey) public returns (bytes memory) {
-        bytes32 resultHash = gateway.getResultHash(_result);
+        bytes32 resultHash = getResultHash(_result);
         bytes32 resultEthSignedMessageHash = gateway.getEthSignedMessageHash(resultHash);
         (uint8 v2, bytes32 r2, bytes32 s2) = vm.sign(_foundryPkey, resultEthSignedMessageHash);
         bytes memory resultSig = abi.encodePacked(r2, s2, v2);
@@ -211,7 +219,7 @@ contract ContractTest is Test {
 
         Util.ExecutionInfo memory assembledInfo = Util.ExecutionInfo({
             user_key: userPublicKey,
-            routing_code_hash:"some RoutingCodeHash",
+            routing_code_hash: "some RoutingCodeHash",
             handle: "some kinda handle",
             nonce: "ssssssssssss",
             payload: payload,
@@ -285,7 +293,7 @@ contract ContractTest is Test {
 
         Util.ExecutionInfo memory assembledInfo = Util.ExecutionInfo({
             user_key: userPublicKey,
-            routing_code_hash:"some RoutingCodeHash",
+            routing_code_hash: "some RoutingCodeHash",
             handle: "some kinda handle",
             nonce: "ssssssssssss",
             payload: payload,
@@ -310,8 +318,6 @@ contract ContractTest is Test {
 
         vm.expectRevert(abi.encodeWithSignature("InvalidSignature()"));
     }
-
-    
 
     // function test_PostExecution() public {
 
