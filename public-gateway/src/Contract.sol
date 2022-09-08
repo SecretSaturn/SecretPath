@@ -53,7 +53,7 @@ contract Gateway {
     //////////////////////////////////////////////////////////////*/
 
     event logNewTask(
-        uint256 task_id,
+        uint256 indexed task_id,
         string source_network,
         address user_address,
         string routing_info,
@@ -66,7 +66,7 @@ contract Gateway {
         bytes12 nonce
     );
 
-    event logCompletedTask(uint256 task_id, bytes32 payload_hash, bytes32 result_hash);
+    event logCompletedTask(uint256 indexed task_id, bytes32 payload_hash, bytes32 result_hash);
 
     /*//////////////////////////////////////////////////////////////
                               Task

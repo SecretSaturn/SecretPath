@@ -15,7 +15,7 @@ contract ContractTest is Test {
     address notOwner;
 
     event logNewTask(
-        uint256 task_id,
+        uint256 indexed task_id,
         string source_network,
         address user_address,
         string routing_info,
@@ -27,6 +27,8 @@ contract ContractTest is Test {
         string handle,
         bytes12 nonce
     );
+
+    event logCompletedTask(uint256 indexed task_id, bytes32 payload_hash, bytes32 result_hash);
 
     function setUp() public {
         userClient = new client();
@@ -346,6 +348,9 @@ contract ContractTest is Test {
             packet_hash: resultHash,
             packet_signature: getResultSignature(result, 6)
         });
+
+        vm.expectEmit(true, true, true,true);
+        emit logCompletedTask(taskId, payloadHash, resultHash);
 
         gateway.postExecution(taskId, sourceNetwork, assembledInfo);
 
