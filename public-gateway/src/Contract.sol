@@ -5,7 +5,6 @@ import "openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol";
 import "openzeppelin-contracts/contracts/utils/Counters.sol";
 
 library Util {
-
     struct Task {
         address callback_address;
         bytes4 callback_selector;
@@ -26,14 +25,14 @@ library Util {
     }
 
     struct PostExecutionInfo {
-        bytes  payload;
+        bytes payload;
         bytes32 payload_hash;
-        bytes  payload_signature;
-        bytes  result;
+        bytes payload_signature;
+        bytes result;
         bytes32 result_hash;
-        bytes  result_signature;
+        bytes result_signature;
         bytes32 packet_hash;
-        bytes  packet_signature;
+        bytes packet_signature;
     }
 }
 
@@ -242,13 +241,7 @@ contract Gateway {
 
     /// @notice Post-Execution
     /// @param _sourceNetwork Source network of the message
-    function postExecution(
-        uint256 _taskId,
-        string memory _sourceNetwork,
-        Util.PostExecutionInfo memory _info
-    )
-        public
-    {
+    function postExecution(uint256 _taskId, string memory _sourceNetwork, Util.PostExecutionInfo memory _info) public {
         bool verifySig;
 
         address checkerAddress = route[_sourceNetwork];
@@ -288,5 +281,4 @@ contract Gateway {
 
         emit logCompletedTask(_taskId, _info.payload_hash, _info.result_hash);
     }
-    
 }

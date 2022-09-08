@@ -60,7 +60,7 @@ contract ContractTest is Test {
     function test_OwnerCanUpdateRouteWithValidSignature() public {
         // Set the Master Verrification Key below
         vm.prank(deployer);
-        address masterVerificationKey = vm.addr(5);
+        address masterVerificationKey = vm.addr(2);
 
         gateway.initialize(masterVerificationKey);
 
@@ -71,7 +71,7 @@ contract ContractTest is Test {
         bytes32 routeHash = gateway.getRouteHash(sampleRoute, SampleVerificationAddress);
         bytes32 ethSignedMessageHash = gateway.getEthSignedMessageHash(routeHash);
 
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(5, ethSignedMessageHash);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(2, ethSignedMessageHash);
         bytes memory sig = abi.encodePacked(r, s, v);
 
         vm.prank(deployer);
@@ -192,7 +192,7 @@ contract ContractTest is Test {
 
     function test_PreExecution() public {
         // USER ADDRESS       ----->   vm.addr(5);
-        // CALLBACK ADDRESS   ----->   vm.addr(6);
+        // CALLBACK ADDRESS   ----->   vm.addr(7);
 
         bytes4 callbackSelector = bytes4(abi.encodeWithSignature("callback(uint256 _taskId,bytes memory _result,bytes memory _resultSig)"));
         string memory sourceNetwork = "ethereum";
@@ -208,7 +208,7 @@ contract ContractTest is Test {
         bytes memory userPublicKey = "0x736f6d65207075626c6963206b65790000000000000000000000000000000000";
 
         Util.Task memory assembledTask = Util.Task({
-            callback_address: vm.addr(6),
+            callback_address: vm.addr(7),
             callback_selector: callbackSelector,
             user_address: vm.addr(5),
             source_network: sourceNetwork,
@@ -243,7 +243,7 @@ contract ContractTest is Test {
         gateway.preExecution(assembledTask, assembledInfo);
 
         (address tempCallbackAddress,,,,,,) = gateway.tasks(1);
-        assertEq(tempCallbackAddress, vm.addr(6));
+        assertEq(tempCallbackAddress, vm.addr(7));
 
         (, bytes4 tempCallbackSelector,,,,,) = gateway.tasks(1);
         assertEq(tempCallbackSelector, callbackSelector);
@@ -319,26 +319,67 @@ contract ContractTest is Test {
         vm.expectRevert(abi.encodeWithSignature("InvalidSignature()"));
     }
 
-    // function test_PostExecution() public {
+    function test_PostExecution() public {
+        test_OwnerCanUpdateRouteWithValidSignature();
+        test_PreExecution();
 
-    //     test_PreExecution();
+        string memory sourceNetwork = "secret";
+        uint256 taskId = 1;
 
-    //     string memory sourceNetwork = "secret";
-    //     uint256 taskId = 1;
+        // bytes32 string encoding of "add a bunch of stuff"
+        bytes memory payload = "0x61646420612062756e6368206f66207374756666000000000000000000000000";
+        bytes32 payloadHash = getPayloadHash(payload);
+        payloadHash = gateway.getEthSignedMessageHash(payloadHash);
 
-    //     string memory routingInfo = "ethereum";
-    //     bytes memory routingInfoSig = getRoutingInfoSignature(routingInfo, 5);
+        // bytes32 string encoding of "some result"
+        bytes memory result = "0x736f6d6520726573756c74000000000000000000000000000000000000000000";
+        bytes32 resultHash = getResultHash(result);
+        resultHash = gateway.getEthSignedMessageHash(resultHash);
 
-    //     // encoding of "add a bunch of stuff"
-    //     bytes memory payload = "0x61646420612062756e6368206f66207374756666000000000000000000000000";
-    //     bytes32 payloadHash = gateway.getPayloadHash(payload);
-    //     bytes memory payloadSig = getPayloadSignature(payload, 5);
+        Util.PostExecutionInfo memory assembledInfo = Util.PostExecutionInfo({
+            payload: payload,
+            payload_hash: payloadHash,
+            payload_signature: getPayloadSignature(payload, 6),
+            result: result,
+            result_hash: resultHash,
+            result_signature: getResultSignature(result, 6),
+            packet_hash: resultHash,
+            packet_signature: getResultSignature(result, 6)
+        });
 
-    //     bytes memory result = "0x74686973206973206120726573756c7400000000000000000000000000000000";
-    //     bytes32 resultHash = gateway.getResultHash(result);
-    //     bytes memory resultSig = getResultSignature(result, 5);
+        gateway.postExecution(taskId, sourceNetwork, assembledInfo);
+    }
 
-    //     Util.Task memory task;
+    function testFail_PostExecutionWithoutMapStoredAddressSignatures() public {
+        test_OwnerCanUpdateRouteWithValidSignature();
+        test_PreExecution();
 
-    // }
+        string memory sourceNetwork = "secret";
+        uint256 taskId = 1;
+
+        // bytes32 string encoding of "add a bunch of stuff"
+        bytes memory payload = "0x61646420612062756e6368206f66207374756666000000000000000000000000";
+        bytes32 payloadHash = getPayloadHash(payload);
+        payloadHash = gateway.getEthSignedMessageHash(payloadHash);
+
+        // bytes32 string encoding of "some result"
+        bytes memory result = "0x736f6d6520726573756c74000000000000000000000000000000000000000000";
+        bytes32 resultHash = getResultHash(result);
+        resultHash = gateway.getEthSignedMessageHash(resultHash);
+
+        Util.PostExecutionInfo memory assembledInfo = Util.PostExecutionInfo({
+            payload: payload,
+            payload_hash: payloadHash,
+            payload_signature: getPayloadSignature(payload, 8),
+            result: result,
+            result_hash: resultHash,
+            result_signature: getResultSignature(result, 6),
+            packet_hash: resultHash,
+            packet_signature: getResultSignature(result, 6)
+        });
+
+        gateway.postExecution(taskId, sourceNetwork, assembledInfo);
+
+        vm.expectRevert(abi.encodeWithSignature("InvalidSignature()"));
+    }
 }
