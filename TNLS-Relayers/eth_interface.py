@@ -1,17 +1,19 @@
+import os
+from logging import getLogger, basicConfig, INFO, StreamHandler
 from pprint import pprint
+from typing import List, Mapping, Sequence
 
 from web3 import Web3
+
 from base_interface import BaseChainInterface, BaseContractInterface, Task
-from typing import List, Mapping, Sequence
-from logging import getLogger, basicConfig, INFO, StreamHandler
-import os
 
 
 class EthInterface(BaseChainInterface):
     """
     Implementaion of BaseChainInterface for eth.
     """
-    def __init__(self, private_key="", address="", provider=None):
+
+    def __init__(self, private_key="", address="", provider=None, **_kwargs):
         if provider is None:
             """
             If we don't have a set provider, read it from config.
@@ -64,11 +66,11 @@ class EthInterface(BaseChainInterface):
         tx_hash = self.provider.eth.send_raw_transaction(signed_tx.rawTransaction)
         return tx_hash
 
-    def get_transactions(self):
+    def get_transactions(self, address):
         """
         See base_interface.py for documentation
         """
-        return self.get_last_txs(self.address)
+        return self.get_last_txs(address=address)
 
     def get_last_block(self):
         """
@@ -104,7 +106,8 @@ class EthContract(BaseContractInterface):
     """
     Implementation of BaseContractInterface for eth.
     """
-    def __init__(self, interface, address, abi):
+
+    def __init__(self, interface, address, abi, **_kwargs):
         self.address = address
         self.abi = abi
         self.interface = interface
@@ -129,6 +132,7 @@ class EthContract(BaseContractInterface):
         """
         See base_interface.py for documentation
         """
+        # TODO:  FIGURE OUT NECESSARY PREPROCESSING HERE?
         function = self.get_function(function_name)
         txn = self.interface.create_transaction(function, *args)
         return self.interface.sign_and_send_transaction(txn)
