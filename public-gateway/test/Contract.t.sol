@@ -349,7 +349,7 @@ contract ContractTest is Test {
             packet_signature: getResultSignature(result, 6)
         });
 
-        vm.expectEmit(true, true, true,true);
+        vm.expectEmit(true, true, true, true);
         emit logCompletedTask(taskId, payloadHash, resultHash);
 
         gateway.postExecution(taskId, sourceNetwork, assembledInfo);

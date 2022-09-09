@@ -243,7 +243,9 @@ contract Gateway {
     //////////////////////////////////////////////////////////////*/
 
     /// @notice Post-Execution
+    /// @param _taskId Task Id of the executed message
     /// @param _sourceNetwork Source network of the message
+    /// @param _info PostExecutionInfo struct
     function postExecution(uint256 _taskId, string memory _sourceNetwork, Util.PostExecutionInfo memory _info) public {
         bool verifySig;
 
