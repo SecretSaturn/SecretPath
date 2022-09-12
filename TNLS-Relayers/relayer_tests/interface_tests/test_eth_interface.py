@@ -5,10 +5,7 @@ from eth_tester import EthereumTester, PyEVMBackend
 from web3 import Web3
 from web3.exceptions import InvalidAddress
 
-try:
-    from ...eth_interface import EthInterface, EthContract
-except:
-    from eth_interface import EthInterface, EthContract
+from eth_interface import EthInterface, EthContract
 
 
 @pytest.fixture

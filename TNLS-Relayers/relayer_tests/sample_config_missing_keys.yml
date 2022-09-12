@@ -1,0 +1,3 @@
+fake_contract:
+  contract_address: "Fake_address"
+  contract_schema: "Fake_schema"

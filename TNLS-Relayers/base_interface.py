@@ -33,12 +33,14 @@ class Task:
     def __init__(self, task_dict):
         if 'task_destination_network' in task_dict:
             self.task_destination_network = task_dict['task_destination_network']
+        elif 'routing_info' in task_dict:
+            self.task_destination_network = task_dict['routing_info']
         else:
             self.task_destination_network = None
         self.task_data = task_dict
 
     def __str__(self):
-        return json.dumps(to_dict(self.__dict__))
+        return json.dumps(to_dict(self.task_data))
 
     def __repr__(self):
         return self.__str__()
@@ -50,17 +52,6 @@ class BaseChainInterface(abc.ABC):
     Governs transaction retrieval and creation
     """
     @abc.abstractmethod
-    def create_transaction(self, contract_function, data):
-        """
-        Creates a contract execution to be sent to the chain
-        Args:
-            contract_function:  The function to be executed on chain
-            data: the arguments for that function
-        """
-        # create task
-        pass
-
-    @abc.abstractmethod
     def sign_and_send_transaction(self, tx):
         """
         Given a raw transaction, signs it and sends it to the chain
@@ -70,7 +61,7 @@ class BaseChainInterface(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def get_transactions(self):
+    def get_transactions(self, address):
         """
             Retrieves all transactions from the chain that fit interface-dependent filters
         """
@@ -82,7 +73,7 @@ class BaseContractInterface(abc.ABC):
     Base class for all contract interfaces
     Governs contract interaction, execution, and event parsing.
     """
-
+    address = None
     @abc.abstractmethod
     def call_function(self, function_name, *args):
         """

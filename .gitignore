@@ -2,7 +2,7 @@
 TNLS-Relayers/etherscan_api_key.txt
 TNLS-Relayers/infura_api_endpoint.txt
 */*/*/infura_api_endpoint.txt
-config.txt
+config.yml
 */.*
 */venv
 .DS_Store
@@ -17,3 +17,5 @@ out/
 !/broadcast
 /broadcast/*
 /broadcast/*/31337
+.vscode
+target/
