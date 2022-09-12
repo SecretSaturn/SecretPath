@@ -289,6 +289,164 @@ def address_and_abi_of_contract(provider_privkey_address):
     return tx_receipt.contractAddress, abi, foo_contract(tx_receipt.contractAddress)
 
 
+@pytest.fixture
+def address_and_abi_of_contract_full_interface(provider_privkey_address):
+    """
+    Creates a contract with the below code, deploys it, and returns it, it's address, and ABI.
+    """
+
+    deploy_address = Web3.EthereumTesterProvider().ethereum_tester.get_accounts()[0]
+
+    abi = """[
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": true,
+				"internalType": "uint256",
+				"name": "task_id",
+				"type": "uint256"
+			},
+			{
+				"indexed": false,
+				"internalType": "string",
+				"name": "source_network",
+				"type": "string"
+			},
+			{
+				"indexed": false,
+				"internalType": "bytes",
+				"name": "payload",
+				"type": "bytes"
+			},
+			{
+				"indexed": false,
+				"internalType": "bytes32",
+				"name": "payload_hash",
+				"type": "bytes32"
+			},
+			{
+				"indexed": false,
+				"internalType": "bytes",
+				"name": "payload_signature",
+				"type": "bytes"
+			},
+			{
+				"indexed": false,
+				"internalType": "bytes",
+				"name": "result",
+				"type": "bytes"
+			},
+			{
+				"indexed": false,
+				"internalType": "bytes32",
+				"name": "result_hash",
+				"type": "bytes32"
+			},
+			{
+				"indexed": false,
+				"internalType": "bytes",
+				"name": "result_signature",
+				"type": "bytes"
+			},
+			{
+				"indexed": false,
+				"internalType": "bytes32",
+				"name": "packet_hash",
+				"type": "bytes32"
+			},
+			{
+				"indexed": false,
+				"internalType": "bytes",
+				"name": "packet_signature",
+				"type": "bytes"
+			}
+		],
+		"name": "logCompletedTask",
+		"type": "event"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "_taskId",
+				"type": "uint256"
+			},
+			{
+				"internalType": "string",
+				"name": "_sourceNetwork",
+				"type": "string"
+			},
+			{
+				"components": [
+					{
+						"internalType": "bytes",
+						"name": "payload",
+						"type": "bytes"
+					},
+					{
+						"internalType": "bytes32",
+						"name": "payload_hash",
+						"type": "bytes32"
+					},
+					{
+						"internalType": "bytes",
+						"name": "payload_signature",
+						"type": "bytes"
+					},
+					{
+						"internalType": "bytes",
+						"name": "result",
+						"type": "bytes"
+					},
+					{
+						"internalType": "bytes32",
+						"name": "result_hash",
+						"type": "bytes32"
+					},
+					{
+						"internalType": "bytes",
+						"name": "result_signature",
+						"type": "bytes"
+					},
+					{
+						"internalType": "bytes32",
+						"name": "packet_hash",
+						"type": "bytes32"
+					},
+					{
+						"internalType": "bytes",
+						"name": "packet_signature",
+						"type": "bytes"
+					}
+				],
+				"internalType": "struct Util.PostExecutionInfo",
+				"name": "_info",
+				"type": "tuple"
+			}
+		],
+		"name": "postExecution",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	}
+]"""
+    bytecode = "608060405234801561001057600080fd5b506106e4806100206000396000f3fe608060405234801561001057600080fd5b506004361061002b5760003560e01c806338157d9a14610030575b600080fd5b61004a60048036038101906100459190610480565b61004c565b005b827fa6959e124e12197da17aa251aed434d16737f5c0a70a86e4ccc26f957d49241483836000015184602001518560400151866060015187608001518860a001518960c001518a60e001516040516100ac999897969594939291906105f7565b60405180910390a2505050565b6000604051905090565b600080fd5b600080fd5b6000819050919050565b6100e0816100cd565b81146100eb57600080fd5b50565b6000813590506100fd816100d7565b92915050565b600080fd5b600080fd5b6000601f19601f8301169050919050565b7f4e487b7100000000000000000000000000000000000000000000000000000000600052604160045260246000fd5b6101568261010d565b810181811067ffffffffffffffff821117156101755761017461011e565b5b80604052505050565b60006101886100b9565b9050610194828261014d565b919050565b600067ffffffffffffffff8211156101b4576101b361011e565b5b6101bd8261010d565b9050602081019050919050565b82818337600083830152505050565b60006101ec6101e784610199565b61017e565b90508281526020810184848401111561020857610207610108565b5b6102138482856101ca565b509392505050565b600082601f8301126102305761022f610103565b5b81356102408482602086016101d9565b91505092915050565b600080fd5b600080fd5b600067ffffffffffffffff82111561026e5761026d61011e565b5b6102778261010d565b9050602081019050919050565b600061029761029284610253565b61017e565b9050828152602081018484840111156102b3576102b2610108565b5b6102be8482856101ca565b509392505050565b600082601f8301126102db576102da610103565b5b81356102eb848260208601610284565b91505092915050565b6000819050919050565b610307816102f4565b811461031257600080fd5b50565b600081359050610324816102fe565b92915050565b6000610100828403121561034157610340610249565b5b61034c61010061017e565b9050600082013567ffffffffffffffff81111561036c5761036b61024e565b5b610378848285016102c6565b600083015250602061038c84828501610315565b602083015250604082013567ffffffffffffffff8111156103b0576103af61024e565b5b6103bc848285016102c6565b604083015250606082013567ffffffffffffffff8111156103e0576103df61024e565b5b6103ec848285016102c6565b606083015250608061040084828501610315565b60808301525060a082013567ffffffffffffffff8111156104245761042361024e565b5b610430848285016102c6565b60a08301525060c061044484828501610315565b60c08301525060e082013567ffffffffffffffff8111156104685761046761024e565b5b610474848285016102c6565b60e08301525092915050565b600080600060608486031215610499576104986100c3565b5b60006104a7868287016100ee565b935050602084013567ffffffffffffffff8111156104c8576104c76100c8565b5b6104d48682870161021b565b925050604084013567ffffffffffffffff8111156104f5576104f46100c8565b5b6105018682870161032a565b9150509250925092565b600081519050919050565b600082825260208201905092915050565b60005b8381101561054557808201518184015260208101905061052a565b83811115610554576000848401525b50505050565b60006105658261050b565b61056f8185610516565b935061057f818560208601610527565b6105888161010d565b840191505092915050565b600081519050919050565b600082825260208201905092915050565b60006105ba82610593565b6105c4818561059e565b93506105d4818560208601610527565b6105dd8161010d565b840191505092915050565b6105f1816102f4565b82525050565b6000610120820190508181036000830152610612818c61055a565b90508181036020830152610626818b6105af565b9050610635604083018a6105e8565b818103606083015261064781896105af565b9050818103608083015261065b81886105af565b905061066a60a08301876105e8565b81810360c083015261067c81866105af565b905061068b60e08301856105e8565b81810361010083015261069e81846105af565b90509a995050505050505050505056fea264697066735822122094f38c0a022e22b5e1399f789645902c30a4fe69496fc563dbac325f471cc3dd64736f6c634300080a0033"
+    # Create our contract class.
+    foo_contract = provider_privkey_address[0].eth.contract(abi=abi, bytecode=bytecode)
+    # issue a transaction to deploy the contract.
+    tx_hash = foo_contract.constructor().transact(
+        {
+            "from": deploy_address,
+            'gas': 1000000,
+        }
+    )
+    # wait for the transaction to be mined
+    tx_receipt = provider_privkey_address[0].eth.wait_for_transaction_receipt(tx_hash, 180)
+    # instantiate and return an instance of our contract.
+    return tx_receipt.contractAddress, abi, foo_contract(tx_receipt.contractAddress)
+
+
 @pytest.mark.skipif(sys.platform.startswith('win'), reason="does not run on windows")
 def test_basic_contract_init(provider_privkey_address, address_and_abi_of_contract):
     # Confirms that the ethContract interface initializes correctly
@@ -342,7 +500,7 @@ def test_function_call(provider_privkey_address, address_and_abi_of_contract):
     contract = EthContract(interface=interface, address=address_and_abi_of_contract[0],
                            abi=address_and_abi_of_contract[1])
     foo_contract = address_and_abi_of_contract[2]
-    tx = contract.call_function('setBar', 'testing contracts is easy')
+    tx = contract.call_function('setBar', '{"_bar":"testing contracts is easy"}')
     # verify that the log's data matches the expected value
     receipt = provider.eth.wait_for_transaction_receipt(tx, 180)
     logs = list(foo_contract.events.barred.getLogs())
@@ -350,3 +508,35 @@ def test_function_call(provider_privkey_address, address_and_abi_of_contract):
     event = logs[0]
     assert event.blockHash == receipt.blockHash
     assert event.__dict__['args']['_bar'] == 'testing contracts is easy'
+
+
+@pytest.mark.skipif(sys.platform.startswith('win'), reason="does not run on windows")
+def test_function_call_with_real_interface(provider_privkey_address, address_and_abi_of_contract_full_interface):
+    # Confirms that the ethContract interface correctly calls functions
+    provider, private_key, address = provider_privkey_address
+    interface = EthInterface(address=address,
+                             private_key=private_key,
+                             provider=provider)
+    contract = EthContract(interface=interface, address=address_and_abi_of_contract_full_interface[0],
+                           abi=address_and_abi_of_contract_full_interface[1])
+    foo_contract = address_and_abi_of_contract_full_interface[2]
+    input = '[ 1,' \
+            ' "secret",' \
+            ' ["0x3078363136343634323036313230363237353665363336383230366636363230373337343735363636363030303' \
+            '03030303030303030303030303030303030303030","0x8a5efa54dcbe3378b7910b0bba0c461fbc' \
+            '85a0928ac485730fedf4c3f4158248","0xd4651f38497602c5c287aff4aa79afa7f3b82abe862151b0bcc7' \
+            'c539b2f9f5f24ca54a148aef19b9ed7e7fd2f84c72fc149eabb32c735d704fdbe6928dda8eef1c","0x3078373' \
+            '3366636643635323037323635373337353663373430303030303030303030303030303030303030303030303030' \
+            '3030303030303030303030303030303030","0xe764ca2c3aae5dc9c65410ab1bb6b48aaee607cbdf7a2308091a' \
+            '71b2a9d16ee4","0x8f02e349b0cb8136cc534c46a1fb483fda66456750ac66442155d050154dc84b390212216c6' \
+            '9bd3ec62e6ef4299395c1b2577bec7ce11aea85ac1c62f52b92f21c","0xe764ca2c3aae5dc9c65410ab1bb6b48aa' \
+            'ee607cbdf7a2308091a71b2a9d16ee4","0x8f02e349b0cb8136cc534c46a1fb483fda66456750ac66442155d0501' \
+            '54dc84b390212216c69bd3ec62e6ef4299395c1b2577bec7ce11aea85ac1c62f52b92f21c"]]'
+    tx = contract.call_function('postExecution', input)
+    # verify that the log's data matches the expected value
+    receipt = provider.eth.wait_for_transaction_receipt(tx, 180)
+    logs = list(foo_contract.events.logCompletedTask.getLogs())
+    assert len(logs) == 1
+    event = logs[0]
+    assert event.blockHash == receipt.blockHash
+    assert event.__dict__['args']['source_network'] == 'secret'

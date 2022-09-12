@@ -1,3 +1,4 @@
+import json
 import os
 from logging import getLogger, basicConfig, INFO, StreamHandler
 from pprint import pprint
@@ -41,18 +42,33 @@ class EthInterface(BaseChainInterface):
         self.logger = getLogger()
         pass
 
-    def create_transaction(self, contract_function, data):
+    def create_transaction(self, contract_function, *args, **kwargs):
         """
         See base_interface.py for documentation
         """
         # create task
         nonce = self.provider.eth.get_transaction_count(self.address)
-        tx = contract_function(data).buildTransaction({
-            'from': self.address,
-            'gas': 200000,
-            'nonce': nonce,
-            'gasPrice': self.provider.eth.gasPrice,
-        })
+        if kwargs is {}:
+            tx = contract_function(*args).buildTransaction({
+                'from': self.address,
+                'gas': 200000,
+                'nonce': nonce,
+                'gasPrice': self.provider.eth.gasPrice,
+            })
+        elif len(args) == 0:
+            tx = contract_function(**kwargs).buildTransaction({
+                'from': self.address,
+                'gas': 200000,
+                'nonce': nonce,
+                'gasPrice': self.provider.eth.gasPrice,
+            })
+        else:
+            tx = contract_function(*args, **kwargs).buildTransaction({
+                'from': self.address,
+                'gas': 200000,
+                'nonce': nonce,
+                'gasPrice': self.provider.eth.gasPrice,
+            })
 
         return tx
 
@@ -132,9 +148,24 @@ class EthContract(BaseContractInterface):
         """
         See base_interface.py for documentation
         """
-        # TODO:  FIGURE OUT NECESSARY PREPROCESSING HERE?
+        kwargs = None
         function = self.get_function(function_name)
-        txn = self.interface.create_transaction(function, *args)
+        if len(args) == 1:
+            args = json.loads(args[0])
+            if isinstance(args, dict):
+                kwargs = args
+                args = []
+            else:
+                for i, value in enumerate(args):
+                    if isinstance(value, list):
+                        args[i] = tuple(value)
+                kwargs = None
+        if kwargs is None:
+            txn = self.interface.create_transaction(function, *args)
+        elif args is None:
+            txn = self.interface.create_transaction(function, **kwargs)
+        else:
+            txn = self.interface.create_transaction(function, *args, **kwargs)
         return self.interface.sign_and_send_transaction(txn)
 
     def parse_event_from_txn(self, event_name, txn) -> List[Task]:
