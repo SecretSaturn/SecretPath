@@ -113,9 +113,16 @@ class BaseChainInterface(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def get_transactions(self, address):
+    def get_transactions(self, address, height=None):
         """
             Retrieves all transactions from the chain that fit interface-dependent filters
+        """
+        pass
+
+    @abc.abstractmethod
+    def get_last_block(self):
+        """
+            Retrieves the current block height of the chain
         """
         pass
 

@@ -17,9 +17,12 @@ class FakeChainInterface(BaseChainInterface):
 
     def __init__(self, tx_list):
         self.tx_list = tx_list
+        self.height_call_list = []
+        self.start_height = 1
         pass
 
-    def get_transactions(self, _):
+    def get_transactions(self, _, height=None):
+        self.height_call_list.append(height)
         return self.tx_list
         pass
 
@@ -28,6 +31,9 @@ class FakeChainInterface(BaseChainInterface):
 
     def sign_and_send_transaction(self, _tx):
         pass
+
+    def get_last_block(self):
+        return self.start_height
 
 
 class FakeChainForConfig(BaseChainInterface):
@@ -39,10 +45,13 @@ class FakeChainForConfig(BaseChainInterface):
         self.__dict__ = kwargs
         pass
 
-    def get_transactions(self, _):
+    def get_transactions(self, _, **_kwargs):
         pass
 
     def sign_and_send_transaction(self, _tx):
+        pass
+
+    def get_last_block(self):
         pass
 
 
@@ -136,6 +145,58 @@ def test_config_file_parsing_bad_name(fake_map_names_to_interfaces, request):
     with pytest.raises(ValueError) as e:
         convert_config_file_to_dict(config_file, map_of_names_to_interfaces=fake_map_names_to_interfaces)
     assert str(e.value) == "fake_contract_bad not in map of names to interfaces"
+
+
+def test_basic_relayer_poll_height_none(fake_interface_factory):
+    # Tests that a freshly initialized relayer polls the chain for the latest height and loops up to it
+    task_dict_list = [{'task_id': '1', 'args': '1', 'task_destination_network': 'fake'},
+                      {'task_id': '2', 'args': '2', 'task_destination_network': 'fake'}]
+    num_to_add = 3
+    chain_interface, contract_interface = fake_interface_factory(task_dict_list, num_to_add)
+    dict_of_names_to_interfaces = {'fake': (chain_interface, contract_interface, '', '')}
+    chain_interface.start_height = 1
+    relayer = Relayer(dict_of_names_to_interfaces, num_loops=1)
+    assert relayer.dict_of_names_to_blocks == {'fake': None}
+    relayer.poll_for_transactions()
+    assert chain_interface.height_call_list == [1]
+    assert relayer.dict_of_names_to_blocks == {'fake': 1}
+    assert len(relayer.task_list) == 2
+    assert relayer.task_list[0].task_data == {'task_id': '1', 'args': '1', 'task_destination_network': 'fake'}
+    assert relayer.task_list[1].task_data == {'task_id': '2', 'args': '2', 'task_destination_network': 'fake'}
+
+
+def test_basic_relayer_poll_height_greater(fake_interface_factory):
+    # Tests that a relayer with a fixed height properly catches up to the chain
+    task_dict_list = [{'task_id': '1', 'args': '1', 'task_destination_network': 'fake'},
+                      {'task_id': '2', 'args': '2', 'task_destination_network': 'fake'}]
+    num_to_add = 3
+    chain_interface, contract_interface = fake_interface_factory(task_dict_list, num_to_add)
+    dict_of_names_to_interfaces = {'fake': (chain_interface, contract_interface, '', '')}
+    chain_interface.start_height = 2
+    relayer = Relayer(dict_of_names_to_interfaces, num_loops=1)
+    relayer.dict_of_names_to_blocks['fake'] = 0
+    relayer.poll_for_transactions()
+    assert chain_interface.height_call_list == [1, 2]
+    assert relayer.dict_of_names_to_blocks == {'fake': 2}
+    assert len(relayer.task_list) == 4
+    assert relayer.task_list[2].task_data == {'task_id': '1', 'args': '1', 'task_destination_network': 'fake'}
+    assert relayer.task_list[3].task_data == {'task_id': '2', 'args': '2', 'task_destination_network': 'fake'}
+
+
+def test_basic_relayer_poll_height_equal(fake_interface_factory):
+    # Tests that relayer polling with equal heights is a no-op
+    task_dict_list = [{'task_id': '1', 'args': '1', 'task_destination_network': 'fake'},
+                      {'task_id': '2', 'args': '2', 'task_destination_network': 'fake'}]
+    num_to_add = 3
+    chain_interface, contract_interface = fake_interface_factory(task_dict_list, num_to_add)
+    dict_of_names_to_interfaces = {'fake': (chain_interface, contract_interface, '', '')}
+    chain_interface.start_height = 2
+    relayer = Relayer(dict_of_names_to_interfaces, num_loops=1)
+    relayer.dict_of_names_to_blocks['fake'] = 2
+    relayer.poll_for_transactions()
+    assert chain_interface.height_call_list == []
+    assert relayer.dict_of_names_to_blocks == {'fake': 2}
+    assert len(relayer.task_list) == 0
 
 
 def test_basic_relayer_poll(fake_interface_factory):

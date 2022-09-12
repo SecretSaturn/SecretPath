@@ -303,11 +303,14 @@ def fake_interface_provider():
             self.wallet = FakeWallet()
             pass
 
-        def get_transactions(self, _address):
+        def get_transactions(self, _address, **_height):
             pass
 
         def sign_and_send_transaction(self, tx):
             return tx
+
+        def get_last_block(self):
+            pass
 
     return FakeInterfaceProvider
 

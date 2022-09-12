@@ -39,6 +39,7 @@ class Relayer:
         self.task_ids_to_statuses = {}
         self.task_threads = []
         self.dict_of_names_to_interfaces = dict_of_names_to_interfaces
+        self.dict_of_names_to_blocks = {name: None for name in self.dict_of_names_to_interfaces}
         basicConfig(
             level=DEBUG,
             format="%(asctime)s [relayer: %(levelname)8.8s] %(message)s",
@@ -55,13 +56,19 @@ class Relayer:
         Updates task list with found events
         """
         for name, (chain_interface, contract_interface, evt_name, _) in self.dict_of_names_to_interfaces.items():
-            transactions = chain_interface.get_transactions(contract_interface.address)
-            for transaction in transactions:
-                tasks = contract_interface.parse_event_from_txn(evt_name, transaction)
-                for task in tasks:
-                    task_id = task.task_data['task_id']
-                    self.task_ids_to_statuses[task_id] = 'Received from {}'.format(name)
-                self.task_list.extend(tasks)
+            prev_height = self.dict_of_names_to_blocks[name]
+            curr_height = chain_interface.get_last_block()
+            if prev_height is None:
+                prev_height = curr_height - 1
+            for block_num in range(prev_height + 1, curr_height + 1):
+                transactions = chain_interface.get_transactions(contract_interface.address, height=block_num)
+                for transaction in transactions:
+                    tasks = contract_interface.parse_event_from_txn(evt_name, transaction)
+                    for task in tasks:
+                        task_id = task.task_data['task_id']
+                        self.task_ids_to_statuses[task_id] = 'Received from {}'.format(name)
+                    self.task_list.extend(tasks)
+            self.dict_of_names_to_blocks[name] = curr_height
 
     def route_transaction(self, task: Task):
         """
