@@ -5,5 +5,17 @@ TNLS-Relayers/infura_api_endpoint.txt
 config.yml
 */.*
 */venv
+.DS_Store
+
+# Foundry stuff
+# --------------------------
+# Compiler files
+cache/
+out/
+
+# Ignores development broadcast logs
+!/broadcast
+/broadcast/*
+/broadcast/*/31337
 .vscode
 target/

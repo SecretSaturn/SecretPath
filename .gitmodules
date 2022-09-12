@@ -1,0 +1,9 @@
+[submodule "public-gateway/lib/forge-std"]
+	path = public-gateway/lib/forge-std
+	url = https://github.com/foundry-rs/forge-std
+[submodule "public-gateway/lib/openzeppelin-contracts"]
+	path = public-gateway/lib/openzeppelin-contracts
+	url = https://github.com/openzeppelin/openzeppelin-contracts
+[submodule "public-gateway/lib/solmate"]
+	path = public-gateway/lib/solmate
+	url = https://github.com/transmissions11/solmate
