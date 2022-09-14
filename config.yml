@@ -1,0 +1,8 @@
+ethereum:
+  contract_address: "INSERT_ETHEREUM_CONTRACT_ADDRESS_HERE"
+  contract_schema: "INSERT_ETHEREUM_CONTRACT_SCHEMA_HERE"
+  wallet_address: "0xCe89F0FFa695865d8EbaE7e544541a23FE7f6674"
+
+secret:
+  contract_address: "INSERT_SECRET_CONTRACT_ADDRESS_HERE"
+  wallet_address: "secret1y47aa30tmezpld4npjpad20zl9v76sn8j2nml2"

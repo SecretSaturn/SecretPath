@@ -1,0 +1,56 @@
+name: Deployment
+
+on:
+  push:
+    branches:
+      - main
+
+
+jobs:
+  Deploy-to-main:
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python 3.8
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.8
+      - name: Build Secret Contracts
+        run:
+          echo "Unimplemented"
+      - name: Deploy Secret Contracts
+        run:
+          echo "Unimplemented"
+      - name: Get secret contract verification key
+        run:
+          echo "Unimplemented"
+      - name: Build public contract
+        run:
+          echo "Unimplemented"
+      - name: Deploy public contract
+        run:
+          echo "Unimplemented"
+      - name: Deploy sample scrt contracts
+        run:
+          echo "Unimplemented"
+      - name: Deploy sample eth contracts
+        run:
+          echo "Unimplemented"
+      - name: Install python dependencies
+        working-directory: ./TNLS-Relayers
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Write webserver Config Files
+        working-directory: ./TNLS-Relayers
+        env:
+          INFURA_ENDPOINT: ${{ secrets.INFURA_ENDPOINT }}
+        run: |
+          touch infura_api_endpoint.txt
+          echo "$INFURA_ENDPOINT" > infura_api_endpoint.txt
+          echo "Unimplemented"
+      - name: Deploy webserver to heroku
+        run:
+          echo "Unimplemented"
