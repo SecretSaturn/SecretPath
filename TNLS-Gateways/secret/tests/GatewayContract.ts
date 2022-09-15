@@ -3,14 +3,16 @@ export type HumanAddr = string;
 
 export interface PreExecutionMsg {
   task_id: number;
-  handle: string;
-  routing_info: Contract;
-  sender_info: Sender;
+  source_network: string;
+  routing_info: HumanAddr;
+  routing_code_hash: string;
   payload: Binary;
-  nonce: Binary;
   payload_hash: Binary;
   payload_signature: Binary;
-  source_network: string;
+  user_address: HumanAddr;
+  user_key: Binary;
+  handle: string;
+  nonce: Binary;
   [k: string]: unknown;
 }
 export interface Contract {
@@ -44,7 +46,9 @@ export interface InitMsg {
 }
 export interface Payload {
   data: string;
-  routing_info: Contract;
-  sender: Sender;
+  routing_info: string;
+  routing_code_hash: string;
+  user_address: string;
+  user_key: Binary;
   [k: string]: unknown;
 }

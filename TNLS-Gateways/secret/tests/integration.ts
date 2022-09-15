@@ -1,11 +1,12 @@
 import axios from "axios";
-import { Wallet, SecretNetworkClient, fromUtf8 } from "secretjs";
+import { Wallet, SecretNetworkClient, fromUtf8, fromHex } from "secretjs";
 import fs from "fs";
 import assert from "assert";
-import { PreExecutionMsg, PostExecutionMsg, Payload, Contract, Sender, Binary, BroadcastMsg } from "./GatewayContract";
+import { PreExecutionMsg, Payload, Binary } from "./GatewayContract";
 import { ecdsaSign } from "secp256k1";
 import { Wallet as EthWallet } from "ethers";
-import { arrayify, SigningKey } from "ethers/lib/utils";
+import { arrayify, SigningKey, computeAddress, recoverAddress, recoverPublicKey, keccak256 } from "ethers/lib/utils";
+import sha3 from "js-sha3";
 import { createHash, randomBytes } from 'crypto';
 import { encrypt_payload } from './encrypt-payload/pkg'
 import 'dotenv/config'
@@ -47,7 +48,7 @@ const initializeGateway = async (
   scrtRngAddress: string,
 ) => {
   const wasmCode = fs.readFileSync(contractPath);
-  console.log("\nUploading contract");
+  console.log("\nUploading gateway contract");
 
   const uploadReceipt = await client.tx.compute.storeCode(
     {
@@ -109,22 +110,10 @@ const initializeGateway = async (
     (log) => log.type === "message" && log.key === "contract_address"
   )!.value;
 
-  const encryption_pubkey = contract.arrayLog!.find(
-    (log) => log.type === "wasm" && log.key === "encryption_pubkey"
-  )!.value;
-
-  const signing_pubkey = contract.arrayLog!.find(
-    (log) => log.type === "wasm" && log.key === "signing_pubkey"
-  )!.value;
-
   console.log(`Contract address: ${contractAddress}\n`);
+  console.log(`Init used \x1b[33m${contract.gasUsed}\x1b[0m gas\n`);
 
-  console.log(`\x1b[32mEncryption key: ${encryption_pubkey}\x1b[0m`);
-  console.log(`\x1b[32mVerification key: ${signing_pubkey}\x1b[0m\n`);
-
-  console.log(`Init used \x1b[33m${contract.gasUsed}\x1b[0m gas`);
-
-  var gatewayInfo: [string, string, string] = [contractCodeHash, contractAddress, encryption_pubkey];
+  var gatewayInfo: [string, string] = [contractCodeHash, contractAddress];
   return gatewayInfo;
 };
 
@@ -325,8 +314,10 @@ async function initializeAndUploadContract() {
 
   console.log(`Retrieving random number...`);
   await rngTx(client, gatewayHash, gatewayAddress, scrtRngHash, scrtRngAddress);
-  console.log(`Sending query: {"get_public_key": {} }`);
-  const gatewayKey = await queryPubKey(client, gatewayHash, gatewayAddress);
+  console.log(`Sending query: {"get_public_keys": {} }`);
+  const gatewayKeys = await queryPubKey(client, gatewayHash, gatewayAddress);
+
+  const gatewayKey = Buffer.from(gatewayKeys.verification_key.substring(2), 'hex').toString('base64')
 
   const [contractHash, contractAddress] = await initializeContract(
     client,
@@ -379,7 +370,7 @@ async function rngTx(
     );
   };
 
-  console.log(`"key_gen" used \x1b[33m${tx.gasUsed}\x1b[0m gas`);
+  console.log(`"key_gen" used \x1b[33m${tx.gasUsed}\x1b[0m gas\n`);
 }
 
 async function gatewayTx(
@@ -388,31 +379,30 @@ async function gatewayTx(
   gatewayAddress: string,
   contractHash: string,
   contractAddress: string,
-  gatewayPublicKey: string, // base64
+  gatewayPublicKey: string, // base64, encryption key
 ) {
   const wallet = EthWallet.createRandom(); 
   const userPublicAddress: string = wallet.address;
   const userPublicKey: string = new SigningKey(wallet.privateKey).compressedPublicKey;
-  console.log(`\n\x1b[34mEthereum Address: ${wallet.address}\n\x1b[34mPublic Key: ${userPublicKey}\n\x1b[34mPrivate Key: ${wallet.privateKey}\x1b[0m\n`);
+  // console.log(`\n\x1b[34mEthereum Address: ${wallet.address}\n\x1b[34mPublic Key: ${userPublicKey}\n\x1b[34mPrivate Key: ${wallet.privateKey}\x1b[0m\n`);
 
   const userPrivateKeyBytes = arrayify(wallet.privateKey)
   const userPublicKeyBytes = arrayify(userPublicKey)
   const gatewayPublicKeyBuffer = Buffer.from(gatewayPublicKey, 'base64')
   const gatewayPublicKeyBytes = arrayify(gatewayPublicKeyBuffer)
-
-  const routing_info: Contract = {
-    address: contractAddress,
-    hash: contractHash
-  };
-  const sender: Sender = {
-    address: userPublicAddress,
-    public_key: Buffer.from(userPublicKeyBytes).toString('base64'),
-  };
+  
   const inputs = JSON.stringify({"my_value": 1});
+  const routing_info = contractAddress;
+  const routing_code_hash = contractHash;
+  const user_address = userPublicAddress;
+  const user_key = Buffer.from(userPublicKeyBytes).toString('base64');
+
   const payload: Payload = {
     data: inputs,
     routing_info: routing_info,
-    sender: sender,
+    routing_code_hash: routing_code_hash,
+    user_address: user_address,
+    user_key: user_key
   };
   console.log("Unencrypted Payload:");
   console.log(payload);
@@ -425,22 +415,21 @@ async function gatewayTx(
     .toString('base64');
 
   const payloadHash = createHash('sha256').update(ciphertext,'base64').digest();
-  const payloadHash64 = payloadHash.toString('base64');
-  console.log(`\nPayload Hash is ${payloadHash.byteLength} bytes`);
-
+  // const payloadHash64 = payloadHash.toString('base64');
   const payloadSignature = ecdsaSign(payloadHash, userPrivateKeyBytes).signature;
-  const payloadSignature64 = Buffer.from(payloadSignature).toString('base64');
-  console.log(`Payload Signature is ${payloadSignature.byteLength} bytes\n`);
+  // const payloadSignature64 = Buffer.from(payloadSignature).toString('base64');
 
   const handle_msg: PreExecutionMsg = {
     task_id: 1,
     handle: "add_one",
     routing_info: routing_info,
-    sender_info: sender,
+    routing_code_hash: routing_code_hash,
+    user_address: user_address,
+    user_key: user_key,
     payload: ciphertext,
     nonce: Buffer.from(nonce).toString('base64'),
-    payload_hash: payloadHash64,
-    payload_signature: payloadSignature64,
+    payload_hash: payloadHash.toString('base64'),
+    payload_signature: Buffer.from(payloadSignature).toString('base64'),
     source_network: "ethereum",
   };
   console.log("handle_msg:");
@@ -452,15 +441,14 @@ async function gatewayTx(
       contractAddress: gatewayAddress,
       codeHash: gatewayHash,
       msg: {
-        input: { inputs: handle_msg }, // TODO eliminate nesting if reasonable
+        input: { inputs: handle_msg }, // TODO eliminate nesting if possible
       },
       sentFunds: [],
     },
     {
-      gasLimit: 200000,
+      gasLimit: 500000,
     }
   );
-  console.log(tx);
 
   if (tx.code !== 0) {
     throw new Error(
@@ -469,14 +457,11 @@ async function gatewayTx(
   };
 
   // Parsing the logs from the 'Output' handle
-
   let logs: {[index: string]:string} = {};
   const logKeys = [
     "source_network",
-    "routing_info",
-    "routing_info_hash",
-    "routing_info_signature",
-    "payload",
+    "task_destination_network",
+    "task_id", 
     "payload_hash",
     "payload_signature",
     "result",
@@ -484,9 +469,6 @@ async function gatewayTx(
     "result_signature",
     "packet_hash",
     "packet_signature",
-    "task_id", 
-    "task_id_hash",
-    "task_id_signature",
   ];
 
   logKeys.forEach((key) => logs[key] = tx.arrayLog!.find(
@@ -496,40 +478,47 @@ async function gatewayTx(
   console.log("\nOutput Logs:");
   console.log(logs);
 
+  console.log('\nTesting recoverAddress on each signature:')
+  const test1 = recoverAddress(logs["payload_hash"], logs["payload_signature"]);
+  const test2 = recoverAddress(logs["result_hash"], logs["result_signature"]);
+  const test3 = recoverAddress(logs["packet_hash"], logs["packet_signature"]);
+  [test1, test2, test3].forEach(element => {
+    console.log(element)
+  });
+
   assert(logs["source_network"] == "secret");
-  assert(logs["routing_info"] == "ethereum");
-  assert(Buffer.from(logs["routing_info_hash"], 'base64').byteLength == 32);
-  assert(Buffer.from(logs["routing_info_signature"], 'base64').byteLength == 64);
-  assert(logs["payload"] == ciphertext);
-  assert(Buffer.from(logs["payload_hash"], 'base64').byteLength == 32);
-  assert(Buffer.from(logs["payload_signature"], 'base64').byteLength == 64);
-  assert(logs["result"] == "{\"my_value\":2}"); // note that value changed
-  assert(Buffer.from(logs["result_hash"], 'base64').byteLength == 32);
-  assert(Buffer.from(logs["result_signature"], 'base64').byteLength == 64);
-  assert(Buffer.from(logs["packet_hash"], 'base64').byteLength == 32);
-  assert(Buffer.from(logs["packet_signature"], 'base64').byteLength == 64);
+  assert(logs["task_destination_network"] == "ethereum");
   assert(logs["task_id"] == "1");
-  assert(Buffer.from(logs["task_id_hash"], 'base64').byteLength == 32);
-  assert(Buffer.from(logs["task_id_signature"], 'base64').byteLength == 64);
+  assert(fromHex(logs["payload_hash"].substring(2)).byteLength == 32);
+  assert(fromHex(logs["payload_signature"].substring(2)).byteLength == 65);
+  assert(logs["result"] == "0x7b226d795f76616c7565223a327d");
+  assert(fromHex(logs["result_hash"].substring(2)).byteLength == 32);
+  assert(fromHex(logs["result_signature"].substring(2)).byteLength == 65);
+  assert(fromHex(logs["packet_hash"].substring(2)).byteLength == 32);
+  assert(fromHex(logs["packet_signature"].substring(2)).byteLength == 65);
 
   console.log(`inputTx used \x1b[33m${tx.gasUsed}\x1b[0m gas`);
 }
+
+type PublicKeyResponse = { encryption_key: Binary, verification_key: Binary };
 
 async function queryPubKey(
   client: SecretNetworkClient,
   gatewayHash: string,
   gatewayAddress: string,
-): Promise<string> {
-  type PublicKeyResponse = { key: Binary };
+): Promise<PublicKeyResponse> {
 
   const response = (await client.query.compute.queryContract({
     contractAddress: gatewayAddress,
     codeHash: gatewayHash,
-    query: { get_public_key: {} },
+    query: { get_public_keys: {} },
   })) as PublicKeyResponse;
 
-  console.log(`Gateway Public Key: ${response.key}`);
-  return response.key
+  console.log(`\x1b[32mEncryption key: ${response.encryption_key}\x1b[0m`);
+  console.log(`\x1b[32mPublic key: ${response.verification_key}\x1b[0m`);
+  console.log(`\x1b[34;1mEth Address: ${computeAddress(response.verification_key)}\x1b[0m`);
+
+  return response
 }
 
 async function test_gateway_tx(
@@ -541,9 +530,9 @@ async function test_gateway_tx(
   scrtRngHash: string,
   scrtRngAddress: string,
 ) {
-  console.log(`Sending query: {"get_public_key": {} }`);
+  console.log(`Sending query: {"get_public_keys": {} }`);
   const gatewayPublicKey = await queryPubKey(client, gatewayHash, gatewayAddress);
-  await gatewayTx(client, gatewayHash, gatewayAddress, contractHash, contractAddress, gatewayPublicKey);
+  await gatewayTx(client, gatewayHash, gatewayAddress, contractHash, contractAddress, gatewayPublicKey.encryption_key);
 }
 
 async function runTestFunction(

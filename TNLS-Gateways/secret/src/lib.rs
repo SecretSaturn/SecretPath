@@ -8,16 +8,18 @@
 //!
 //! ### Cargo Features
 //!
-//! * `library`: disable all init/handle/query exports
+//! * `contract`: enables init/handle/query exports (default)
+//!     - use `default-features: false` to use this package as a dependency instead of a contract
 pub mod contract;
 pub mod msg;
 pub mod state;
 pub mod types;
 
 pub use crate::msg::{
-    InputResponse, PostExecutionMsg, PrivContractHandleMsg, ResponseStatus::Success,
+    InputResponse, PostExecutionMsg, PreExecutionMsg, PrivContractHandleMsg,
+    ResponseStatus::Success,
 };
-pub use crate::types::{Payload, Sender};
+pub use crate::types::Payload;
 
 #[cfg(feature = "contract")]
 #[cfg(target_arch = "wasm32")]
