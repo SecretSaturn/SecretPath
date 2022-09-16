@@ -6,3 +6,5 @@ ethereum:
 secret:
   contract_address: "INSERT_SECRET_CONTRACT_ADDRESS_HERE"
   wallet_address: "secret1y47aa30tmezpld4npjpad20zl9v76sn8j2nml2"
+  contract_encryption_key: "INSERT_SECRET_CONTRACT_ENCRYPTION_KEY_HERE"
+  contract_eth_address: "INSERT_SECRET_CONTRACT_ETH_ADDRESS_HERE"

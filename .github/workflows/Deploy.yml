@@ -5,37 +5,63 @@ on:
     branches:
       - main
 
-
 jobs:
   Deploy-to-main:
 
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout sources
+        uses: actions/checkout@v3
       - name: Set up Python 3.8
         uses: actions/setup-python@v4
         with:
           python-version: 3.8
-      - name: Build Secret Contracts
-        run:
-          echo "Unimplemented"
-      - name: Deploy Secret Contracts
-        run:
-          echo "Unimplemented"
-      - name: Get secret contract verification key
-        run:
-          echo "Unimplemented"
+      - name: Install stable toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: 1.63.0
+          target: wasm32-unknown-unknown
+          override: true
+      - name: Install wasm-opt
+        run: sudo apt update && sudo apt install -y binaryen clang
+      - name: Build Secret gateway contract
+        run: cd TNLS-Gateways/secret/ && make build-mainnet
+      - name: Build Secret sample contract
+        run: cd TNLS-Gateways/secret/tests/example-private-contract && make build-mainnet
+      - name: Install dependencies
+        run: npm --prefix secret-deploy/ install
+      - name: Create .env file for Node
+        env:
+          MNEMONIC: ${{ secrets.SECRET_WALLET_MNEMONIC }}
+        run: |
+          touch secret-deploy/.env
+          echo MNEMONIC="$MNEMONIC" >> secret-deploy/.env
+          echo GRPC_WEB_URL='"https://grpc.testnet.secretsaturn.net"' >> secret-deploy/.env
+          echo CHAIN_ID='"pulsar-2"' >> secret-deploy/.env
+          cat secret-deploy/.env
+      - name: Deploy Secret contracts
+        working-directory: ./secret-deploy
+        run: npx ts-node deploy.ts
+      - name: Get Secret contract details
+        run: |
+          echo "SECRET_GATEWAY_CODE_HASH=$(sed -n '2{p;q}' secret-deploy/secret_gateway.log)" >> $GITHUB_ENV
+          echo "SECRET_GATEWAY_ADDRESS=$(sed -n '3{p;q}' secret-deploy/secret_gateway.log)" >> $GITHUB_ENV
+          echo "SECRET_GATEWAY_ENCRYPTION_KEY=$(sed -n '4{p;q}' secret-deploy/secret_gateway.log)" >> $GITHUB_ENV
+          echo "SECRET_GATEWAY_ETH_ADDRESS=$(sed -n '5{p;q}' secret-deploy/secret_gateway.log)" >> $GITHUB_ENV
+          echo "SECRET_SAMPLE_CODE_HASH=$(sed -n '2{p;q}' secret-deploy/secret_sample.log)" >> $GITHUB_ENV
+          echo "SECRET_SAMPLE_ADDRESS=$(sed -n '3{p;q}' secret-deploy/secret_sample.log)" >> $GITHUB_ENV
+      - name: Update config.yml with Secret info
+        run: |
+          sed -i 's/INSERT_SECRET_CONTRACT_ADDRESS_HERE/${{ env.SECRET_GATEWAY_ADDRESS }}/g' config.yml
+          sed -i 's/INSERT_SECRET_CONTRACT_ENCRYPTION_KEY_HERE/${{ env.SECRET_GATEWAY_ENCRYPTION_KEY }}/g' config.yml
+          sed -i 's/INSERT_SECRET_CONTRACT_ETH_ADDRESS_HERE/${{ env.SECRET_GATEWAY_ETH_ADDRESS }}/g' config.yml
+          cat config.yml
       - name: Build public contract
         run:
           echo "Unimplemented"
       - name: Deploy public contract
-        run:
-          echo "Unimplemented"
-      - name: Deploy sample scrt contracts
-        run:
-          echo "Unimplemented"
-      - name: Deploy sample eth contracts
         run:
           echo "Unimplemented"
       - name: Install python dependencies

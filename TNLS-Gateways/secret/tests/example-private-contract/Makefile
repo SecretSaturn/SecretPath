@@ -40,7 +40,7 @@ build-mainnet-reproducible:
 compress-wasm:
 	cp ./target/wasm32-unknown-unknown/release/*.wasm ./contract.wasm
 	@## The following line is not necessary, may work only on linux (extra size optimization)
-	@# wasm-opt -Os ./contract.wasm -o ./contract.wasm
+	wasm-opt -Os ./contract.wasm -o ./contract.wasm
 	cat ./contract.wasm | gzip -9 > ./contract.wasm.gz
 
 .PHONY: schema
