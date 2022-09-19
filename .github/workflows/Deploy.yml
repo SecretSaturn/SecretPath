@@ -58,6 +58,8 @@ jobs:
           sed -i 's/INSERT_SECRET_CONTRACT_ENCRYPTION_KEY_HERE/${{ env.SECRET_GATEWAY_ENCRYPTION_KEY }}/g' config.yml
           sed -i 's/INSERT_SECRET_CONTRACT_ETH_ADDRESS_HERE/${{ env.SECRET_GATEWAY_ETH_ADDRESS }}/g' config.yml
           cat config.yml
+          git config --global user.email "leor@atbash.co"
+          git config --global user.name "Leor Fishman"
           git commit -am "Update config.yml with Secret info"
       - name: Build public contract
         run:
