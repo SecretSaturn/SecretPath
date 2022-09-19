@@ -19,8 +19,7 @@ class EthInterface(BaseChainInterface):
             """
             If we don't have a set provider, read it from config.
             """
-            with open(f"{os.getcwd()}/infura_api_endpoint.txt") as file:
-                infura_endpoint = file.read()
+            infura_endpoint = os.environ.get('INFURA_ENDPOINT')
 
             API_MODE = "dev"
             API_URL = infura_endpoint.replace("{ENDPOINT}",

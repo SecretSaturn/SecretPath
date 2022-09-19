@@ -81,7 +81,9 @@ def generate_full_config(config_file, provider_pair=None):
         provider_eth, provider_scrt = provider_pair
     eth_config = generate_eth_config(config_dict['ethereum'], provider=provider_eth)
     scrt_config = generate_scrt_config(config_dict['secret'], provider=provider_scrt)
-    return {'ethereum': eth_config, 'secret': scrt_config}
+    keys_dict = {'secret': {'verification': config_dict['secret']['contract_eth_address'],
+                            'encryption': config_dict['secret']['contract_encryption_key']}}
+    return {'ethereum': eth_config, 'secret': scrt_config}, keys_dict
 
 
 route_blueprint = Blueprint('route_blueprint', __name__)
@@ -91,10 +93,30 @@ route_blueprint = Blueprint('route_blueprint', __name__)
 def index():
     """
 
-    Returns: The status of the relayer
+    Returns: a string form of the relayer
 
     """
     return str(current_app.config['RELAYER'])
+
+
+@route_blueprint.route('/tasks_to_routes')
+def task_json():
+    """
+
+    Returns: The status of the relayer
+
+    """
+    return str(current_app.config['RELAYER'].task_ids_to_statuses)
+
+
+@route_blueprint.route('/keys')
+def keys():
+    """
+
+    Returns: the current encryption and verification keys
+
+    """
+    return str(current_app.config['KEYS'])
 
 
 def app_factory(config_filename, config_file_converter=generate_full_config, num_loops=None):
@@ -109,9 +131,16 @@ def app_factory(config_filename, config_file_converter=generate_full_config, num
 
     """
     app = Flask(__name__)
-    relayer = Relayer(config_file_converter(config_filename), num_loops=num_loops)
+    config, keys_dict = config_file_converter(config_filename)
+    relayer = Relayer(config, num_loops=num_loops)
+    app.config['RELAYER'] = relayer
+    app.config['KEYS'] = keys_dict
+    app.register_blueprint(route_blueprint)
     thread = Thread(target=relayer.run)
     thread.start()
-    app.config['RELAYER'] = relayer
-    app.register_blueprint(route_blueprint)
     return app
+
+
+if __name__ == '__main__':
+    app = app_factory(f'{Path(__file__).parent.absolute()}/../config.yml')
+    app.run()
