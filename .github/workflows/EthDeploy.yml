@@ -1,0 +1,51 @@
+name: Ethereum Deployment
+
+# on:
+#   push:
+#     branches:
+#       - main
+
+on: workflow_dispatch
+
+env:
+  FOUNDRY_PROFILE: ci
+
+jobs:
+  check:
+    strategy:
+      fail-fast: true
+
+    name: Foundry project
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: recursive
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: nightly
+
+      - name: Run Forge build
+        working-directory: ./public-gateway
+        run: |
+          forge --version
+          forge build --sizes
+        id: build
+
+      - name: Run Forge tests
+        working-directory: ./public-gateway
+        run: |
+          forge test -vvv
+        id: test
+
+      - name: Deploy Procedure
+        working-directory: ./public-gateway
+        env:
+          ALCHEMY_ENDPOINT: ${{secrets.ALCHEMY_ENDPOINT}}
+          PRIVATE_KEY: ${{secrets.PRIVATE_KEY}}
+          ETHERSCAN_KEY: ${{secrets.ETHERSCAN_KEY}}
+        run: | 
+          forge script script/DeployScript.s.sol:DeployScript --rpc-url "$ALCHEMY_ENDPOINT" --private-key "$PRIVATE_KEY" --etherscan-api-key "$ETHERSCAN_KEY" --broadcast --verify -vvvv
+

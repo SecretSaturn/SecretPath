@@ -18,7 +18,12 @@ jobs:
         with:
           version: nightly
 
+      - name: Install forge dependencies
+        working-directory: ./public-gateway
+        run: forge install
+
       - name: Run tests
+        working-directory: ./public-gateway
         run: forge test -vvv
 
       - name: Check gas snapshots
