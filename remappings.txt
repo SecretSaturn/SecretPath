@@ -1,3 +1,4 @@
 ds-test/=public-gateway/lib/forge-std/lib/ds-test/src/
 forge-std/=public-gateway/lib/forge-std/src/
 openzeppelin-contracts/=public-gateway/lib/openzeppelin-contracts
+solmate/=public-gateway/lib/solmate/src/
