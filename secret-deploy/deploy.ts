@@ -212,7 +212,7 @@ async function initializeAndUploadContracts() {
   const gatewayPublicKey = Buffer.from(gatewayKeys.verification_key.substring(2), 'hex').toString('base64');
   const [contractHash, contractAddress] = await initializeContract(
     client,
-    "../TNLS-Gateways/secret/tests/example-private-contract/contract.wasm.gz",
+    "../TNLS-Samples/credit-score/contract.wasm.gz",
     gatewayHash,
     gatewayAddress,
     gatewayPublicKey,
