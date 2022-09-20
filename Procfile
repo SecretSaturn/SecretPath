@@ -1,1 +1,1 @@
-web: python TNLS-Relayers/web_app.py
+worker: python TNLS-Relayers/web_app.py
