@@ -68,7 +68,10 @@ class SCRTInterface(BaseChainInterface):
         block_info = self.provider.tendermint.block_info()
         if height is None:
             height = block_info['block']['header']['height']
-        txns = self.provider.tx.search(options={'message.sender': address, 'tx.minheight': height}).txs
+        try:
+            txns = self.provider.tx.search(options={'message.sender': address, 'tx.minheight': height}).txs
+        except KeyError:
+            return []
         logs_list = [txn.logs for txn in txns]
         flattened_log_list = [item for sublist in logs_list for item in sublist]
         return flattened_log_list
