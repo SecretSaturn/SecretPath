@@ -105,8 +105,12 @@ class EthInterface(BaseChainInterface):
         if address is None:
             address = self.address
         # get last txs for address
-        transactions: Sequence[Mapping] = self.provider.eth.get_block(block_number, full_transactions=True)[
-            'transactions']
+        try:
+            transactions: Sequence[Mapping] = self.provider.eth.get_block(block_number, full_transactions=True)[
+                'transactions']
+        except Exception as e:
+            self.logger.warning(e)
+            return []
         correct_transactions = [transaction for transaction in transactions if transaction['from'] == address]
         correct_transactions = list(
             map(lambda tx: self.provider.eth.get_transaction_receipt(tx['hash']), correct_transactions))

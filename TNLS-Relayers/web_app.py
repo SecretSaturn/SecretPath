@@ -119,7 +119,8 @@ def keys():
     return str(current_app.config['KEYS'])
 
 
-def app_factory(config_filename, config_file_converter=generate_full_config, num_loops=None):
+def app_factory(config_filename=f'{Path(__file__).parent.absolute()}/../config.yml',
+                config_file_converter=generate_full_config, num_loops=None):
     """
     Creates a Flask app with a relayer running on the backend
     Args:

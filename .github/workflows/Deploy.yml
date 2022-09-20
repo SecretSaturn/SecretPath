@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - leorf/fix-web-and-eth-error
 
 jobs:
   Deploy-to-main:
@@ -101,17 +102,7 @@ jobs:
           cat config.yml
           git config --global user.email "leor@atbash.co"
           git config --global user.name "Leor Fishman"
-          git commit -am "Update config.yml with Ethereum contract info"       
-      - name: Install python dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-      - name: Write webserver Config Files
-        working-directory: ./TNLS-Relayers
-        env:
-          INFURA_ENDPOINT: ${{ secrets.INFURA_ENDPOINT }}
-        run: |
-          echo "Unimplemented"
+          git commit -am "Update config.yml with Ethereum contract info"
       - name: Deploy webserver to heroku
         uses: akhileshns/heroku-deploy@v3.12.12
         with:
