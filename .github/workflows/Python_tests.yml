@@ -39,7 +39,7 @@ jobs:
 
       - name: Install secretcli
         run: |
-          wget https://github.com/scrtlabs/SecretNetwork/releases/download/v1.3.1/secretcli-Linux
+          wget https://github.com/scrtlabs/SecretNetwork/releases/download/v1.4.0/secretcli-Linux
           chmod +x secretcli-Linux
           sudo mv secretcli-Linux /usr/local/bin/secretcli
 
