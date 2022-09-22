@@ -60,6 +60,8 @@ class Relayer:
         Updates task list with found events
         """
         for name, (chain_interface, contract_interface, evt_name, _) in self.dict_of_names_to_interfaces.items():
+            if name == 'secret':
+                continue
             prev_height = self.dict_of_names_to_blocks[name]
             curr_height = chain_interface.get_last_block()
             if prev_height is None:
@@ -92,7 +94,11 @@ class Relayer:
             return
         contract_for_txn = self.dict_of_names_to_interfaces[task.task_destination_network][1]
         function_name = self.dict_of_names_to_interfaces[task.task_destination_network][3]
-        contract_for_txn.call_function(function_name, str(task))
+        if task.task_destination_network == 'secret':
+            ntasks, _ = contract_for_txn.call_function(function_name, str(task))
+            self.task_list.extend(ntasks)
+        else:
+            contract_for_txn.call_function(function_name, str(task))
         self.task_ids_to_statuses[task.task_data['task_id']] = 'Routed to {}'.format(task.task_destination_network)
         self.task_ids_to_info[task.task_data['task_id']] = str(task)
         self.logger.info('Routed {} to {}'.format(task, task.task_destination_network))

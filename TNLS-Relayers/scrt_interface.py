@@ -189,8 +189,14 @@ class SCRTContract(BaseContractInterface):
             args = json.loads(args)
         txn = self.construct_txn(function_schema, function_name, args)
         transaction_result = self.interface.sign_and_send_transaction(txn)
-        self.logger.info(f"Transaction result: {transaction_result}")
-        return transaction_result
+        try:
+            logs = transaction_result.logs
+        except AttributeError:
+            logs = []
+        self.logger.info(f"Got {(logs)} transactions")
+        task_list = self.parse_event_from_txn('wasm', logs)
+        self.logger.info(f"Transaction result: {task_list}")
+        return task_list, transaction_result
 
     def parse_event_from_txn(self, event_name: str, logs: List[TxLog]):
         """

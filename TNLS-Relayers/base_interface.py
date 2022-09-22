@@ -4,8 +4,7 @@ import json
 from typing import List
 
 eth_task_keys_to_msg = {
-    '_taskId': 'task_id', '_sourceNetwork': 'source_network', '_info': ['payload',
-                                                                        'payload_hash',
+    '_taskId': 'task_id', '_sourceNetwork': 'source_network', '_info': ['payload_hash',
                                                                         'payload_signature',
                                                                         'result',
                                                                         'result_hash',
