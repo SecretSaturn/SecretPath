@@ -14,6 +14,7 @@ library Util {
 
     struct ExecutionInfo {
         bytes user_key;
+        bytes user_pubkey;
         string routing_code_hash;
         string handle;
         bytes12 nonce;

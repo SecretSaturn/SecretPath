@@ -27,6 +27,7 @@ contract Gateway is IGateway {
         bytes32 payload_hash,
         bytes payload_signature,
         bytes user_key,
+        bytes user_pubkey,
         string handle,
         bytes12 nonce
     );
@@ -121,6 +122,7 @@ contract Gateway is IGateway {
             _task.payload_hash,
             _info.payload_signature,
             _info.user_key,
+            _info.user_pubkey,
             _info.handle,
             _info.nonce
             );
