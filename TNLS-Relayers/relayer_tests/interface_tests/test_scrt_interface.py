@@ -290,7 +290,7 @@ def fake_interface_provider():
             self.wasm = FakeWasm()
 
     class FakeWallet:
-        def create_tx(self, msgs=None):
+        def create_tx(self, msgs=None, **_kwargs):
             if msgs is None:
                 return 1
             return msgs[0]

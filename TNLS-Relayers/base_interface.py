@@ -1,9 +1,24 @@
 import abc
+import base64
 import json
 from typing import List
 
+eth_task_keys_to_msg = {
+    '_taskId': 'task_id', '_sourceNetwork': 'source_network', '_info': ['payload',
+                                                                        'payload_hash',
+                                                                        'payload_signature',
+                                                                        'result',
+                                                                        'result_hash',
+                                                                        'result_signature',
+                                                                        'packet_hash',
+                                                                        'packet_signature']
 
-def to_dict(dict_to_parse):
+}
+task_keys_to_msg = {'ethereum': eth_task_keys_to_msg}
+task_keys_in_order = {'ethereum': ['_taskId', '_sourceNetwork', '_info']}
+
+
+def to_dict(dict_to_parse, key_type=""):
     """
     deeply converts an attribute dictionary to a json serializable dict
     sourced from SO on attribute dictionaries:
@@ -21,24 +36,21 @@ def to_dict(dict_to_parse):
             parsed_dict[key] = to_dict(val)
         # convert 'HexBytes' type to 'str'
         elif 'HexBytes' in str(type(val)):
-            parsed_dict[key] = val.hex()
+            if key_type in task_keys_in_order:
+                parsed_dict[key] = val.hex()
+            else:
+                parsed_dict[key] = base64.b64encode(val).decode('ascii')
+        elif isinstance(val, bytes):
+            if key_type in task_keys_in_order:
+                parsed_dict[key] = val.hex()
+            else:
+                parsed_dict[key] = base64.b64encode(val).decode('ascii')
+
     return parsed_dict
 
 
 # Postexec
-eth_task_keys_to_msg = {
-    '_taskId': 'task_id', '_sourceNetwork': 'source_network', '_info': ['payload',
-                                                                        'payload_hash',
-                                                                        'payload_signature',
-                                                                        'result',
-                                                                        'result_hash',
-                                                                        'result_signature',
-                                                                        'packet_hash',
-                                                                        'packet_signature']
 
-}
-task_keys_to_msg = {'ethereum': eth_task_keys_to_msg}
-task_keys_in_order = {'ethereum': ['_taskId', '_sourceNetwork', '_info']}
 
 
 def translate_dict(dict_to_translate, translation_mechanism):
@@ -66,11 +78,15 @@ class Task:
     """
 
     def __init__(self, task_dict):
+        task_dict = dict(task_dict)
         if 'task_destination_network' in task_dict:
             self.task_destination_network = task_dict['task_destination_network']
         elif 'routing_info' in task_dict and ':' in task_dict['routing_info']:
             self.task_destination_network = task_dict['routing_info'].split(':')[0]
             task_dict['routing_info'] = task_dict['routing_info'].split(':')[1]
+            task_dict['task_destination_network'] = self.task_destination_network
+        elif 'routing_info' in task_dict and 'secret' in task_dict['routing_info']:
+            self.task_destination_network = 'secret'
             task_dict['task_destination_network'] = self.task_destination_network
         elif 'routing_info' in task_dict:
             self.task_destination_network = task_dict['routing_info']
@@ -86,10 +102,10 @@ class Task:
             if '_taskId' in new_task_dict:
                 new_task_dict['_taskId'] = int(new_task_dict['_taskId'])
             if self.task_destination_network in task_keys_in_order:
-                ndict = to_dict(new_task_dict)
+                ndict = to_dict(new_task_dict, key_type=self.task_destination_network)
                 new_task_list = [ndict[key] for key in task_keys_in_order[self.task_destination_network]]
                 return json.dumps(new_task_list)
-            return json.dumps(to_dict(new_task_dict))
+            return json.dumps(to_dict(new_task_dict, key_type=self.task_destination_network))
         else:
             return json.dumps(to_dict(self.task_data))
 

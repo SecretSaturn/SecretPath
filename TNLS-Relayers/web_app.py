@@ -1,5 +1,6 @@
 import json
 import os
+import time
 from pathlib import Path
 from threading import Thread
 
@@ -56,8 +57,13 @@ def generate_scrt_config(config_dict, provider=None):
     event_name = 'wasm'
     function_name = list(json.loads(contract_schema).keys())[0]
     initialized_chain = SCRTInterface(private_key=priv_key, address=address, provider=provider)
-    initialized_contract = SCRTContract(interface=initialized_chain, address=contract_address,
-                                        abi=contract_schema)
+    specialized_initialized_chain = SCRTInterface(private_key=priv_key, address=address, provider=provider)
+    if provider is None:
+        initialized_contract = SCRTContract(interface=specialized_initialized_chain, address=contract_address,
+                                            abi=contract_schema)
+    else:
+        initialized_contract = SCRTContract(interface=initialized_chain, address=contract_address,
+                                            abi=contract_schema)
     scrt_tuple = (initialized_chain, initialized_contract, event_name, function_name)
     return scrt_tuple
 
@@ -109,6 +115,36 @@ def task_json():
     return str(current_app.config['RELAYER'].task_ids_to_statuses)
 
 
+@route_blueprint.route('/networks_to_blocks')
+def net_to_block():
+    """
+
+    Returns: The status of the relayer
+
+    """
+    return str(current_app.config['RELAYER'].dict_of_names_to_blocks)
+
+
+@route_blueprint.route('/ids_to_jsons')
+def id_to_json():
+    """
+
+    Returns: The status of the relayer
+
+    """
+    return str(current_app.config['RELAYER'].task_ids_to_info)
+
+
+@route_blueprint.route('/networks_to_addresses')
+def net_to_address():
+    """
+
+        Returns: The map of names to contract addresses
+
+        """
+    return str(current_app.config['RELAYER'].dict_of_names_to_addresses)
+
+
 @route_blueprint.route('/keys')
 def keys():
     """
@@ -120,7 +156,7 @@ def keys():
 
 
 def app_factory(config_filename=f'{Path(__file__).parent.absolute()}/../config.yml',
-                config_file_converter=generate_full_config, num_loops=None):
+                config_file_converter=generate_full_config, num_loops=None, do_restart=True):
     """
     Creates a Flask app with a relayer running on the backend
     Args:
@@ -131,6 +167,8 @@ def app_factory(config_filename=f'{Path(__file__).parent.absolute()}/../config.y
     Returns: a flask app
 
     """
+    import warnings
+    warnings.simplefilter("ignore", UserWarning)
     app = Flask(__name__)
     config, keys_dict = config_file_converter(config_filename)
     relayer = Relayer(config, num_loops=num_loops)
@@ -139,6 +177,21 @@ def app_factory(config_filename=f'{Path(__file__).parent.absolute()}/../config.y
     app.register_blueprint(route_blueprint)
     thread = Thread(target=relayer.run)
     thread.start()
+
+    def _thread_restarter():
+        thread_target = thread
+        while True:
+            if not thread_target.is_alive():
+                relayer = Relayer(config, num_loops=num_loops)
+                thread_2 = Thread(target=relayer.run)
+                thread_2.start()
+                thread_target = thread_2
+                app.config['RELAYER'] = relayer
+            time.sleep(5)
+
+    thread_restarter = Thread(target=_thread_restarter)
+    if do_restart:
+        thread_restarter.start()
     return app
 
 

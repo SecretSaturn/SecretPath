@@ -138,7 +138,7 @@ def test_scrt_config(set_os_env_vars, provider_privkey_address_scrt):
     config_dict = {'wallet_address': provider_privkey_address_scrt[2], 'contract_address': '0x0'}
     interface, contract_interface, evt_name, function_name = generate_scrt_config(config_dict, provider=provider)
     assert evt_name == 'wasm'
-    assert function_name == 'PreExecutionMsg'
+    assert function_name == 'inputs'
     assert contract_interface.address == '0x0'
     assert contract_interface.interface == interface
     fee = interface.wallet.lcd.custom_fees["send"]
@@ -216,7 +216,7 @@ def test_gen_full_config(rewrite_yaml, request, provider_privkey_address_scrt, p
     scrt_config = config['secret']
     interface, contract_interface, evt_name, function_name = scrt_config
     assert evt_name == 'wasm'
-    assert function_name == 'PreExecutionMsg'
+    assert function_name == 'inputs'
     assert contract_interface.address == '0x0'
     assert contract_interface.interface == interface
     interface, contract_interface, evt_name, function_name = eth_config
@@ -486,7 +486,7 @@ def test_web_app(fake_interface_factory):
         return dict_of_names_to_interfaces, {'secret': {'verification': 'test_eth_address',
                                                         'encryption': 'test_encryption_key'}}
 
-    app = app_factory("", config_file_converter=get_dict_of_names_to_interfaces, num_loops=1)
+    app = app_factory("", config_file_converter=get_dict_of_names_to_interfaces, num_loops=1, do_restart=False)
     relayer = app.config['RELAYER']
     assert app.config['KEYS'] == {'secret': {'verification': "test_eth_address",
                                              'encryption': "test_encryption_key"}}

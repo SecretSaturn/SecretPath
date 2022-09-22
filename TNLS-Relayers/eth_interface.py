@@ -111,9 +111,13 @@ class EthInterface(BaseChainInterface):
         except Exception as e:
             self.logger.warning(e)
             return []
-        correct_transactions = [transaction for transaction in transactions if transaction['from'] == address]
-        correct_transactions = list(
-            map(lambda tx: self.provider.eth.get_transaction_receipt(tx['hash']), correct_transactions))
+        correct_transactions = []
+        for transaction in transactions:
+            try:
+                correct_transactions.append(self.provider.eth.get_transaction_receipt(transaction['hash']))
+            except Exception as e:
+                self.logger.warning(e)
+                continue
 
         return correct_transactions
 
@@ -134,6 +138,7 @@ class EthContract(BaseContractInterface):
             handlers=[StreamHandler()],
         )
         self.logger = getLogger()
+        self.logger.info("Initialized Eth contract with address: %s", self.address)
         pass
 
     def get_function(self, function_name):

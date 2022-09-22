@@ -1,4 +1,5 @@
 import json
+from copy import deepcopy
 from logging import getLogger, basicConfig, DEBUG, StreamHandler
 from typing import List
 
@@ -92,6 +93,7 @@ class SCRTContract(BaseContractInterface):
             handlers=[StreamHandler()],
         )
         self.logger = getLogger()
+        self.logger.info(f"Initialized SCRT interface for contract {self.address}")
         pass
 
     def get_function(self, function_name):
@@ -124,7 +126,10 @@ class SCRTContract(BaseContractInterface):
 
         """
         arg_keys = function_schema['args']
-        arg_dict = dict()
+        if isinstance(args, tuple) and len(args) == 1:
+            args = args[0]
+        if isinstance(args, str):
+            args = json.loads(args)
         if isinstance(args, list):
             arg_values = [arg for arg in args]
             if len(arg_keys) != len(arg_values):
@@ -136,8 +141,12 @@ class SCRTContract(BaseContractInterface):
                     arg_values = arg_values[:len(arg_keys)]
             arg_dict = dict(zip(arg_keys, arg_values))
         elif isinstance(args, dict):
+            if 'task_destination_network' in args:
+                args.pop('task_destination_network')
             arg_dict = args
             if set(arg_keys) != set(args.keys()):
+                self.logger.info(f"Arguments do not match schema."
+                                 f"  Expected {sorted(list(arg_keys))} arguments but got {sorted(list(args.keys()))}")
                 self.logger.warning(f"Arguments do not match schema."
                                     f"  Expected {sorted(list(arg_keys))} arguments but got {sorted(list(args.keys()))}")
                 if set(arg_keys) > set(args.keys()):
@@ -145,14 +154,22 @@ class SCRTContract(BaseContractInterface):
                         if key not in args.keys():
                             arg_dict[key] = ""
                 arg_dict = {key: arg_dict[key] for key in arg_keys}
+        else:
+            self.logger.warning(f"Arguments must be a list or dict, got {type(args)}")
+            arg_dict = json.loads(args)
         function_schema = {function_name: arg_dict}
+        if function_name == 'inputs':
+            nschema = {'input': deepcopy(function_schema)}
+            function_schema = nschema
+        self.logger.info(
+            f"Using arguments {function_schema} to call function {function_name} at address {self.address}")
         txn_msgs = self.interface.provider.wasm.contract_execute_msg(
             sender_address=self.interface.address,
             contract_address=self.address,
             handle_msg=function_schema,
 
         )
-        txn = self.interface.wallet.create_tx(msgs=[txn_msgs])
+        txn = self.interface.wallet.create_tx(msgs=[txn_msgs], gas=500000, gas_prices='1uscrt', gas_adjustment=1)
         return txn
 
     def call_function(self, function_name, *args):
@@ -166,13 +183,14 @@ class SCRTContract(BaseContractInterface):
 
         """
         function_schema = self.get_function(function_name)
+        if len(args) == 1 and isinstance(args, list):
+            args = args[0]
         if isinstance(args, str):
             args = json.loads(args)
-        if len(args) == 1:
-            args = args[0]
-        args = json.loads(json.dumps(args))
         txn = self.construct_txn(function_schema, function_name, args)
-        return self.interface.sign_and_send_transaction(txn)
+        transaction_result = self.interface.sign_and_send_transaction(txn)
+        self.logger.info(f"Transaction result: {transaction_result}")
+        return transaction_result
 
     def parse_event_from_txn(self, event_name: str, logs: List[TxLog]):
         """
