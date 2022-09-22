@@ -33,6 +33,8 @@ pub struct State {
 pub struct TaskInfo {
     /// The original, encrypted payload.
     pub payload: Binary,
+    /// The original payload_hash from the front-end.
+    pub payload_hash: Binary,
     /// A unique hash for the task.
     pub input_hash: [u8; 32],
     /// The name of the network that message came from.

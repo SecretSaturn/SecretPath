@@ -361,7 +361,6 @@ contract ContractTest is Test {
 
         Util.PostExecutionInfo memory assembledInfo = Util.PostExecutionInfo({
             payload_hash: payloadHash,
-            payload_signature: getPayloadSignature(payload, 6),
             result: result,
             result_hash: resultHash,
             result_signature: getResultSignature(result, 6),
@@ -397,7 +396,6 @@ contract ContractTest is Test {
 
         Util.PostExecutionInfo memory assembledInfo = Util.PostExecutionInfo({
             payload_hash: payloadHash,
-            payload_signature: getPayloadSignature(payload, 8),
             result: result,
             result_hash: resultHash,
             result_signature: getResultSignature(result, 6),
@@ -524,8 +522,6 @@ contract ContractTest is Test {
 
         // payload
         bytes32 payloadHash = hex"ea57f8cfce0dca7528ff349328b9a524dbbd49fe724026da575aed40cd3ac2c4";
-        bytes memory payloadSignature =
-            hex"293fb5fe48d81aadd26574aca54509804f628a851d7df4e3356b0e191ef5b11c33f07e7eeb0494384df6f3f636e2fc0fcf64ee3fb0d5e3d6f3302a81325bd06f1b";
 
         // result
         bytes memory result = hex"7b226d795f76616c7565223a327d";
@@ -540,7 +536,6 @@ contract ContractTest is Test {
 
         Util.PostExecutionInfo memory assembledInfo = Util.PostExecutionInfo({
             payload_hash: payloadHash,
-            payload_signature: payloadSignature,
             result: result,
             result_hash: resultHash,
             result_signature: resultSignature,
@@ -632,8 +627,6 @@ contract ContractTest is Test {
 
         // payload
         bytes32 payloadHash = hex"ea57f8cfce0dca7528ff349328b9a524dbbd49fe724026da575aed40cd3ac2c4";
-        bytes memory payloadSignature =
-            hex"293fb5fe48d81aadd26574aca54509804f628a851d7df4e3356b0e191ef5b11c33f07e7eeb0494384df6f3f636e2fc0fcf64ee3fb0d5e3d6f3302a81325bd06f1b";
 
         // result
         bytes memory result = hex"7b226d795f76616c7565223a327d";
@@ -648,7 +641,6 @@ contract ContractTest is Test {
 
         Util.PostExecutionInfo memory assembledInfo = Util.PostExecutionInfo({
             payload_hash: payloadHash,
-            payload_signature: payloadSignature,
             result: result,
             result_hash: resultHash,
             result_signature: resultSignature,

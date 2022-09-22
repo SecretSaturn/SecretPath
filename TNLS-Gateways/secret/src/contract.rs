@@ -221,6 +221,7 @@ fn pre_execution<S: Storage, A: Api, Q: Querier>(
     // create a task information store
     let task_info = TaskInfo {
         payload: msg.payload, // storing the ENCRYPTED payload
+        payload_hash: msg.payload_hash,
         input_hash,           // storing the DECRYPTED input_values hashed together with task ID
         source_network: msg.source_network,
         user_address: payload.user_address.clone(),
@@ -304,10 +305,6 @@ fn post_execution<S: Storage, A: Api, Q: Querier>(
 
     // the first hash guarantees the message lenth is 32
     // the second hash prepends the Ethereum message
-    hasher.update(task_info.payload.as_slice());
-    let payload_hash = hasher.finalize_reset();
-    hasher.update([prefix, &payload_hash].concat());
-    let payload_hash = hasher.finalize_reset();
 
     // create message hash of (result + payload + inputs)
     let data = [
@@ -329,27 +326,19 @@ fn post_execution<S: Storage, A: Api, Q: Querier>(
     // used in production to create signatures
     // NOTE: api.secp256k1_sign() will perform an additional sha_256 hash operation on the given data
     #[cfg(target_arch = "wasm32")]
-    let (payload_signature, result_signature) = {
+    let result_signature = {
         let sk = PrivateKey::parse(&signing_key_bytes)?;
 
-        let payload_signature = sk.sign(&payload_hash, deps.api).serialize().to_vec();
         let result_signature = sk.sign(&result_hash, deps.api).serialize().to_vec();
 
-        (payload_signature, result_signature)
+        result_signature
     };
 
     // used only in unit testing to create signatures
     #[cfg(not(target_arch = "wasm32"))]
-    let (payload_signature, result_signature) = {
+    let result_signature = {
         let secp = secp256k1::Secp256k1::signing_only();
         let sk = secp256k1::SecretKey::from_slice(&signing_key_bytes).unwrap();
-
-        let payload_message = secp256k1::Message::from_slice(&payload_hash)
-            .map_err(|err| StdError::generic_err(err.to_string()))?;
-        let payload_signature = secp
-            .sign_ecdsa_recoverable(&payload_message, &sk)
-            .serialize_compact();
-        let payload_signature = payload_signature.1;
 
         let result_message = secp256k1::Message::from_slice(&result_hash)
             .map_err(|err| StdError::generic_err(err.to_string()))?;
@@ -358,7 +347,7 @@ fn post_execution<S: Storage, A: Api, Q: Querier>(
             .serialize_compact();
         let result_signature = result_signature.1;
 
-        (payload_signature, result_signature)
+        result_signature
     };
 
     // create hash of entire packet (used to verify the message wasn't modified in transit)
@@ -367,8 +356,7 @@ fn post_execution<S: Storage, A: Api, Q: Querier>(
         routing_info.as_bytes(),      // task_destination_network
         &msg.task_id.to_le_bytes(),   // task ID
         task_info.payload.as_slice(), // payload (original encrypted payload)
-        &payload_hash,                // payload message
-        &payload_signature,           // payload signature
+        task_info.payload_hash.as_slice(),                // original payload message
         msg.result.as_bytes(),        // result
         &result_hash,                 // result message
         &result_signature,            // result signature
@@ -405,8 +393,7 @@ fn post_execution<S: Storage, A: Api, Q: Querier>(
     // NOTE: we need to perform the additional sha_256 because that is what the secret network API method does
     // NOTE: we add an extra byte to the end of the signatures for `ecrecover` in Solidity
     // let task_id = format!("{:#04x}", &msg.task_id);
-    let payload_hash = format!("0x{}", sha_256(&payload_hash).encode_hex::<String>());
-    let payload_signature = format!("0x{}{:x}", &payload_signature.encode_hex::<String>(), 27);
+    let payload_hash = format!("0x{}", task_info.payload_hash.as_slice().encode_hex::<String>());
     let result = format!("0x{}", msg.result.encode_hex::<String>());
     let result_hash = format!("0x{}", sha_256(&result_hash).encode_hex::<String>());
     let result_signature = format!("0x{}{:x}", &result_signature.encode_hex::<String>(), 27);
@@ -420,7 +407,6 @@ fn post_execution<S: Storage, A: Api, Q: Querier>(
             plaintext_log("task_destination_network", routing_info),
             plaintext_log("task_id", msg.task_id),
             plaintext_log("payload_hash", payload_hash),
-            plaintext_log("payload_signature", payload_signature),
             plaintext_log("result", result),
             plaintext_log("result_hash", result_hash),
             plaintext_log("result_signature", result_signature),
@@ -895,34 +881,28 @@ mod tests {
                 .len(),
             32
         );
+        assert_eq!(logs[4].value, "0x7b22616e73776572223a2034327d".to_string());
+
         assert_eq!(
-            hex::decode(logs[4].value.clone().strip_prefix("0x").unwrap())
+            hex::decode(logs[5].value.clone().strip_prefix("0x").unwrap())
                 .unwrap()
                 .len(),
-            65
+            32
         );
-        assert_eq!(logs[5].value, "0x7b22616e73776572223a2034327d".to_string());
-
         assert_eq!(
             hex::decode(logs[6].value.clone().strip_prefix("0x").unwrap())
                 .unwrap()
                 .len(),
-            32
+            65
         );
         assert_eq!(
             hex::decode(logs[7].value.clone().strip_prefix("0x").unwrap())
                 .unwrap()
                 .len(),
-            65
-        );
-        assert_eq!(
-            hex::decode(logs[8].value.clone().strip_prefix("0x").unwrap())
-                .unwrap()
-                .len(),
             32
         );
         assert_eq!(
-            hex::decode(logs[9].value.clone().strip_prefix("0x").unwrap())
+            hex::decode(logs[8].value.clone().strip_prefix("0x").unwrap())
                 .unwrap()
                 .len(),
             65

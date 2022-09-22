@@ -493,7 +493,6 @@ async function gatewayTx(
     "task_destination_network",
     "task_id", 
     "payload_hash",
-    "payload_signature",
     "result",
     "result_hash",
     "result_signature",
@@ -511,7 +510,6 @@ async function gatewayTx(
   assert(logs["task_destination_network"] == "ethereum");
   assert(logs["task_id"] == "1");
   assert(fromHex(logs["payload_hash"].substring(2)).byteLength == 32);
-  assert(fromHex(logs["payload_signature"].substring(2)).byteLength == 65);
   // assert(logs["result"] == "???");
   assert(fromHex(logs["result_hash"].substring(2)).byteLength == 32);
   assert(fromHex(logs["result_signature"].substring(2)).byteLength == 65);

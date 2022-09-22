@@ -144,14 +144,6 @@ contract Gateway is IGateway {
 
         address checkerAddress = route[_sourceNetwork];
 
-        // Payload signature verification
-        verifySig = true;
-        recoveredSigner = Util.modifiedRecoverSigner(_info.payload_hash, _info.payload_signature, checkerAddress);
-        verifySig = recoveredSigner == checkerAddress;
-        if (!verifySig) {
-            revert InvalidSignature();
-        }
-
         // Payload hash verification from tasks struct
         bool verifyPayloadHash;
         verifyPayloadHash = _info.payload_hash == tasks[_taskId].payload_hash;

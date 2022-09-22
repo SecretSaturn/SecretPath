@@ -467,7 +467,6 @@ async function gatewayTx(
     "task_destination_network",
     "task_id", 
     "payload_hash",
-    "payload_signature",
     "result",
     "result_hash",
     "result_signature",
@@ -483,10 +482,10 @@ async function gatewayTx(
   console.log(logs);
 
   console.log('\nTesting recoverAddress on each signature:')
-  const test1 = recoverAddress(logs["payload_hash"], logs["payload_signature"]);
+  // const test1 = recoverAddress(logs["payload_hash"], logs["payload_signature"]);
   const test2 = recoverAddress(logs["result_hash"], logs["result_signature"]);
   const test3 = recoverAddress(logs["packet_hash"], logs["packet_signature"]);
-  [test1, test2, test3].forEach(element => {
+  [test2, test3].forEach(element => {
     console.log(element)
   });
 
@@ -494,7 +493,6 @@ async function gatewayTx(
   assert(logs["task_destination_network"] == "ethereum");
   assert(logs["task_id"] == "1");
   assert(fromHex(logs["payload_hash"].substring(2)).byteLength == 32);
-  assert(fromHex(logs["payload_signature"].substring(2)).byteLength == 65);
   assert(logs["result"] == "0x7b226d795f76616c7565223a327d");
   assert(fromHex(logs["result_hash"].substring(2)).byteLength == 32);
   assert(fromHex(logs["result_signature"].substring(2)).byteLength == 65);
