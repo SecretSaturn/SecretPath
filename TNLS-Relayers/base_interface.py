@@ -39,11 +39,17 @@ def to_dict(dict_to_parse, key_type=""):
             if key_type in task_keys_in_order:
                 parsed_dict[key] = val.hex()
             else:
+                if key == 'payload_signature':
+                    # cut off signature byte for eth-scrt
+                    val = val[:-1]
                 parsed_dict[key] = base64.b64encode(val).decode('ascii')
         elif isinstance(val, bytes):
             if key_type in task_keys_in_order:
                 parsed_dict[key] = val.hex()
             else:
+                if key == 'payload_signature':
+                    # cut off signature byte for eth-scrt
+                    val = val[:-1]
                 parsed_dict[key] = base64.b64encode(val).decode('ascii')
 
     return parsed_dict
