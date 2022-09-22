@@ -1,7 +1,6 @@
 import { encrypt_payload } from "./wasm";
 import { ethers } from "ethers";
-import { arrayify, hexlify, SigningKey, keccak256 } from "ethers/lib/utils";
-import sha3 from "js-sha3";
+import { arrayify, hexlify, SigningKey, keccak256, recoverPublicKey, computeAddress } from "ethers/lib/utils";
 import { Buffer } from "buffer/";
 import secureRandom from "secure-random";
 
@@ -125,6 +124,10 @@ export async function setupSubmit(element: HTMLButtonElement) {
         const payloadSignature = await provider.send(method, params)
         console.log(`Payload Signature: ${payloadSignature}`)
 
+        const user_pubkey = recoverPublicKey(payloadHash, payloadSignature)
+        console.log(`Recovered public key: ${user_pubkey}`)
+        console.log(`Verify this matches the user address: ${computeAddress(userPublicKey)}`)
+
         document.querySelector<HTMLDivElement>('#preview')!.innerHTML = `
         <h2>Raw Payload</h2>
         <p>${thePayload}</p>
@@ -146,6 +149,7 @@ export async function setupSubmit(element: HTMLButtonElement) {
         const _payloadHash = payloadHash
         const _info = {
             user_key: hexlify(user_key),
+            user_pubkey: user_pubkey,  // need the updated ABI before including this
             routing_code_hash: routing_code_hash,
             handle: handle,
             nonce: hexlify(nonce),

@@ -11,6 +11,7 @@ export interface PreExecutionMsg {
   payload_signature: Binary;
   user_address: HumanAddr;
   user_key: Binary;
+  user_pubkey: Binary;
   handle: string;
   nonce: Binary;
   [k: string]: unknown;

@@ -1,8 +1,11 @@
 {
   "name": "create-payload",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
+  "engines": {
+    "node": "16.x"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",

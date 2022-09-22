@@ -640,6 +640,7 @@ mod tests {
             "2a2fbe493ef25b536bbe0baa3917b51e5ba092e14bd76abf50a59526e2789be3".to_string();
         let user_address = HumanAddr::from("some eth address".to_string());
         let user_key = Binary(public_key.serialize().to_vec());
+        let user_pubkey = user_key.clone(); // TODO make this a unique key
 
         let payload = Payload {
             data: data.clone(),
@@ -690,6 +691,7 @@ mod tests {
             routing_code_hash: routing_code_hash.clone(),
             user_address: user_address.clone(),
             user_key: user_key.clone(),
+            user_pubkey: user_pubkey.clone(),
             payload: Binary(wrong_encrypted_payload.clone()),
             nonce: Binary(b"unique nonce".to_vec()),
             payload_hash: Binary(payload_hash.to_vec()),
@@ -719,6 +721,7 @@ mod tests {
             payload_signature: Binary(payload_signature.serialize_compact().to_vec()),
             user_address: user_address.clone(),
             user_key: user_key.clone(),
+            user_pubkey: user_pubkey.clone(),
             handle: "test".to_string(),
             nonce: Binary(b"unique nonce".to_vec()),
         };
@@ -736,6 +739,7 @@ mod tests {
             routing_code_hash,
             user_address,
             user_key,
+            user_pubkey,
             payload: Binary(encrypted_payload),
             nonce: Binary(b"unique nonce".to_vec()),
             payload_hash: Binary(payload_hash.to_vec()),
@@ -795,6 +799,7 @@ mod tests {
             "2a2fbe493ef25b536bbe0baa3917b51e5ba092e14bd76abf50a59526e2789be3".to_string();
         let user_address = HumanAddr::from("some eth address".to_string());
         let user_key = Binary(public_key.serialize().to_vec());
+        let user_pubkey = user_key.clone(); // TODO make this a unique key
 
         let payload = Payload {
             data: data.clone(),
@@ -830,6 +835,7 @@ mod tests {
             payload_signature: Binary(payload_signature.serialize_compact().to_vec()),
             user_address,
             user_key,
+            user_pubkey: user_pubkey.clone(),
             handle: "test".to_string(),
             nonce: Binary(b"unique nonce".to_vec()),
         };

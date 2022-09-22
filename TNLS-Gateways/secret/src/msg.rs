@@ -95,6 +95,8 @@ pub struct PreExecutionMsg {
     pub user_address: HumanAddr,
     /// User public key from payload encryption (not their wallet public key).
     pub user_key: Binary,
+    /// User's wallet public key.
+    pub user_pubkey: Binary,
     /// Handle to be called at destination contract.
     pub handle: String,
     /// Unique random bytes used to encrypt payload.
@@ -107,7 +109,7 @@ impl PreExecutionMsg {
             .secp256k1_verify(
                 self.payload_hash.as_slice(),
                 self.payload_signature.as_slice(),
-                self.user_key.as_slice(),
+                self.user_pubkey.as_slice(),
             )
             .map_err(|err| StdError::generic_err(err.to_string()))?;
         Ok(())
