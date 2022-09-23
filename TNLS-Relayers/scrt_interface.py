@@ -1,6 +1,7 @@
 import json
 from copy import deepcopy
 from logging import getLogger, basicConfig, DEBUG, StreamHandler
+from threading import Lock
 from typing import List
 
 from secret_sdk.client.lcd import LCDClient
@@ -32,6 +33,7 @@ class SCRTInterface(BaseChainInterface):
         assert self.address == str(self.private_key.acc_address), f"Address {self.address} and private key " \
                                                                   f"{self.private_key.acc_address} mismatch"
         self.wallet = self.provider.wallet(self.private_key)
+        self.lock = Lock()
 
     def sign_and_send_transaction(self, tx):
         """
@@ -43,8 +45,10 @@ class SCRTInterface(BaseChainInterface):
                 the receipt of the broadcast transaction
 
         """
-        signed_tx = self.wallet.key.sign_tx(tx)
-        return self.provider.tx.broadcast(signed_tx)
+        with self.lock:
+            signed_tx = self.wallet.key.sign_tx(tx)
+            tx_res = self.provider.tx.broadcast(signed_tx)
+        return tx_res
 
     def get_last_block(self):
         """
