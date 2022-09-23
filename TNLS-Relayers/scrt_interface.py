@@ -33,7 +33,6 @@ class SCRTInterface(BaseChainInterface):
         assert self.address == str(self.private_key.acc_address), f"Address {self.address} and private key " \
                                                                   f"{self.private_key.acc_address} mismatch"
         self.wallet = self.provider.wallet(self.private_key)
-        self.lock = Lock()
 
     def sign_and_send_transaction(self, tx):
         """
@@ -45,10 +44,8 @@ class SCRTInterface(BaseChainInterface):
                 the receipt of the broadcast transaction
 
         """
-        with self.lock:
-            signed_tx = self.wallet.key.sign_tx(tx)
-            tx_res = self.provider.tx.broadcast(signed_tx)
-        return tx_res
+        signed_tx = self.wallet.key.sign_tx(tx)
+        return self.provider.tx.broadcast(signed_tx)
 
     def get_last_block(self):
         """
@@ -196,10 +193,10 @@ class SCRTContract(BaseContractInterface):
             txn = self.construct_txn(function_schema, function_name, args)
             transaction_result = self.interface.sign_and_send_transaction(txn)
         try:
+            self.logger.info(f"Transaction result: {transaction_result}")
             logs = transaction_result.logs
         except AttributeError:
             logs = []
-        self.logger.info(f"Got {(logs)} transactions")
         task_list = self.parse_event_from_txn('wasm', logs)
         self.logger.info(f"Transaction result: {task_list}")
         return task_list, transaction_result

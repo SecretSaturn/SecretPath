@@ -113,6 +113,8 @@ class Task:
                 return json.dumps(new_task_list)
             return json.dumps(to_dict(new_task_dict, key_type=self.task_destination_network))
         else:
+            if 'task_id' in self.task_data and self.task_destination_network == 'secret':
+                self.task_data['task_id'] = int(self.task_data['task_id'])
             return json.dumps(to_dict(self.task_data))
 
     def __repr__(self):
