@@ -97,6 +97,7 @@ class SCRTContract(BaseContractInterface):
             handlers=[StreamHandler()],
         )
         self.logger = getLogger()
+        self.lock = Lock()
         self.logger.info(f"Initialized SCRT interface for contract {self.address}")
         pass
 
@@ -191,8 +192,9 @@ class SCRTContract(BaseContractInterface):
             args = args[0]
         if isinstance(args, str):
             args = json.loads(args)
-        txn = self.construct_txn(function_schema, function_name, args)
-        transaction_result = self.interface.sign_and_send_transaction(txn)
+        with self.lock:
+            txn = self.construct_txn(function_schema, function_name, args)
+            transaction_result = self.interface.sign_and_send_transaction(txn)
         try:
             logs = transaction_result.logs
         except AttributeError:

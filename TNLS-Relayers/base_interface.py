@@ -84,7 +84,7 @@ class Task:
     def __init__(self, task_dict):
         task_dict = dict(task_dict)
         if 'task_id' in task_dict:
-            task_dict['task_id'] = int(task_dict['task_id'])
+            task_dict['task_id'] = str(task_dict['task_id'])
         if 'task_destination_network' in task_dict:
             self.task_destination_network = task_dict['task_destination_network']
         elif 'routing_info' in task_dict and ':' in task_dict['routing_info']:
