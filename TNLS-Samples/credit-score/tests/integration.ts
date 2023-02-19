@@ -85,7 +85,7 @@ const initializeGateway = async (
   console.log("Contract codeId: ", codeId);
 
   const contractCodeHash = await client.query.compute.codeHashByCodeId({code_id: codeId});
-  console.log(`Contract hash: ${contractCodeHash}`);
+  console.log(`Contract hash: ${contractCodeHash.code_hash}`);
 
   const contract = await client.tx.compute.instantiateContract(
     {
@@ -164,7 +164,7 @@ const initializeScrtRng = async (
   console.log("Contract codeId: ", codeId);
 
   const contractCodeHash = await client.query.compute.codeHashByCodeId({code_id: codeId});
-  console.log(`Contract hash: ${contractCodeHash}`);
+  console.log(`Contract hash: ${contractCodeHash.code_hash}`);
 
   const contract = await client.tx.compute.instantiateContract(
     {
@@ -242,7 +242,7 @@ const initializeContract = async (
   console.log("Contract codeId: ", codeId);
 
   const contractCodeHash = await client.query.compute.codeHashByCodeId({code_id: codeId});
-  console.log(`Contract hash: ${contractCodeHash}`);
+  console.log(`Contract hash: ${contractCodeHash.code_hash}`);
 
   const contract = await client.tx.compute.instantiateContract(
     {
