@@ -2,7 +2,7 @@
   "devDependencies": {
     "@types/node": "^18.0.3",
     "axios": "^0.27.2",
-    "secretjs": "^1.4.0-alpha.5",
+    "secretjs": "^1.6.13",
     "typescript": "^4.7.4"
   },
   "dependencies": {
