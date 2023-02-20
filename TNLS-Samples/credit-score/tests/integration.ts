@@ -535,7 +535,7 @@ async function queryPubKey(
     contract_address: gatewayAddress,
     code_hash: gatewayHash,
     query: query_msg,
-  })) as PublicKeyResponse;
+  }).catch(e => console.log(e))) as PublicKeyResponse;
   // console.log(`Response:\n${JSON.stringify(response, undefined ,2)}\n`);
   console.log(`\x1b[32mEncryption key: ${response.encryption_key}\x1b[0m`);
   console.log(`\x1b[32mPublic key: ${response.verification_key}\x1b[0m`);

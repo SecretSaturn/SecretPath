@@ -1,4 +1,4 @@
-use cosmwasm_std::{Binary, CanonicalAddr, HumanAddr};
+use cosmwasm_std::{Addr, Binary, CanonicalAddr};
 use secret_toolkit::storage::{Item, Keymap};
 
 use schemars::JsonSchema;
@@ -29,7 +29,7 @@ pub struct State {
     pub signing_keys: KeyPair,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, Default)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct TaskInfo {
     /// The original, encrypted payload.
     pub payload: Binary,
@@ -40,7 +40,7 @@ pub struct TaskInfo {
     /// The name of the network that message came from.
     pub source_network: String,
     /// Public address of the user that sent the message.
-    pub user_address: HumanAddr,
+    pub user_address: Addr,
 }
 /// A key pair using the [Binary] type
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, Default)]

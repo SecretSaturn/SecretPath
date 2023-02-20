@@ -1,11 +1,11 @@
 use cosmwasm_std::{
-    log, to_binary, Api, Binary, Decimal, Env, Extern, HandleResponse, HandleResult, InitResponse,
-    InitResult, Querier, QueryResult, StdError, Storage, Uint128,
+    entry_point, to_binary, Binary, Decimal, Deps, DepsMut, Env, MessageInfo, Response, StdError,
+    StdResult, Uint128,
 };
 use secret_toolkit::utils::{pad_handle_result, pad_query_result, HandleCallback};
 
 use crate::{
-    msg::{GatewayMsg, HandleMsg, InitMsg, QueryMsg, QueryResponse, ScoreResponse},
+    msg::{ExecuteMsg, GatewayMsg, InstantiateMsg, QueryMsg, QueryResponse, ScoreResponse},
     state::{Input, State, CONFIG},
 };
 use tnls::msg::{PostExecutionMsg, PrivContractHandleMsg};
@@ -14,11 +14,13 @@ use tnls::msg::{PostExecutionMsg, PrivContractHandleMsg};
 /// response size
 pub const BLOCK_SIZE: usize = 256;
 
-pub fn init<S: Storage, A: Api, Q: Querier>(
-    deps: &mut Extern<S, A, Q>,
+#[entry_point]
+pub fn instantiate(
+    deps: DepsMut,
     _env: Env,
-    msg: InitMsg,
-) -> InitResult {
+    _info: MessageInfo,
+    msg: InstantiateMsg,
+) -> StdResult<Response> {
     let state = State {
         gateway_address: msg.gateway_address,
         gateway_hash: msg.gateway_hash,
@@ -26,23 +28,21 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
     };
 
     // config(&mut deps.storage).save(&state)?;
-    CONFIG.save(&mut deps.storage, &state)?;
+    CONFIG.save(deps.storage, &state)?;
 
-    Ok(InitResponse::default())
+    Ok(Response::default())
 }
 
-pub fn handle<S: Storage, A: Api, Q: Querier>(
-    deps: &mut Extern<S, A, Q>,
-    env: Env,
-    msg: HandleMsg,
-) -> HandleResult {
+#[entry_point]
+pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> StdResult<Response> {
     let response = match msg {
-        HandleMsg::Input { message } => try_handle(deps, env, message),
+        ExecuteMsg::Input { message } => try_handle(deps, env, info, message),
     };
     pad_handle_result(response, BLOCK_SIZE)
 }
 
-pub fn query<S: Storage, A: Api, Q: Querier>(deps: &Extern<S, A, Q>, msg: QueryMsg) -> QueryResult {
+#[entry_point]
+pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     let response = match msg {
         QueryMsg::Query {} => try_query(deps),
     };
@@ -50,13 +50,14 @@ pub fn query<S: Storage, A: Api, Q: Querier>(deps: &Extern<S, A, Q>, msg: QueryM
 }
 
 // acts like a gateway message handle filter
-fn try_handle<S: Storage, A: Api, Q: Querier>(
-    deps: &mut Extern<S, A, Q>,
+fn try_handle(
+    deps: DepsMut,
     env: Env,
+    _info: MessageInfo,
     msg: PrivContractHandleMsg,
-) -> HandleResult {
+) -> StdResult<Response> {
     // verify signature with stored gateway public key
-    let gateway_key = CONFIG.load(&deps.storage)?.gateway_key;
+    let gateway_key = CONFIG.load(deps.storage)?.gateway_key;
     deps.api
         .secp256k1_verify(
             msg.input_hash.as_slice(),
@@ -75,14 +76,14 @@ fn try_handle<S: Storage, A: Api, Q: Querier>(
     }
 }
 
-fn try_request_score<S: Storage, A: Api, Q: Querier>(
-    deps: &mut Extern<S, A, Q>,
+fn try_request_score(
+    deps: DepsMut,
     _env: Env,
     input_values: String,
     task_id: u64,
     input_hash: Binary,
-) -> HandleResult {
-    let config = CONFIG.load(&deps.storage)?;
+) -> StdResult<Response> {
+    let config = CONFIG.load(deps.storage)?;
 
     let input: Input = serde_json_wasm::from_str(&input_values)
         .map_err(|err| StdError::generic_err(err.to_string()))?;
@@ -96,26 +97,32 @@ fn try_request_score<S: Storage, A: Api, Q: Querier>(
             input_hash,
         },
     }
-    .to_cosmos_msg(config.gateway_hash, config.gateway_address, None)?;
+    .to_cosmos_msg(
+        config.gateway_hash,
+        config.gateway_address.to_string(),
+        None,
+    )?;
 
-    Ok(HandleResponse {
-        messages: vec![callback_msg],
-        log: vec![log("status", "private computation complete")],
-        data: None,
-    })
+    Ok(Response::new()
+        .add_message(callback_msg)
+        .add_attribute("status", "private computation complete"))
 }
 
 pub fn try_calculate_score(input: Input) -> Result<String, StdError> {
-    let assets = Uint128((input.onchain_assets + input.offchain_assets).into());
-    let liabilities = Uint128(input.liabilities.into());
-    let missed_payments = Uint128(input.missed_payments.into());
-    let income = Uint128(input.income.into());
+    let assets = Uint128::from(input.onchain_assets + input.offchain_assets);
+    let liabilities = Uint128::from(input.liabilities);
+    let missed_payments = Uint128::from(input.missed_payments);
+    let income = Uint128::from(input.income);
 
-    let ratio = (Decimal::from_ratio(assets+income, liabilities+missed_payments+Uint128(1)) * Uint128(1)).u128();
+    let ratio = (Decimal::from_ratio(
+        assets + income,
+        liabilities + missed_payments + Uint128::from(1u8),
+    ) * Uint128::from(1u8))
+    .u128();
     let score: u32;
 
     if ratio >= 9 {
-        score = 850       
+        score = 850
     } else if (6..9).contains(&ratio) {
         score = 750
     } else if (4..6).contains(&ratio) {
@@ -140,7 +147,7 @@ pub fn try_calculate_score(input: Input) -> Result<String, StdError> {
     Ok(serde_json_wasm::to_string(&resp).unwrap())
 }
 
-fn try_query<S: Storage, A: Api, Q: Querier>(_deps: &Extern<S, A, Q>) -> QueryResult {
+fn try_query(_deps: Deps) -> StdResult<Binary> {
     let message = "placeholder".to_string();
     to_binary(&QueryResponse { message })
 }
@@ -148,25 +155,26 @@ fn try_query<S: Storage, A: Api, Q: Querier>(_deps: &Extern<S, A, Q>) -> QueryRe
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cosmwasm_std::testing::{mock_dependencies, mock_env};
-    use cosmwasm_std::{coins, from_binary, HumanAddr};
+    use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info};
+    use cosmwasm_std::{from_binary, Addr};
 
     #[test]
     fn proper_initialization() {
-        let mut deps = mock_dependencies(20, &[]);
-        let env = mock_env("creator", &coins(1000, "earth"));
-        let msg = InitMsg {
-            gateway_address: HumanAddr("fake address".to_string()),
+        let mut deps = mock_dependencies();
+        let env = mock_env();
+        let info = mock_info("sender", &[]);
+        let msg = InstantiateMsg {
+            gateway_address: Addr::unchecked("fake address".to_string()),
             gateway_hash: "fake code hash".to_string(),
             gateway_key: Binary(b"fake key".to_vec()),
         };
 
         // we can just call .unwrap() to assert this was a success
-        let res = init(&mut deps, env, msg).unwrap();
+        let res = instantiate(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
         assert_eq!(0, res.messages.len());
 
         // it worked, let's query
-        let res = query(&deps, QueryMsg::Query {});
+        let res = query(deps.as_ref(), env.clone(), QueryMsg::Query {});
         assert!(res.is_ok(), "query failed: {}", res.err().unwrap());
         let value: QueryResponse = from_binary(&res.unwrap()).unwrap();
         assert_eq!("placeholder", value.message);
@@ -174,27 +182,29 @@ mod tests {
 
     #[test]
     fn request_score() {
-        let mut deps = mock_dependencies(20, &[]);
-        let env = mock_env("creator", &coins(1000, "earth"));
-        let init_msg = InitMsg {
-            gateway_address: HumanAddr("fake address".to_string()),
+        let mut deps = mock_dependencies();
+        let env = mock_env();
+        let info = mock_info("sender", &[]);
+        let init_msg = InstantiateMsg {
+            gateway_address: Addr::unchecked("fake address".to_string()),
             gateway_hash: "fake code hash".to_string(),
             gateway_key: Binary(b"fake key".to_vec()),
         };
-        init(&mut deps, env.clone(), init_msg).unwrap();
+        instantiate(deps.as_mut(), env.clone(), info.clone(), init_msg).unwrap();
 
         let message = PrivContractHandleMsg {
             input_values: "{\"address\":\"0x249C8753A9CB2a47d97A11D94b2179023B7aBCca\",\"name\":\"bob\",\"offchain_assets\":100,\"onchain_assets\":100,\"liabilities\":100,\"missed_payments\":100,\"income\":100}".to_string(),
             handle: "request_score".to_string(),
-            user_address: HumanAddr("0x1".to_string()),
+            user_address: Addr::unchecked("0x1".to_string()),
             task_id: 1,
             input_hash: to_binary(&"".to_string()).unwrap(),
             signature: to_binary(&"".to_string()).unwrap(),
         };
-        let handle_msg = HandleMsg::Input { message };
+        let handle_msg = ExecuteMsg::Input { message };
 
-        let handle_response = handle(&mut deps, env.clone(), handle_msg).unwrap();
-        let result = &handle_response.log[0].value;
+        let handle_response =
+            execute(deps.as_mut(), env.clone(), info.clone(), handle_msg).unwrap();
+        let result = &handle_response.attributes[0].value;
         assert_eq!(result, "private computation complete                                                                                                                                                                                                                                    ");
     }
 

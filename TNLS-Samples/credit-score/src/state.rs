@@ -1,4 +1,4 @@
-use cosmwasm_std::{Binary, HumanAddr};
+use cosmwasm_std::{Addr, Binary};
 use secret_toolkit::storage::Item;
 
 use schemars::JsonSchema;
@@ -8,7 +8,7 @@ pub static CONFIG: Item<State> = Item::new(b"config");
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct State {
-    pub gateway_address: HumanAddr,
+    pub gateway_address: Addr,
     pub gateway_hash: String,
     pub gateway_key: Binary,
 }

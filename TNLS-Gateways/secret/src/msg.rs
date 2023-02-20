@@ -1,6 +1,4 @@
-use cosmwasm_std::{
-    from_binary, Api, Binary, Extern, HumanAddr, Querier, StdError, StdResult, Storage,
-};
+use cosmwasm_std::{from_binary, Addr, Binary, DepsMut, StdError, StdResult};
 use secret_toolkit::utils::HandleCallback;
 
 use crate::types::*;
@@ -13,23 +11,20 @@ use chacha20poly1305::{ChaCha20Poly1305, Nonce};
 use secp256k1::{ecdh::SharedSecret, PublicKey, SecretKey};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct InitMsg {
+pub struct InstantiateMsg {
     /// Entropy used for Prng seed.
     pub entropy: String,
     /// Optional admin address, env.message.sender if missing.
-    pub admin: Option<HumanAddr>,
+    pub admin: Option<Addr>,
     pub rng_hash: String,
-    pub rng_addr: HumanAddr,
+    pub rng_addr: Addr,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
-pub enum HandleMsg {
+pub enum ExecuteMsg {
     /// Triggers the scrt-rng contract to send back previously requested randomness.
-    KeyGen {
-        rng_hash: String,
-        rng_addr: HumanAddr,
-    },
+    KeyGen { rng_hash: String, rng_addr: Addr },
     /// Receives the callback message from scrt-rng. Actual key generation happens at this step.
     ReceiveFRn {
         cb_msg: Binary,
@@ -37,13 +32,9 @@ pub enum HandleMsg {
         rn: [u8; 32],
     },
     /// Process an interchain message through the private gateway.
-    Input {
-        inputs: PreExecutionMsg,
-    },
+    Input { inputs: PreExecutionMsg },
     /// Receive results from private contract and broadcast logs for Relayer.
-    Output {
-        outputs: PostExecutionMsg,
-    },
+    Output { outputs: PostExecutionMsg },
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, JsonSchema, Debug)]
@@ -82,7 +73,7 @@ pub struct PreExecutionMsg {
     /// Source network (where to go once pulled into the next gateway).
     pub source_network: String,
     /// Destination contract address.
-    pub routing_info: HumanAddr,
+    pub routing_info: Addr,
     /// Destination contract code hash.
     pub routing_code_hash: String,
     /// Encryption of (data, routing info, and user info).
@@ -92,7 +83,7 @@ pub struct PreExecutionMsg {
     /// Signature of hash of encrypted input values.
     pub payload_signature: Binary,
     /// User public chain address.
-    pub user_address: HumanAddr,
+    pub user_address: Addr,
     /// User public key from payload encryption (not their wallet public key).
     pub user_key: Binary,
     /// User's wallet public key.
@@ -104,7 +95,7 @@ pub struct PreExecutionMsg {
 }
 
 impl PreExecutionMsg {
-    pub fn verify<S: Storage, A: Api, Q: Querier>(&self, deps: &Extern<S, A, Q>) -> StdResult<()> {
+    pub fn verify(&self, deps: &DepsMut) -> StdResult<()> {
         deps.api
             .secp256k1_verify(
                 self.payload_hash.as_slice(),
@@ -141,11 +132,11 @@ pub enum SecretMsg {
         entropy: String,
         max_blk_delay: Option<u64>,
         purpose: Option<String>,
-        receiver_addr: Option<HumanAddr>,
+        receiver_addr: Option<Addr>,
         receiver_code_hash: String,
     },
     FulfillRn {
-        creator_addr: HumanAddr,
+        creator_addr: Addr,
         purpose: Option<String>,
         receiver_code_hash: String,
     },
@@ -164,7 +155,7 @@ pub struct PrivContractHandleMsg {
     /// Handle function to be called in the destination contract.
     pub handle: String,
     /// Public network user address.
-    pub user_address: HumanAddr,
+    pub user_address: Addr,
     /// Task ID passed along for later verification.
     pub task_id: u64,
     /// SHA256 hash of `input_values`.
@@ -217,11 +208,11 @@ pub enum ScrtRngMsg {
         entropy: String,
         max_blk_delay: Option<u64>,
         purpose: Option<String>,
-        receiver_addr: Option<HumanAddr>,
+        receiver_addr: Option<Addr>,
         receiver_hash: String,
     },
     FulfullRn {
-        creator_addr: HumanAddr,
+        creator_addr: Addr,
         purpose: Option<String>,
         receiver_code_hash: String,
     },

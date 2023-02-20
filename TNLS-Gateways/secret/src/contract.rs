@@ -1,6 +1,6 @@
 use cosmwasm_std::{
-    plaintext_log, to_binary, Api, Binary, Env, Extern, HandleResponse, HandleResult,
-    HumanAddr, InitResponse, InitResult, Querier, QueryResult, StdError, Storage,
+    entry_point, to_binary, Addr, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdError,
+    StdResult,
 };
 use secret_toolkit::{
     crypto::secp256k1::{PrivateKey, PublicKey},
@@ -10,7 +10,7 @@ use secret_toolkit::{
 
 use crate::{
     msg::{
-        HandleMsg, InitMsg, InputResponse, PostExecutionMsg, PreExecutionMsg,
+        ExecuteMsg, InputResponse, InstantiateMsg, PostExecutionMsg, PreExecutionMsg,
         PublicKeyResponse, QueryMsg, ResponseStatus::Success, SecretMsg,
     },
     state::{KeyPair, State, TaskInfo, CONFIG, CREATOR, MY_ADDRESS, PRNG_SEED, TASK_MAP},
@@ -35,23 +35,25 @@ pub const BLOCK_SIZE: usize = 256;
 /// * `deps` - mutable reference to Extern containing all the contract's external dependencies
 /// * `env` - Env of contract's environment
 /// * `msg` - InitMsg passed in with the instantiation message
-pub fn init<S: Storage, A: Api, Q: Querier>(
-    deps: &mut Extern<S, A, Q>,
+#[entry_point]
+pub fn instantiate(
+    deps: DepsMut,
     env: Env,
-    msg: InitMsg,
-) -> InitResult {
+    info: MessageInfo,
+    msg: InstantiateMsg,
+) -> StdResult<Response> {
     // Save this contract's address
-    let my_address_raw = &deps.api.canonical_address(&env.contract.address)?;
-    MY_ADDRESS.save(&mut deps.storage, my_address_raw)?;
+    let my_address_raw = &deps.api.addr_canonicalize(env.contract.address.as_str())?;
+    MY_ADDRESS.save(deps.storage, my_address_raw)?;
 
     // Save the address of the contract's creator
-    let creator_raw = deps.api.canonical_address(&env.message.sender)?;
-    CREATOR.save(&mut deps.storage, &creator_raw)?;
+    let creator_raw = deps.api.addr_canonicalize(info.sender.as_str())?;
+    CREATOR.save(deps.storage, &creator_raw)?;
 
     // Set admin address if provided, or else use creator address
     let admin_raw = msg
         .admin
-        .map(|a| deps.api.canonical_address(&a))
+        .map(|a| deps.api.addr_canonicalize(a.as_str()))
         .transpose()?
         .unwrap_or(creator_raw);
 
@@ -64,7 +66,7 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
         signing_keys: KeyPair::default(),
     };
 
-    CONFIG.save(&mut deps.storage, &state)?;
+    CONFIG.save(deps.storage, &state)?;
 
     // create a message to request randomness from scrt-rng oracle
     let rng_msg = SecretMsg::CreateRn {
@@ -73,14 +75,11 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
         max_blk_delay: None,
         purpose: Some("secret gateway entropy".to_string()),
         receiver_addr: Some(env.contract.address),
-        receiver_code_hash: env.contract_code_hash,
+        receiver_code_hash: env.contract.code_hash,
     }
-    .to_cosmos_msg(msg.rng_hash, msg.rng_addr, None)?;
+    .to_cosmos_msg(msg.rng_hash, msg.rng_addr.into_string(), None)?;
 
-    Ok(InitResponse {
-        messages: vec![rng_msg],
-        log: vec![],
-    })
+    Ok(Response::new().add_message(rng_msg))
 }
 
 #[cfg(feature = "contract")]
@@ -92,35 +91,37 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
 /// * `deps` - mutable reference to Extern containing all the contract's external dependencies
 /// * `env` - Env of contract's environment
 /// * `msg` - HandleMsg passed in with the execute message
-pub fn handle<S: Storage, A: Api, Q: Querier>(
-    deps: &mut Extern<S, A, Q>,
+#[entry_point]
+pub fn execute(
+    deps: DepsMut,
     env: Env,
-    msg: HandleMsg,
-) -> HandleResult {
+    _info: MessageInfo,
+    msg: ExecuteMsg,
+) -> StdResult<Response> {
     match msg {
-        HandleMsg::KeyGen { rng_hash, rng_addr } => {
+        ExecuteMsg::KeyGen { rng_hash, rng_addr } => {
             pad_handle_result(try_fulfill_rn(deps, env, rng_hash, rng_addr), BLOCK_SIZE)
         }
-        HandleMsg::ReceiveFRn {
+        ExecuteMsg::ReceiveFRn {
             cb_msg: _,
             purpose: _,
             rn,
         } => pad_handle_result(create_gateway_keys(deps, env, rn), BLOCK_SIZE),
-        HandleMsg::Input { inputs } => {
+        ExecuteMsg::Input { inputs } => {
             pad_handle_result(pre_execution(deps, env, inputs), BLOCK_SIZE)
         }
-        HandleMsg::Output { outputs } => post_execution(deps, env, outputs),
+        ExecuteMsg::Output { outputs } => post_execution(deps, env, outputs),
     }
 }
 
-fn try_fulfill_rn<S: Storage, A: Api, Q: Querier>(
-    deps: &mut Extern<S, A, Q>,
+fn try_fulfill_rn(
+    deps: DepsMut,
     env: Env,
     rng_hash: String,
-    rng_addr: HumanAddr,
-) -> HandleResult {
+    rng_addr: Addr,
+) -> StdResult<Response> {
     // load config
-    let state = CONFIG.load(&deps.storage)?;
+    let state = CONFIG.load(deps.storage)?;
 
     // check if the keys have already been created
     if state.keyed {
@@ -132,24 +133,16 @@ fn try_fulfill_rn<S: Storage, A: Api, Q: Querier>(
     let fulfill_rn_msg = SecretMsg::FulfillRn {
         creator_addr: env.contract.address,
         purpose: Some("secret gateway entropy".to_string()),
-        receiver_code_hash: env.contract_code_hash,
+        receiver_code_hash: env.contract.code_hash,
     }
-    .to_cosmos_msg(rng_hash, rng_addr, None)?;
+    .to_cosmos_msg(rng_hash, rng_addr.into_string(), None)?;
 
-    Ok(HandleResponse {
-        messages: vec![fulfill_rn_msg],
-        log: vec![],
-        data: None,
-    })
+    Ok(Response::new().add_message(fulfill_rn_msg))
 }
 
-fn create_gateway_keys<S: Storage, A: Api, Q: Querier>(
-    deps: &mut Extern<S, A, Q>,
-    env: Env,
-    prng_seed: [u8; 32],
-) -> HandleResult {
+fn create_gateway_keys(deps: DepsMut, env: Env, prng_seed: [u8; 32]) -> StdResult<Response> {
     // load config
-    let state = CONFIG.load(&deps.storage)?;
+    let state = CONFIG.load(deps.storage)?;
 
     // check if the keys have already been created
     if state.keyed {
@@ -172,35 +165,29 @@ fn create_gateway_keys<S: Storage, A: Api, Q: Querier>(
         pk: Binary(public.serialize().to_vec()), // public key is 65 bytes
     };
 
-    CONFIG.update(&mut deps.storage, |mut state| {
+    CONFIG.update(deps.storage, |mut state| {
         state.keyed = true;
-        state.encryption_keys = encryption_keys;
-        state.signing_keys = signing_keys;
+        state.encryption_keys = encryption_keys.clone();
+        state.signing_keys = signing_keys.clone();
         Ok(state)
     })?;
 
-    PRNG_SEED.save(&mut deps.storage, &new_prng_seed)?; // is there any need to save this?
+    PRNG_SEED.save(deps.storage, &new_prng_seed)?; // is there any need to save this?
 
-    Ok(HandleResponse {
-        messages: vec![],
-        log: vec![
-            plaintext_log("encryption_pubkey", &state.encryption_keys.pk),
-            plaintext_log("signing_pubkey", &state.signing_keys.pk),
-        ],
-        data: None,
-    })
+    let encryption_pubkey = encryption_keys.pk.to_base64();
+    let signing_pubkey = signing_keys.pk.to_base64();
+
+    Ok(Response::new()
+        .add_attribute_plaintext("encryption_pubkey", encryption_pubkey)
+        .add_attribute_plaintext("signing_pubkey", signing_pubkey))
 }
 
-fn pre_execution<S: Storage, A: Api, Q: Querier>(
-    deps: &mut Extern<S, A, Q>,
-    _env: Env,
-    msg: PreExecutionMsg,
-) -> HandleResult {
+fn pre_execution(deps: DepsMut, _env: Env, msg: PreExecutionMsg) -> StdResult<Response> {
     // verify that signature is correct
-    msg.verify(deps)?;
+    msg.verify(&deps)?;
 
     // load config
-    let config = CONFIG.load(&deps.storage)?;
+    let config = CONFIG.load(deps.storage)?;
 
     // decrypt payload
     let payload = msg.decrypt_payload(config.encryption_keys.sk)?;
@@ -222,13 +209,13 @@ fn pre_execution<S: Storage, A: Api, Q: Querier>(
     let task_info = TaskInfo {
         payload: msg.payload, // storing the ENCRYPTED payload
         payload_hash: msg.payload_hash,
-        input_hash,           // storing the DECRYPTED input_values hashed together with task ID
+        input_hash, // storing the DECRYPTED input_values hashed together with task ID
         source_network: msg.source_network,
         user_address: payload.user_address.clone(),
     };
 
     // map task ID to task info
-    TASK_MAP.insert(&mut deps.storage, &msg.task_id, task_info)?;
+    TASK_MAP.insert(deps.storage, &msg.task_id, &task_info)?;
 
     // load this gateway's signing key
     let mut signing_key_bytes = [0u8; 32];
@@ -236,10 +223,14 @@ fn pre_execution<S: Storage, A: Api, Q: Querier>(
 
     // used in production to create signature
     #[cfg(target_arch = "wasm32")]
-    let signature = PrivateKey::parse(&signing_key_bytes)?
-        .sign(&input_hash, deps.api)
-        .serialize()
-        .to_vec();
+    let signature = deps
+        .api
+        .secp256k1_sign(&input_hash, &signing_key_bytes)
+        .map_err(|err| StdError::generic_err(err.to_string()))?;
+    // let signature = PrivateKey::parse(&signing_key_bytes)?
+    //     .sign(&input_hash, deps.api)
+    //     .serialize()
+    //     .to_vec();
 
     // used only in unit testing to create signatures
     #[cfg(not(target_arch = "wasm32"))]
@@ -262,32 +253,28 @@ fn pre_execution<S: Storage, A: Api, Q: Querier>(
             signature: Binary(signature),
         },
     };
-    let cosmos_msg =
-        private_contract_msg.to_cosmos_msg(msg.routing_code_hash, msg.routing_info, None)?;
+    let cosmos_msg = private_contract_msg.to_cosmos_msg(
+        msg.routing_code_hash,
+        msg.routing_info.into_string(),
+        None,
+    )?;
 
-    Ok(HandleResponse {
-        messages: vec![cosmos_msg],
-        log: vec![
-            plaintext_log("task_id", &msg.task_id),
-            plaintext_log("status", "sent to private contract"),
-        ],
-        data: Some(to_binary(&InputResponse { status: Success })?),
-    })
+    Ok(Response::new()
+        .add_message(cosmos_msg)
+        .add_attribute_plaintext("task_id", msg.task_id.to_string())
+        .add_attribute_plaintext("status", "sent to private contract")
+        .set_data(to_binary(&InputResponse { status: Success })?))
 }
 
-fn post_execution<S: Storage, A: Api, Q: Querier>(
-    deps: &mut Extern<S, A, Q>,
-    _env: Env,
-    msg: PostExecutionMsg,
-) -> HandleResult {
+fn post_execution(deps: DepsMut, _env: Env, msg: PostExecutionMsg) -> StdResult<Response> {
     // load task info and remove task ID from map
     let task_info = TASK_MAP
-        .get(&deps.storage, &msg.task_id)
+        .get(deps.storage, &msg.task_id)
         .ok_or_else(|| StdError::generic_err("task id not found"))?;
 
     // this panics in unit tests
     #[cfg(target_arch = "wasm32")]
-    TASK_MAP.remove(&mut deps.storage, &msg.task_id)?;
+    TASK_MAP.remove(deps.storage, &msg.task_id)?;
 
     // verify that input hash is correct one for Task ID
     if msg.input_hash.as_slice() != task_info.input_hash.to_vec() {
@@ -319,7 +306,7 @@ fn post_execution<S: Storage, A: Api, Q: Querier>(
     let result_hash = hasher.finalize_reset();
 
     // load this gateway's signing key
-    let private_key = CONFIG.load(&deps.storage)?.signing_keys.sk;
+    let private_key = CONFIG.load(deps.storage)?.signing_keys.sk;
     let mut signing_key_bytes = [0u8; 32];
     signing_key_bytes.copy_from_slice(private_key.as_slice());
 
@@ -327,9 +314,13 @@ fn post_execution<S: Storage, A: Api, Q: Querier>(
     // NOTE: api.secp256k1_sign() will perform an additional sha_256 hash operation on the given data
     #[cfg(target_arch = "wasm32")]
     let result_signature = {
-        let sk = PrivateKey::parse(&signing_key_bytes)?;
+        // let sk = PrivateKey::parse(&signing_key_bytes)?;
+        // let result_signature = sk.sign(&result_hash, deps.api).serialize().to_vec();
 
-        let result_signature = sk.sign(&result_hash, deps.api).serialize().to_vec();
+        let result_signature = deps
+            .api
+            .secp256k1_sign(&result_hash, &signing_key_bytes)
+            .map_err(|err| StdError::generic_err(err.to_string()))?;
 
         result_signature
     };
@@ -345,21 +336,20 @@ fn post_execution<S: Storage, A: Api, Q: Querier>(
         let result_signature = secp
             .sign_ecdsa_recoverable(&result_message, &sk)
             .serialize_compact();
-        let result_signature = result_signature.1;
 
-        result_signature
+        result_signature.1
     };
 
     // create hash of entire packet (used to verify the message wasn't modified in transit)
     let data = [
-        "secret".as_bytes(),          // source network
-        routing_info.as_bytes(),      // task_destination_network
-        &msg.task_id.to_le_bytes(),   // task ID
-        task_info.payload.as_slice(), // payload (original encrypted payload)
-        task_info.payload_hash.as_slice(),                // original payload message
-        msg.result.as_bytes(),        // result
-        &result_hash,                 // result message
-        &result_signature,            // result signature
+        "secret".as_bytes(),               // source network
+        routing_info.as_bytes(),           // task_destination_network
+        &msg.task_id.to_le_bytes(),        // task ID
+        task_info.payload.as_slice(),      // payload (original encrypted payload)
+        task_info.payload_hash.as_slice(), // original payload message
+        msg.result.as_bytes(),             // result
+        &result_hash,                      // result message
+        &result_signature,                 // result signature
     ]
     .concat();
     hasher.update(&data);
@@ -371,11 +361,16 @@ fn post_execution<S: Storage, A: Api, Q: Querier>(
     // NOTE: api.secp256k1_sign() will perform an additional sha_256 hash operation on the given data
     #[cfg(target_arch = "wasm32")]
     let packet_signature = {
-        PrivateKey::parse(&signing_key_bytes)?
-            .sign(&packet_hash, deps.api)
-            .serialize()
-            .to_vec()
+        deps.api
+            .secp256k1_sign(&packet_hash, &signing_key_bytes)
+            .map_err(|err| StdError::generic_err(err.to_string()))?
     };
+    // let packet_signature = {
+    //     PrivateKey::parse(&signing_key_bytes)?
+    //         .sign(&packet_hash, deps.api)
+    //         .serialize()
+    //         .to_vec()
+    // };
 
     // used only in unit testing to create signature
     #[cfg(not(target_arch = "wasm32"))]
@@ -393,28 +388,26 @@ fn post_execution<S: Storage, A: Api, Q: Querier>(
     // NOTE: we need to perform the additional sha_256 because that is what the secret network API method does
     // NOTE: we add an extra byte to the end of the signatures for `ecrecover` in Solidity
     // let task_id = format!("{:#04x}", &msg.task_id);
-    let payload_hash = format!("0x{}", task_info.payload_hash.as_slice().encode_hex::<String>());
+    let payload_hash = format!(
+        "0x{}",
+        task_info.payload_hash.as_slice().encode_hex::<String>()
+    );
     let result = format!("0x{}", msg.result.encode_hex::<String>());
     let result_hash = format!("0x{}", sha_256(&result_hash).encode_hex::<String>());
     let result_signature = format!("0x{}{:x}", &result_signature.encode_hex::<String>(), 27);
     let packet_hash = format!("0x{}", sha_256(&packet_hash).encode_hex::<String>());
     let packet_signature = format!("0x{}{:x}", &packet_signature.encode_hex::<String>(), 27);
 
-    Ok(HandleResponse {
-        messages: vec![],
-        log: vec![
-            plaintext_log("source_network", "secret"),
-            plaintext_log("task_destination_network", routing_info),
-            plaintext_log("task_id", msg.task_id),
-            plaintext_log("payload_hash", payload_hash),
-            plaintext_log("result", result),
-            plaintext_log("result_hash", result_hash),
-            plaintext_log("result_signature", result_signature),
-            plaintext_log("packet_hash", packet_hash),
-            plaintext_log("packet_signature", packet_signature),
-        ],
-        data: None,
-    })
+    Ok(Response::new()
+        .add_attribute_plaintext("source_network", "secret")
+        .add_attribute_plaintext("task_destination_network", routing_info)
+        .add_attribute_plaintext("task_id", msg.task_id.to_string())
+        .add_attribute_plaintext("payload_hash", payload_hash)
+        .add_attribute_plaintext("result", result)
+        .add_attribute_plaintext("result_hash", result_hash)
+        .add_attribute_plaintext("result_signature", result_signature)
+        .add_attribute_plaintext("packet_hash", packet_hash)
+        .add_attribute_plaintext("packet_signature", packet_signature))
 }
 
 #[cfg(feature = "contract")]
@@ -425,7 +418,8 @@ fn post_execution<S: Storage, A: Api, Q: Querier>(
 ///
 /// * `deps` - reference to Extern containing all the contract's external dependencies
 /// * `msg` - QueryMsg passed in with the query call
-pub fn query<S: Storage, A: Api, Q: Querier>(deps: &Extern<S, A, Q>, msg: QueryMsg) -> QueryResult {
+#[entry_point]
+pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     let response = match msg {
         QueryMsg::GetPublicKeys {} => query_public_keys(deps),
     };
@@ -433,8 +427,8 @@ pub fn query<S: Storage, A: Api, Q: Querier>(deps: &Extern<S, A, Q>, msg: QueryM
 }
 
 // the encryption key will be a base64 string, the verifying key will be a '0x' prefixed hex string
-fn query_public_keys<S: Storage, A: Api, Q: Querier>(deps: &Extern<S, A, Q>) -> QueryResult {
-    let state: State = CONFIG.load(&deps.storage)?;
+fn query_public_keys(deps: Deps) -> StdResult<Binary> {
+    let state: State = CONFIG.load(deps.storage)?;
     to_binary(&PublicKeyResponse {
         encryption_key: state.encryption_keys.pk,
         verification_key: format!(
@@ -485,11 +479,11 @@ pub fn generate_keypair(
 /// * `entropy` - Entropy seed saved in the contract
 pub fn new_entropy(env: &Env, seed: &[u8], entropy: &[u8]) -> [u8; 32] {
     // 16 here represents the lengths in bytes of the block height and time.
-    let entropy_len = 16 + env.message.sender.len() + entropy.len();
+    let entropy_len = 16 + env.contract.address.to_string().len() + entropy.len();
     let mut rng_entropy = Vec::with_capacity(entropy_len);
     rng_entropy.extend_from_slice(&env.block.height.to_be_bytes());
-    rng_entropy.extend_from_slice(&env.block.time.to_be_bytes());
-    rng_entropy.extend_from_slice(env.message.sender.0.as_bytes());
+    rng_entropy.extend_from_slice(&env.block.time.seconds().to_be_bytes());
+    rng_entropy.extend_from_slice(env.contract.address.to_string().as_bytes());
     rng_entropy.extend_from_slice(entropy);
 
     let mut rng = Prng::new(seed, &rng_entropy);
@@ -501,8 +495,8 @@ pub fn new_entropy(env: &Env, seed: &[u8], entropy: &[u8]) -> [u8; 32] {
 mod tests {
     use super::*;
     use crate::types::*;
-    use cosmwasm_std::testing::{mock_dependencies, mock_env};
-    use cosmwasm_std::{from_binary, Binary, Empty, HumanAddr};
+    use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info};
+    use cosmwasm_std::{from_binary, Addr, Binary, Empty};
 
     use chacha20poly1305::aead::{Aead, NewAead};
     use chacha20poly1305::{ChaCha20Poly1305, Key, Nonce};
@@ -512,39 +506,35 @@ mod tests {
     const SOMEBODY: &str = "somebody";
 
     #[track_caller]
-    fn setup_test_case<S: Storage, A: Api, Q: Querier>(
-        deps: &mut Extern<S, A, Q>,
-    ) -> Result<InitResponse<Empty>, StdError> {
+    fn setup_test_case(deps: DepsMut) -> Result<Response<Empty>, StdError> {
         // Instantiate a contract with entropy
-        let admin = Some(HumanAddr(OWNER.to_owned()));
+        let admin = Some(Addr::unchecked(OWNER.to_owned()));
         let entropy = "secret".to_owned();
         let rng_hash = "string".to_string();
-        let rng_addr = HumanAddr("address".to_string());
+        let rng_addr = Addr::unchecked("address".to_string());
 
-        let init_msg = InitMsg {
+        let init_msg = InstantiateMsg {
             admin,
             entropy,
             rng_hash,
             rng_addr,
         };
-        init(deps, mock_env(OWNER, &[]), init_msg)
+        instantiate(deps, mock_env(), mock_info(OWNER, &[]), init_msg)
     }
 
     #[track_caller]
-    fn get_gateway_encryption_key<S: Storage, A: Api, Q: Querier>(deps: &Extern<S, A, Q>) -> Binary {
+    fn get_gateway_encryption_key(deps: Deps) -> Binary {
         let query_msg = QueryMsg::GetPublicKeys {};
-        let query_result = query(&deps, query_msg);
+        let query_result = query(deps, mock_env(), query_msg);
         let query_answer: PublicKeyResponse = from_binary(&query_result.unwrap()).unwrap();
         let gateway_pubkey = query_answer.encryption_key;
         gateway_pubkey
     }
 
     #[track_caller]
-    fn get_gateway_verification_key<S: Storage, A: Api, Q: Querier>(
-        deps: &Extern<S, A, Q>,
-    ) -> String {
+    fn get_gateway_verification_key(deps: Deps) -> String {
         let query_msg = QueryMsg::GetPublicKeys {};
-        let query_result = query(&deps, query_msg);
+        let query_result = query(deps, mock_env(), query_msg);
         let query_answer: PublicKeyResponse = from_binary(&query_result.unwrap()).unwrap();
         let gateway_pubkey = query_answer.verification_key;
         gateway_pubkey
@@ -552,32 +542,33 @@ mod tests {
 
     #[test]
     fn test_init() {
-        let mut deps = mock_dependencies(20, &[]);
+        let mut deps = mock_dependencies();
 
-        let response = setup_test_case(&mut deps).unwrap();
+        let response = setup_test_case(deps.as_mut()).unwrap();
         assert_eq!(1, response.messages.len());
     }
 
     #[test]
     fn test_query() {
-        let mut deps = mock_dependencies(20, &[]);
-        let env = mock_env(SOMEBODY, &[]);
+        let mut deps = mock_dependencies();
+        let env = mock_env();
+        let info = mock_info(OWNER, &[]);
 
         // initialize
-        setup_test_case(&mut deps).unwrap();
+        setup_test_case(deps.as_mut()).unwrap();
 
         // mock scrt-rng message
         let mut rng = Prng::new(&[1, 2, 3], &[4, 5, 6]);
-        let fake_msg = HandleMsg::ReceiveFRn {
+        let fake_msg = ExecuteMsg::ReceiveFRn {
             cb_msg: Binary(vec![]),
             purpose: None,
             rn: rng.rand_bytes(),
         };
-        handle(&mut deps, env, fake_msg).unwrap();
+        execute(deps.as_mut(), env.clone(), info, fake_msg).unwrap();
 
         // query
         let msg = QueryMsg::GetPublicKeys {};
-        let res = query(&deps, msg);
+        let res = query(deps.as_ref(), env.clone(), msg);
         assert!(res.is_ok(), "query failed: {}", res.err().unwrap());
         let value: PublicKeyResponse = from_binary(&res.unwrap()).unwrap();
         assert_eq!(value.encryption_key.as_slice().len(), 33);
@@ -585,23 +576,30 @@ mod tests {
 
     #[test]
     fn test_pre_execution() {
-        let mut deps = mock_dependencies(20, &[]);
-        let env = mock_env(OWNER, &[]);
+        let mut deps = mock_dependencies();
+        let env = mock_env();
+        let info = mock_info(OWNER, &[]);
 
         // initialize
-        setup_test_case(&mut deps).unwrap();
+        setup_test_case(deps.as_mut()).unwrap();
 
         // mock scrt-rng message
         let mut rng = Prng::new(&[1, 2, 3], &[4, 5, 6]);
-        let fake_msg = HandleMsg::ReceiveFRn {
+        let fake_msg = ExecuteMsg::ReceiveFRn {
             cb_msg: Binary(vec![]),
             purpose: None,
             rn: rng.rand_bytes(),
         };
-        handle(&mut deps, env.clone(), fake_msg).unwrap();
+        execute(
+            deps.as_mut(),
+            env.clone(),
+            mock_info("sender", &[]),
+            fake_msg,
+        )
+        .unwrap();
 
         // get gateway public encryption key
-        let gateway_pubkey = get_gateway_encryption_key(&deps);
+        let gateway_pubkey = get_gateway_encryption_key(deps.as_ref());
 
         // mock key pair
         let secp = Secp256k1::new();
@@ -621,10 +619,10 @@ mod tests {
         let data = "{\"fingerprint\": \"0xF9BA143B95FF6D82\", \"location\": \"Menlo Park, CA\"}"
             .to_string();
         let routing_info =
-            HumanAddr::from("secret19zpyd046u4swqpksr3n44cej4j8pg6ahw95y85".to_string());
+            Addr::unchecked("secret19zpyd046u4swqpksr3n44cej4j8pg6ahw95y85".to_string());
         let routing_code_hash =
             "2a2fbe493ef25b536bbe0baa3917b51e5ba092e14bd76abf50a59526e2789be3".to_string();
-        let user_address = HumanAddr::from("some eth address".to_string());
+        let user_address = Addr::unchecked("some eth address".to_string());
         let user_key = Binary(public_key.serialize().to_vec());
         let user_pubkey = user_key.clone(); // TODO make this a unique key
 
@@ -652,7 +650,7 @@ mod tests {
         let payload_signature = secp.sign_ecdsa(&message, &secret_key);
 
         // mock wrong payload (encrypted with a key that does not match the one inside the payload)
-        let wrong_user_address = HumanAddr::from("wrong eth address".to_string());
+        let wrong_user_address = Addr::unchecked("wrong eth address".to_string());
         let wrong_user_key = Binary(wrong_public_key.serialize().to_vec());
 
         let wrong_payload = Payload {
@@ -684,15 +682,15 @@ mod tests {
             payload_signature: Binary(payload_signature.serialize_compact().to_vec()),
             source_network: "ethereum".to_string(),
         };
-        let handle_msg = HandleMsg::Input {
+        let handle_msg = ExecuteMsg::Input {
             inputs: pre_execution_msg,
         };
-        let err = handle(&mut deps, env.clone(), handle_msg).unwrap_err();
+        let err = execute(deps.as_mut(), env.clone(), info.clone(), handle_msg).unwrap_err();
         assert_eq!(err, StdError::generic_err("verification key mismatch"));
 
         // wrong routing info
         let wrong_routing_info =
-            HumanAddr::from("secret13rcx3p8pxf0ttuvxk6czwu73sdccfz4w6e27fd".to_string());
+            Addr::unchecked("secret13rcx3p8pxf0ttuvxk6czwu73sdccfz4w6e27fd".to_string());
         let routing_code_hash =
             "19438bf0cdf555c6472fb092eae52379c499681b36e47a2ef1c70f5269c8f02f".to_string();
 
@@ -711,10 +709,10 @@ mod tests {
             handle: "test".to_string(),
             nonce: Binary(b"unique nonce".to_vec()),
         };
-        let handle_msg = HandleMsg::Input {
+        let handle_msg = ExecuteMsg::Input {
             inputs: pre_execution_msg,
         };
-        let err = handle(&mut deps, env.clone(), handle_msg).unwrap_err();
+        let err = execute(deps.as_mut(), env.clone(), info.clone(), handle_msg).unwrap_err();
         assert_eq!(err, StdError::generic_err("routing info mismatch"));
 
         // test proper input handle
@@ -732,10 +730,10 @@ mod tests {
             payload_signature: Binary(payload_signature.serialize_compact().to_vec()),
             source_network: "ethereum".to_string(),
         };
-        let handle_msg = HandleMsg::Input {
+        let handle_msg = ExecuteMsg::Input {
             inputs: pre_execution_msg,
         };
-        let handle_result = handle(&mut deps, env.clone(), handle_msg);
+        let handle_result = execute(deps.as_mut(), env.clone(), info, handle_msg);
         assert!(
             handle_result.is_ok(),
             "handle failed: {}",
@@ -748,23 +746,23 @@ mod tests {
 
     #[test]
     fn test_post_execution() {
-        let mut deps = mock_dependencies(20, &[]);
-        let env = mock_env(OWNER, &[]);
-
+        let mut deps = mock_dependencies();
+        let env = mock_env();
+        let info = mock_info(SOMEBODY, &[]);
         // initialize
-        setup_test_case(&mut deps).unwrap();
+        setup_test_case(deps.as_mut()).unwrap();
 
         // mock scrt-rng message
         let mut rng = Prng::new(&[1, 2, 3], &[4, 5, 6]);
-        let fake_msg = HandleMsg::ReceiveFRn {
+        let fake_msg = ExecuteMsg::ReceiveFRn {
             cb_msg: Binary(vec![]),
             purpose: None,
             rn: rng.rand_bytes(),
         };
-        handle(&mut deps, env.clone(), fake_msg).unwrap();
+        execute(deps.as_mut(), env.clone(), info.clone(), fake_msg).unwrap();
 
         // get gateway public encryption key
-        let gateway_pubkey = get_gateway_encryption_key(&deps);
+        let gateway_pubkey = get_gateway_encryption_key(deps.as_ref());
 
         // mock key pair
         let secp = Secp256k1::new();
@@ -780,10 +778,10 @@ mod tests {
         let data = "{\"fingerprint\": \"0xF9BA143B95FF6D82\", \"location\": \"Menlo Park, CA\"}"
             .to_string();
         let routing_info =
-            HumanAddr::from("secret19zpyd046u4swqpksr3n44cej4j8pg6ahw95y85".to_string());
+            Addr::unchecked("secret19zpyd046u4swqpksr3n44cej4j8pg6ahw95y85".to_string());
         let routing_code_hash =
             "2a2fbe493ef25b536bbe0baa3917b51e5ba092e14bd76abf50a59526e2789be3".to_string();
-        let user_address = HumanAddr::from("some eth address".to_string());
+        let user_address = Addr::unchecked("some eth address".to_string());
         let user_key = Binary(public_key.serialize().to_vec());
         let user_pubkey = user_key.clone(); // TODO make this a unique key
 
@@ -825,10 +823,10 @@ mod tests {
             handle: "test".to_string(),
             nonce: Binary(b"unique nonce".to_vec()),
         };
-        let handle_msg = HandleMsg::Input {
+        let handle_msg = ExecuteMsg::Input {
             inputs: pre_execution_msg.clone(),
         };
-        handle(&mut deps, env.clone(), handle_msg).unwrap();
+        execute(deps.as_mut(), env.clone(), info.clone(), handle_msg).unwrap();
 
         // test incorrect input_hash
         let wrong_post_execution_msg = PostExecutionMsg {
@@ -836,10 +834,10 @@ mod tests {
             task_id: 1u64,
             input_hash: Binary(sha_256("wrong data".as_bytes()).to_vec()),
         };
-        let handle_msg = HandleMsg::Output {
+        let handle_msg = ExecuteMsg::Output {
             outputs: wrong_post_execution_msg,
         };
-        let err = handle(&mut deps, env.clone(), handle_msg).unwrap_err();
+        let err = execute(deps.as_mut(), env.clone(), info.clone(), handle_msg).unwrap_err();
         assert_eq!(
             err,
             StdError::generic_err("input hash does not match task id")
@@ -854,18 +852,18 @@ mod tests {
             ),
         };
 
-        let handle_msg = HandleMsg::Output {
+        let handle_msg = ExecuteMsg::Output {
             outputs: post_execution_msg,
         };
-        let handle_result = handle(&mut deps, env.clone(), handle_msg);
+        let handle_result = execute(deps.as_mut(), env.clone(), info.clone(), handle_msg);
         assert!(
             handle_result.is_ok(),
             "handle failed: {}",
             handle_result.err().unwrap()
         );
-        let logs = handle_result.unwrap().log;
+        let logs = handle_result.unwrap().attributes;
 
-        let gateway_pubkey = get_gateway_verification_key(&deps);
+        let gateway_pubkey = get_gateway_verification_key(deps.as_ref());
         println!("Gateway public key: {:?}", gateway_pubkey);
 
         for log in logs.clone() {
