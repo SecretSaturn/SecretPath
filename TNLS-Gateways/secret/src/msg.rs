@@ -12,25 +12,13 @@ use secp256k1::{ecdh::SharedSecret, PublicKey, SecretKey};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
-    /// Entropy used for Prng seed.
-    pub entropy: String,
     /// Optional admin address, env.message.sender if missing.
-    pub admin: Option<Addr>,
-    pub rng_hash: String,
-    pub rng_addr: Addr,
+    pub admin: Option<Addr>
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum ExecuteMsg {
-    /// Triggers the scrt-rng contract to send back previously requested randomness.
-    KeyGen { rng_hash: String, rng_addr: Addr },
-    /// Receives the callback message from scrt-rng. Actual key generation happens at this step.
-    ReceiveFRn {
-        cb_msg: Binary,
-        purpose: Option<String>,
-        rn: [u8; 32],
-    },
     /// Process an interchain message through the private gateway.
     Input { inputs: PreExecutionMsg },
     /// Receive results from private contract and broadcast logs for Relayer.
@@ -135,11 +123,6 @@ pub enum SecretMsg {
         receiver_addr: Option<Addr>,
         receiver_code_hash: String,
     },
-    FulfillRn {
-        creator_addr: Addr,
-        purpose: Option<String>,
-        receiver_code_hash: String,
-    },
     Input {
         message: PrivContractHandleMsg,
     },
@@ -197,27 +180,5 @@ pub struct BroadcastMsg {
 }
 
 impl HandleCallback for BroadcastMsg {
-    const BLOCK_SIZE: usize = 256;
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum ScrtRngMsg {
-    CreateRn {
-        cb_msg: Binary,
-        entropy: String,
-        max_blk_delay: Option<u64>,
-        purpose: Option<String>,
-        receiver_addr: Option<Addr>,
-        receiver_hash: String,
-    },
-    FulfullRn {
-        creator_addr: Addr,
-        purpose: Option<String>,
-        receiver_code_hash: String,
-    },
-}
-
-impl HandleCallback for ScrtRngMsg {
     const BLOCK_SIZE: usize = 256;
 }

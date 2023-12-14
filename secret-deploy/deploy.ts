@@ -4,7 +4,7 @@ import { computeAddress } from "ethers/lib/utils";
 import 'dotenv/config'
 
 var mnemonic = process.env.MNEMONIC!;
-var endpoint = process.env.GRPC_WEB_URL!;
+var endpoint = process.env.LCD_WEB_URL!;
 var chainId = process.env.CHAIN_ID!;
 
 type PublicKeyResponse = { encryption_key: string, verification_key: string };
@@ -13,9 +13,9 @@ type PublicKeyResponse = { encryption_key: string, verification_key: string };
 const initializeClient = async (endpoint: string, chainId: string) => {
   let wallet = new Wallet(mnemonic);
   const accAddress = wallet.address;
-  const client = await SecretNetworkClient.create({
+  const client = new SecretNetworkClient({
     // Create a client to interact with the network
-    grpcWebUrl: endpoint,
+    url: endpoint,
     chainId: chainId,
     wallet: wallet,
     walletAddress: accAddress,
@@ -28,15 +28,13 @@ const initializeClient = async (endpoint: string, chainId: string) => {
 const initializeGateway = async (
   client: SecretNetworkClient,
   contractPath: string,
-  scrtRngHash: string,
-  scrtRngAddress: string,
 ) => {
   const wasmCode = fs.readFileSync(contractPath);
   console.log("\nUploading gateway contract");
 
   const uploadReceipt = await client.tx.compute.storeCode(
     {
-      wasmByteCode: wasmCode,
+      wasm_byte_code: wasmCode,
       sender: client.address,
       source: "",
       builder: "",
@@ -62,7 +60,7 @@ const initializeGateway = async (
   console.log(`Upload used \x1b[33m${uploadReceipt.gasUsed}\x1b[0m gas\n`);
 
   const codeId = Number(codeIdKv!.value);
-  const contractCodeHash = await client.query.compute.codeHash(codeId);
+  const {code_hash: contractCodeHash} = await client.query.compute.codeHashByCodeId({code_id: codeId.toString()});
   
   console.log("Gateway contract code id: ", codeId);
   console.log(`Gateway contract code hash: ${contractCodeHash}`);
@@ -70,13 +68,10 @@ const initializeGateway = async (
   const contract = await client.tx.compute.instantiateContract(
     {
       sender: client.address,
-      codeId,
-      initMsg: { 
-        entropy: "TNLS rocks",
-        rng_hash: scrtRngHash,
-        rng_addr: scrtRngAddress,
+      code_id: codeId,
+      init_msg: { 
       },
-      codeHash: contractCodeHash,
+      code_hash: contractCodeHash,
       label: "test_secret_gateway" + Math.ceil(Math.random() * 10000), // The label should be unique for every contract, add random string in order to maintain uniqueness
     },
     {
@@ -100,7 +95,7 @@ const initializeGateway = async (
   console.log(`Gateway contract address: ${contractAddress}\n`);
   console.log(`Init used \x1b[33m${contract.gasUsed}\x1b[0m gas\n`);
 
-  var gatewayInfo: [string, string] = [contractCodeHash, contractAddress];
+  const gatewayInfo: [string, string] = [contractCodeHash as any, contractAddress];
   return gatewayInfo;
 };
 
@@ -116,7 +111,7 @@ const initializeContract = async (
 
   const uploadReceipt = await client.tx.compute.storeCode(
     {
-      wasmByteCode: wasmCode,
+      wasm_byte_code: wasmCode,
       sender: client.address,
       source: "",
       builder: "",
@@ -142,7 +137,7 @@ const initializeContract = async (
   console.log(`Upload used \x1b[33m${uploadReceipt.gasUsed}\x1b[0m gas\n`);
 
   const codeId = Number(codeIdKv!.value);
-  const contractCodeHash = await client.query.compute.codeHash(codeId);
+  const {code_hash:contractCodeHash} = await client.query.compute.codeHashByCodeId({code_id:codeId.toString()});
   
   console.log("Sample contract code id: ", codeId);
   console.log(`Sample contract code hash: ${contractCodeHash}`);
@@ -150,13 +145,13 @@ const initializeContract = async (
   const contract = await client.tx.compute.instantiateContract(
     {
       sender: client.address,
-      codeId,
-      initMsg: {
+      code_id: codeId,
+      init_msg: {
         gateway_hash: gatewayHash,
         gateway_address: gatewayAddress,
         gateway_key: gatewayKey,
       },
-      codeHash: contractCodeHash,
+      code_hash: contractCodeHash,
       label: "test_sample_contract" + Math.ceil(Math.random() * 10000),
     },
     {
@@ -180,11 +175,11 @@ const initializeContract = async (
   console.log(`Sample contract address: ${contractAddress}\n`);
   console.log(`Init used \x1b[33m${contract.gasUsed}\x1b[0m gas`);
 
-  var contractInfo: [string, string] = [contractCodeHash, contractAddress];
+  var contractInfo: [string, string] = [contractCodeHash as any, contractAddress];
   return contractInfo;
 };
 
-async function getScrtBalance(userCli: SecretNetworkClient): Promise<string> {
+async function getScrtBalance(userCli: SecretNetworkClient) {
   let balanceResponse = await userCli.query.bank.balance({
     address: userCli.address,
     denom: "uscrt",
@@ -197,16 +192,10 @@ async function initializeAndUploadContracts() {
   const client = await initializeClient(endpoint, chainId);
   let balance = await getScrtBalance(client);
   console.log(`Current SCRT Balance: ${balance}`)
-  const scrtRngHash = "15D8766782EE5434510FBA567E8376A7E39155B16D1CA2308FD2D8BB28AFB05C";
-  const scrtRngAddress = "secret14yqa7fux3308kknsmdft8azmkje5krzwz570q9";
   const [gatewayHash, gatewayAddress] = await initializeGateway(
     client,
     "../TNLS-Gateways/secret/contract.wasm.gz",
-    scrtRngHash,
-    scrtRngAddress,
   );
-  console.log(`Retrieving random number...`);
-  await rngTx(client, gatewayHash, gatewayAddress, scrtRngHash, scrtRngAddress);
   console.log(`Sending query: {"get_public_keys": {} }`);
   const gatewayKeys = await queryPubKeys(client, gatewayHash, gatewayAddress);
   const gatewayPublicKey = Buffer.from(gatewayKeys.verification_key.substring(2), 'hex').toString('base64');
@@ -218,49 +207,15 @@ async function initializeAndUploadContracts() {
     gatewayPublicKey,
   );
 
-  var clientInfo: [SecretNetworkClient, string, string, string, string, string, string] = [
+  var clientInfo: [SecretNetworkClient, string, string, string, string] = [
     client,
     gatewayHash,
     gatewayAddress,
     contractHash,
     contractAddress,
-    scrtRngHash,
-    scrtRngAddress,
   ];
   return clientInfo;
 }
-
-async function rngTx(
-  client: SecretNetworkClient,
-  gatewayHash: string,
-  gatewayAddress: string,
-  scrtRngHash: string,
-  scrtRngAddress: string,
-) {
-  const tx = await client.tx.compute.executeContract(
-    {
-      sender: client.address,
-      contractAddress: gatewayAddress,
-      codeHash: gatewayHash,
-      msg: {
-        key_gen: { 
-          rng_hash: scrtRngHash,
-          rng_addr: scrtRngAddress,
-        },
-      },
-      sentFunds: [],
-    },
-    {
-      gasLimit: 5000000,
-    }
-  );
-  if (tx.code !== 0) {
-    throw new Error(
-      `Failed with the following error:\n ${tx.rawLog}`
-    );
-  };
-  console.log(`"key_gen" used \x1b[33m${tx.gasUsed}\x1b[0m gas\n`);
-};
 
 async function queryPubKeys(
   client: SecretNetworkClient,
@@ -268,8 +223,8 @@ async function queryPubKeys(
   gatewayAddress: string,
 ): Promise<PublicKeyResponse> {
   const response = (await client.query.compute.queryContract({
-    contractAddress: gatewayAddress,
-    codeHash: gatewayHash,
+    contract_address: gatewayAddress,
+    code_hash: gatewayHash,
     query: { get_public_keys: {} },
   })) as PublicKeyResponse;
   console.log(`\x1b[32mEncryption key: ${response.encryption_key}\x1b[0m`);
@@ -281,6 +236,7 @@ async function queryPubKeys(
 };
 
 (async () => {
-  const [client, gatewayHash, gatewayAddress, contractHash, contractAddress, scrtRngHash, scrtRngAddress] =
+  const [client, gatewayHash, gatewayAddress, contractHash, contractAddress] =
     await initializeAndUploadContracts();
+  console.log(client, gatewayHash, gatewayAddress, contractHash, contractAddress)
 })();

@@ -1,10 +1,10 @@
 use cosmwasm_std::{
-    entry_point, to_binary, Addr, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdError,
+    entry_point, to_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdError,
     StdResult,
 };
 use secret_toolkit::{
     crypto::secp256k1::{PrivateKey, PublicKey},
-    crypto::{sha_256, Prng},
+    crypto::{sha_256, ContractPrng},
     utils::{pad_handle_result, pad_query_result, HandleCallback},
 };
 
@@ -13,7 +13,7 @@ use crate::{
         ExecuteMsg, InputResponse, InstantiateMsg, PostExecutionMsg, PreExecutionMsg,
         PublicKeyResponse, QueryMsg, ResponseStatus::Success, SecretMsg,
     },
-    state::{KeyPair, State, TaskInfo, CONFIG, CREATOR, MY_ADDRESS, PRNG_SEED, TASK_MAP},
+    state::{KeyPair, State, TaskInfo, CONFIG, CREATOR, MY_ADDRESS, TASK_MAP},
     PrivContractHandleMsg,
 };
 
@@ -68,18 +68,9 @@ pub fn instantiate(
 
     CONFIG.save(deps.storage, &state)?;
 
-    // create a message to request randomness from scrt-rng oracle
-    let rng_msg = SecretMsg::CreateRn {
-        cb_msg: Binary(vec![]),
-        entropy: msg.entropy,
-        max_blk_delay: None,
-        purpose: Some("secret gateway entropy".to_string()),
-        receiver_addr: Some(env.contract.address),
-        receiver_code_hash: env.contract.code_hash,
-    }
-    .to_cosmos_msg(msg.rng_hash, msg.rng_addr.into_string(), None)?;
+    let _result = create_gateway_keys(deps, env);
 
-    Ok(Response::new().add_message(rng_msg))
+    Ok(Response::new())
 }
 
 #[cfg(feature = "contract")]
@@ -99,14 +90,6 @@ pub fn execute(
     msg: ExecuteMsg,
 ) -> StdResult<Response> {
     match msg {
-        ExecuteMsg::KeyGen { rng_hash, rng_addr } => {
-            pad_handle_result(try_fulfill_rn(deps, env, rng_hash, rng_addr), BLOCK_SIZE)
-        }
-        ExecuteMsg::ReceiveFRn {
-            cb_msg: _,
-            purpose: _,
-            rn,
-        } => pad_handle_result(create_gateway_keys(deps, env, rn), BLOCK_SIZE),
         ExecuteMsg::Input { inputs } => {
             pad_handle_result(pre_execution(deps, env, inputs), BLOCK_SIZE)
         }
@@ -114,33 +97,7 @@ pub fn execute(
     }
 }
 
-fn try_fulfill_rn(
-    deps: DepsMut,
-    env: Env,
-    rng_hash: String,
-    rng_addr: Addr,
-) -> StdResult<Response> {
-    // load config
-    let state = CONFIG.load(deps.storage)?;
-
-    // check if the keys have already been created
-    if state.keyed {
-        return Err(StdError::generic_err(
-            "keys have already been created".to_string(),
-        ));
-    }
-
-    let fulfill_rn_msg = SecretMsg::FulfillRn {
-        creator_addr: env.contract.address,
-        purpose: Some("secret gateway entropy".to_string()),
-        receiver_code_hash: env.contract.code_hash,
-    }
-    .to_cosmos_msg(rng_hash, rng_addr.into_string(), None)?;
-
-    Ok(Response::new().add_message(fulfill_rn_msg))
-}
-
-fn create_gateway_keys(deps: DepsMut, env: Env, prng_seed: [u8; 32]) -> StdResult<Response> {
+fn create_gateway_keys(deps: DepsMut, env: Env) -> StdResult<Response> {
     // load config
     let state = CONFIG.load(deps.storage)?;
 
@@ -152,14 +109,14 @@ fn create_gateway_keys(deps: DepsMut, env: Env, prng_seed: [u8; 32]) -> StdResul
     }
 
     // Generate secp256k1 key pair for encryption
-    let (secret, public, new_prng_seed) = generate_keypair(&env, prng_seed.to_vec(), None)?;
+    let (secret, public) = generate_keypair(&env)?;
     let encryption_keys = KeyPair {
         sk: Binary(secret.serialize().to_vec()), // private key is 32 bytes,
         pk: Binary(public.serialize_compressed().to_vec()), // public key is 33 bytes
     };
 
     // Generate secp256k1 key pair for signing messages
-    let (secret, public, new_prng_seed) = generate_keypair(&env, new_prng_seed, None)?;
+    let (secret, public) = generate_keypair(&env)?;
     let signing_keys = KeyPair {
         sk: Binary(secret.serialize().to_vec()), // private key is 32 bytes,
         pk: Binary(public.serialize().to_vec()), // public key is 65 bytes
@@ -171,8 +128,6 @@ fn create_gateway_keys(deps: DepsMut, env: Env, prng_seed: [u8; 32]) -> StdResul
         state.signing_keys = signing_keys.clone();
         Ok(state)
     })?;
-
-    PRNG_SEED.save(deps.storage, &new_prng_seed)?; // is there any need to save this?
 
     let encryption_pubkey = encryption_keys.pk.to_base64();
     let signing_pubkey = signing_keys.pk.to_base64();
@@ -442,54 +397,23 @@ fn query_public_keys(deps: Deps) -> StdResult<Binary> {
 
 /// Returns (PublicKey, StaticSecret, Vec<u8>)
 ///
-/// generates a public and privite key pair and generates a new PRNG_SEED with or without user entropy.
+/// generates a public and private key pair
 ///
 /// # Arguments
 ///
 /// * `env` - contract's environment to be used for randomization
-/// * `prng_seed` - required prng seed for randomization
-/// * `user_entropy` - optional random string input by the user
 pub fn generate_keypair(
     env: &Env,
-    prng_seed: Vec<u8>,
-    user_entropy: Option<String>,
-) -> Result<(PrivateKey, PublicKey, Vec<u8>), StdError> {
-    // generate new rng seed
-    let new_prng_bytes: [u8; 32] = match user_entropy {
-        Some(s) => new_entropy(env, prng_seed.as_ref(), s.as_bytes()),
-        None => new_entropy(env, prng_seed.as_ref(), prng_seed.as_ref()),
-    };
+) -> Result<(PrivateKey, PublicKey), StdError> {
 
     // generate and return key pair
-    let mut rng = Prng::new(prng_seed.as_ref(), new_prng_bytes.as_ref());
+    let mut rng = ContractPrng::from_env(env);
     let sk = PrivateKey::parse(&rng.rand_bytes())?;
     let pk = sk.pubkey();
 
-    Ok((sk, pk, new_prng_bytes.to_vec()))
+    Ok((sk, pk))
 }
 
-/// Returns [u8;32]
-///
-/// generates new entropy from block data, does not save it to the contract.
-///
-/// # Arguments
-///
-/// * `env` - Env of contract's environment
-/// * `seed` - (user generated) seed for rng
-/// * `entropy` - Entropy seed saved in the contract
-pub fn new_entropy(env: &Env, seed: &[u8], entropy: &[u8]) -> [u8; 32] {
-    // 16 here represents the lengths in bytes of the block height and time.
-    let entropy_len = 16 + env.contract.address.to_string().len() + entropy.len();
-    let mut rng_entropy = Vec::with_capacity(entropy_len);
-    rng_entropy.extend_from_slice(&env.block.height.to_be_bytes());
-    rng_entropy.extend_from_slice(&env.block.time.seconds().to_be_bytes());
-    rng_entropy.extend_from_slice(env.contract.address.to_string().as_bytes());
-    rng_entropy.extend_from_slice(entropy);
-
-    let mut rng = Prng::new(seed, &rng_entropy);
-
-    rng.rand_bytes()
-}
 
 #[cfg(test)]
 mod tests {
@@ -509,15 +433,9 @@ mod tests {
     fn setup_test_case(deps: DepsMut) -> Result<Response<Empty>, StdError> {
         // Instantiate a contract with entropy
         let admin = Some(Addr::unchecked(OWNER.to_owned()));
-        let entropy = "secret".to_owned();
-        let rng_hash = "string".to_string();
-        let rng_addr = Addr::unchecked("address".to_string());
 
         let init_msg = InstantiateMsg {
             admin,
-            entropy,
-            rng_hash,
-            rng_addr,
         };
         instantiate(deps, mock_env(), mock_info(OWNER, &[]), init_msg)
     }
@@ -557,15 +475,6 @@ mod tests {
         // initialize
         setup_test_case(deps.as_mut()).unwrap();
 
-        // mock scrt-rng message
-        let mut rng = Prng::new(&[1, 2, 3], &[4, 5, 6]);
-        let fake_msg = ExecuteMsg::ReceiveFRn {
-            cb_msg: Binary(vec![]),
-            purpose: None,
-            rn: rng.rand_bytes(),
-        };
-        execute(deps.as_mut(), env.clone(), info, fake_msg).unwrap();
-
         // query
         let msg = QueryMsg::GetPublicKeys {};
         let res = query(deps.as_ref(), env.clone(), msg);
@@ -582,21 +491,6 @@ mod tests {
 
         // initialize
         setup_test_case(deps.as_mut()).unwrap();
-
-        // mock scrt-rng message
-        let mut rng = Prng::new(&[1, 2, 3], &[4, 5, 6]);
-        let fake_msg = ExecuteMsg::ReceiveFRn {
-            cb_msg: Binary(vec![]),
-            purpose: None,
-            rn: rng.rand_bytes(),
-        };
-        execute(
-            deps.as_mut(),
-            env.clone(),
-            mock_info("sender", &[]),
-            fake_msg,
-        )
-        .unwrap();
 
         // get gateway public encryption key
         let gateway_pubkey = get_gateway_encryption_key(deps.as_ref());
@@ -751,15 +645,6 @@ mod tests {
         let info = mock_info(SOMEBODY, &[]);
         // initialize
         setup_test_case(deps.as_mut()).unwrap();
-
-        // mock scrt-rng message
-        let mut rng = Prng::new(&[1, 2, 3], &[4, 5, 6]);
-        let fake_msg = ExecuteMsg::ReceiveFRn {
-            cb_msg: Binary(vec![]),
-            purpose: None,
-            rn: rng.rand_bytes(),
-        };
-        execute(deps.as_mut(), env.clone(), info.clone(), fake_msg).unwrap();
 
         // get gateway public encryption key
         let gateway_pubkey = get_gateway_encryption_key(deps.as_ref());

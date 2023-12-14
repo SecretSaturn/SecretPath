@@ -5,6 +5,7 @@ TNLS-Relayers/infura_api_endpoint.txt
 */.*
 */venv
 .DS_Store
+yarn.lock
 
 # Foundry stuff
 # --------------------------
@@ -18,3 +19,5 @@ out/
 /broadcast/*/31337
 .vscode
 target/
+TNLS-Gateways/secret/contract.wasm
+TNLS-Gateways/secret/contract.wasm.gz
