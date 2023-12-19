@@ -201,7 +201,7 @@ async function initializeAndUploadContracts() {
   const gatewayPublicKey = Buffer.from(gatewayKeys.verification_key.substring(2), 'hex').toString('base64');
   const [contractHash, contractAddress] = await initializeContract(
     client,
-    "../TNLS-Samples/credit-score/contract.wasm.gz",
+    "../TNLS-Samples/RNG/contract.wasm.gz",
     gatewayHash,
     gatewayAddress,
     gatewayPublicKey,
@@ -238,5 +238,4 @@ async function queryPubKeys(
 (async () => {
   const [client, gatewayHash, gatewayAddress, contractHash, contractAddress] =
     await initializeAndUploadContracts();
-  console.log(client, gatewayHash, gatewayAddress, contractHash, contractAddress)
 })();

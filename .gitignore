@@ -4,6 +4,7 @@ TNLS-Relayers/infura_api_endpoint.txt
 */*/*/infura_api_endpoint.txt
 */.*
 */venv
+*/__pycache__
 .DS_Store
 yarn.lock
 
@@ -17,7 +18,10 @@ out/
 !/broadcast
 /broadcast/*
 /broadcast/*/31337
+public-gateway/broadcast/*
 .vscode
 target/
 TNLS-Gateways/secret/contract.wasm
 TNLS-Gateways/secret/contract.wasm.gz
+.env
+__pycache__/

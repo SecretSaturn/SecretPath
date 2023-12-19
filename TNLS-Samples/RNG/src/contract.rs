@@ -1,12 +1,12 @@
 use cosmwasm_std::{
-    entry_point, to_binary, Binary, Decimal, Deps, DepsMut, Env, MessageInfo, Response, StdError,
-    StdResult, Uint128,
+    entry_point, to_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdError,
+    StdResult,
 };
 use secret_toolkit::utils::{pad_handle_result, pad_query_result, HandleCallback};
 
 use crate::{
-    msg::{ExecuteMsg, GatewayMsg, InstantiateMsg, QueryMsg, QueryResponse, ScoreResponse},
-    state::{Input, State, CONFIG},
+    msg::{ExecuteMsg, GatewayMsg, InstantiateMsg, QueryMsg, QueryResponse},
+    state::{State, CONFIG},
 };
 use tnls::msg::{PostExecutionMsg, PrivContractHandleMsg};
 
@@ -37,6 +37,7 @@ pub fn instantiate(
 pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> StdResult<Response> {
     let response = match msg {
         ExecuteMsg::Input { message } => try_handle(deps, env, info, message),
+        ExecuteMsg::ReturnRandom {} => return_random(deps, env, info),
     };
     pad_handle_result(response, BLOCK_SIZE)
 }
@@ -69,26 +70,36 @@ fn try_handle(
     // determine which function to call based on the included handle
     let handle = msg.handle.as_str();
     match handle {
-        "request_score" => {
-            try_request_score(deps, env, msg.input_values, msg.task_id, msg.input_hash)
+        "request_random" => {
+            try_random(deps, env, msg.input_values, msg.task_id, msg.input_hash)
         }
         _ => Err(StdError::generic_err("invalid handle".to_string())),
     }
 }
 
-fn try_request_score(
+fn return_random(
+    _deps: DepsMut,
+    env: Env,
+    _info: MessageInfo,
+) -> StdResult<Response> {
+
+    let result = serde_json_wasm::to_string(&env.block.random)
+    .map_err(|err| StdError::generic_err(err.to_string()))?;
+
+    Ok(Response::new().add_attribute("random", result))
+}
+
+fn try_random(
     deps: DepsMut,
-    _env: Env,
-    input_values: String,
+    env: Env,
+    _input_values: String,
     task_id: u64,
     input_hash: Binary,
 ) -> StdResult<Response> {
     let config = CONFIG.load(deps.storage)?;
 
-    let input: Input = serde_json_wasm::from_str(&input_values)
-        .map_err(|err| StdError::generic_err(err.to_string()))?;
-
-    let result = try_calculate_score(input)?;
+    let result = serde_json_wasm::to_string(&env.block.random)
+    .map_err(|err| StdError::generic_err(err.to_string()))?;
 
     let callback_msg = GatewayMsg::Output {
         outputs: PostExecutionMsg {
@@ -105,46 +116,7 @@ fn try_request_score(
 
     Ok(Response::new()
         .add_message(callback_msg)
-        .add_attribute("status", "private computation complete"))
-}
-
-pub fn try_calculate_score(input: Input) -> Result<String, StdError> {
-    let assets = Uint128::from(input.onchain_assets + input.offchain_assets);
-    let liabilities = Uint128::from(input.liabilities);
-    let missed_payments = Uint128::from(input.missed_payments);
-    let income = Uint128::from(input.income);
-
-    let ratio = (Decimal::from_ratio(
-        assets + income,
-        liabilities + missed_payments + Uint128::from(1u8),
-    ) * Uint128::from(1u8))
-    .u128();
-    let score: u32;
-
-    if ratio >= 9 {
-        score = 850
-    } else if (6..9).contains(&ratio) {
-        score = 750
-    } else if (4..6).contains(&ratio) {
-        score = 650
-    } else if (3..4).contains(&ratio) {
-        score = 550
-    } else if (2..3).contains(&ratio) {
-        score = 450
-    } else if (1..2).contains(&ratio) {
-        score = 350
-    } else {
-        score = 250
-    }
-
-    let name = input.name.unwrap_or(input.address);
-
-    let resp = ScoreResponse {
-        name,
-        result: score.to_string(),
-    };
-
-    Ok(serde_json_wasm::to_string(&resp).unwrap())
+        .add_attribute("status", "provided RNG complete"))
 }
 
 fn try_query(_deps: Deps) -> StdResult<Binary> {

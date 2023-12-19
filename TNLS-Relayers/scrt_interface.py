@@ -5,8 +5,10 @@ from threading import Lock
 from typing import List
 
 from secret_sdk.client.lcd import LCDClient
-from secret_sdk.core.auth.data import TxLog
+from secret_sdk.client.lcd.api.tx import CreateTxOptions
+from secret_sdk.core import TxLog
 from secret_sdk.key.raw import RawKey
+from secret_sdk.protobuf.cosmos.tx.v1beta1 import BroadcastMode
 
 from base_interface import BaseChainInterface, BaseContractInterface, Task
 
@@ -19,7 +21,7 @@ class SCRTInterface(BaseChainInterface):
     """
 
     def __init__(self, private_key="c2cdf0a8b0a83b35ace53f097b5e6e6a0a1f2d40535eff1cf434f52a43d59d8f",
-                 address=None, api_url="https://api.pulsar.scrttestnet.com", chain_id="pulsar-2", provider=None,
+                 address=None, api_url="https://api.pulsar.scrttestnet.com", chain_id="pulsar-3", provider=None,
                  **kwargs):
         if isinstance(private_key, str):
             self.private_key = RawKey.from_hex(private_key)
@@ -44,8 +46,7 @@ class SCRTInterface(BaseChainInterface):
                 the receipt of the broadcast transaction
 
         """
-        signed_tx = self.wallet.key.sign_tx(tx)
-        return self.provider.tx.broadcast(signed_tx)
+        return self.provider.tx.broadcast_adapter(tx, mode=BroadcastMode.BROADCAST_MODE_BLOCK)
 
     def get_last_block(self):
         """
@@ -169,9 +170,17 @@ class SCRTContract(BaseContractInterface):
             sender_address=self.interface.address,
             contract_address=self.address,
             handle_msg=function_schema,
-
         )
-        txn = self.interface.wallet.create_tx(msgs=[txn_msgs], gas=500000, gas_prices='1uscrt', gas_adjustment=1)
+        print(function_schema)
+        tx_options = CreateTxOptions(
+            msgs=[txn_msgs],
+            gas=500000,
+            gas_prices='1uscrt',
+            gas_adjustment=1,
+            sequence=None,
+            account_number=None
+        )
+        txn = self.interface.wallet.create_and_sign_tx(options=tx_options)
         return txn
 
     def call_function(self, function_name, *args):

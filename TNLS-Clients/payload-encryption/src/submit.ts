@@ -16,30 +16,18 @@ export async function setupSubmit(element: HTMLButtonElement) {
     const userPublicKeyBytes = arrayify(userPublicKey)
     //
 
-    const gatewayPublicKey = "Ax7TzSrouCQq8bhXNuTcSsJsyRtXzM5sBBMe41unN8NW"; // TODO get this key
+    const gatewayPublicKey = "BMbTfKh++E0vBd+jXejZvMc8hZNGEzZ8JjMgr8Wbc76zEHqQbcgV1+6z1G8GsmwaF18L7CCGbx6phF9Sbni8WxQ="; // TODO get this key
     const gatewayPublicKeyBuffer = Buffer.from(gatewayPublicKey, "base64");
     const gatewayPublicKeyBytes = arrayify(gatewayPublicKeyBuffer);
 
     element.addEventListener("click", async function(event: Event){
         event.preventDefault()
 
-        const offchain_assets = document.querySelector<HTMLFormElement>('#input1')?.value;
-        const onchain_assets = document.querySelector<HTMLFormElement>('#input2')?.value;
-        const liabilities = document.querySelector<HTMLFormElement>('#input3')?.value;
-        const missed_payments = document.querySelector<HTMLFormElement>('#input4')?.value;
-        const income = document.querySelector<HTMLFormElement>('#input5')?.value;
-
         const data = JSON.stringify({
-        address: myAddress,
-        offchain_assets: Number(offchain_assets),
-        onchain_assets: Number(onchain_assets),
-        liabilities: Number(liabilities),
-        missed_payments: Number(missed_payments),
-        income: Number(income)
         })
 
-        const routing_info = "secret1um0x3jtzswtq6779vl0kfl562zxd98gl5xvtyr"
-        const routing_code_hash = "a8505057b5e2b3cd9dfc275bddd085a894f0c055f2f2c2af64cccdd7a671c7c3"
+        const routing_info = "secret17cejw0fm5nk9mqkrkxptjnn8g9ujx6sv0q5p6e"
+        const routing_code_hash = "12f9880e67d423742dd1009ae1764d1f113510baf427bdfae3ea2a5607a7c63a"
         const user_address = myAddress
         const user_key = Buffer.from(userPublicKeyBytes)
 
@@ -52,17 +40,19 @@ export async function setupSubmit(element: HTMLButtonElement) {
             user_key: user_key.toString('base64'),
         })
         
-        const plaintext = Buffer.from(JSON.stringify(thePayload));
+        const plaintext = Buffer.from(thePayload);
         const nonce = secureRandom(12, { type: "Uint8Array" });
-        const handle = "request_score"
+        const handle = "request_random"
 
-        const ciphertext = Buffer.from(
-        encrypt_payload(
-            gatewayPublicKeyBytes,
-            userPrivateKeyBytes,
-            plaintext,
-            nonce
-        ));
+        // const ciphertext = Buffer.from(
+        // encrypt_payload(
+        //     gatewayPublicKeyBytes,
+        //     userPrivateKeyBytes,
+        //     plaintext,
+        //     nonce
+        // ));
+
+        const ciphertext = plaintext
     
         // const ciphertextHash = keccak256(ciphertext)
         // const payloadHash = '0x' + sha3.keccak256("\x19Ethereum Signed Message:\n" + 32 + ciphertextHash.substring(2))
@@ -126,7 +116,7 @@ export async function setupSubmit(element: HTMLButtonElement) {
 
         const user_pubkey = recoverPublicKey(payloadHash, payloadSignature)
         console.log(`Recovered public key: ${user_pubkey}`)
-        console.log(`Verify this matches the user address: ${computeAddress(userPublicKey)}`)
+        console.log(`Verify this matches the user address: ${computeAddress(user_pubkey)}`)
 
         document.querySelector<HTMLDivElement>('#preview')!.innerHTML = `
         <h2>Raw Payload</h2>
@@ -164,8 +154,8 @@ export async function setupSubmit(element: HTMLButtonElement) {
             _info: ${JSON.stringify(_info)}`)
                 
         // create the abi interface and encode the function data
-        const publicClientAddress = '0xCfa680267C8a594789dB69e11b4974f1D1328669'
-        const abi = [{"inputs":[{"internalType":"address","name":"_gatewayAddress","type":"address"}],"stateMutability":"nonpayable","type":"constructor"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"uint256","name":"taskId","type":"uint256"},{"indexed":false,"internalType":"bytes","name":"result","type":"bytes"}],"name":"ComputedResult","type":"event"},{"inputs":[],"name":"GatewayAddress","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"_taskId","type":"uint256"},{"internalType":"bytes","name":"_result","type":"bytes"}],"name":"callback","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"_userAddress","type":"address"},{"internalType":"string","name":"_sourceNetwork","type":"string"},{"internalType":"string","name":"_routingInfo","type":"string"},{"internalType":"bytes32","name":"_payloadHash","type":"bytes32"},{"components":[{"internalType":"bytes","name":"user_key","type":"bytes"},{"internalType":"string","name":"routing_code_hash","type":"string"},{"internalType":"string","name":"handle","type":"string"},{"internalType":"bytes12","name":"nonce","type":"bytes12"},{"internalType":"bytes","name":"payload","type":"bytes"},{"internalType":"bytes","name":"payload_signature","type":"bytes"}],"internalType":"struct Util.ExecutionInfo","name":"_info","type":"tuple"}],"name":"send","outputs":[],"stateMutability":"nonpayable","type":"function"}]
+        const publicClientAddress = '0xcda7Cdaa9d53c04fb6135423f17FBDe5390d49bA'
+        const abi = [{"inputs":[{"internalType":"address","name":"_gatewayAddress","type":"address"}],"stateMutability":"nonpayable","type":"constructor"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"uint256","name":"taskId","type":"uint256"},{"indexed":false,"internalType":"bytes","name":"result","type":"bytes"}],"name":"ComputedResult","type":"event"},{"inputs":[],"name":"GatewayAddress","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"_taskId","type":"uint256"},{"internalType":"bytes","name":"_result","type":"bytes"}],"name":"callback","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"_userAddress","type":"address"},{"internalType":"string","name":"_sourceNetwork","type":"string"},{"internalType":"string","name":"_routingInfo","type":"string"},{"internalType":"bytes32","name":"_payloadHash","type":"bytes32"},{"components":[{"internalType":"bytes","name":"user_key","type":"bytes"},{"internalType":"bytes","name":"user_pubkey","type":"bytes"},{"internalType":"string","name":"routing_code_hash","type":"string"},{"internalType":"string","name":"handle","type":"string"},{"internalType":"bytes12","name":"nonce","type":"bytes12"},{"internalType":"bytes","name":"payload","type":"bytes"},{"internalType":"bytes","name":"payload_signature","type":"bytes"}],"internalType":"struct Util.ExecutionInfo","name":"_info","type":"tuple"}],"name":"send","outputs":[],"stateMutability":"nonpayable","type":"function"}]
         const iface= new ethers.utils.Interface( abi )
         const FormatTypes = ethers.utils.FormatTypes;
         console.log(iface.format(FormatTypes.full))
@@ -218,7 +208,7 @@ export async function setupSubmit(element: HTMLButtonElement) {
         </p>
 
         <h2>Transaction Parameters</h2>
-        <p><b>Tx Hash: </b><a href="https://goerli.etherscan.io/tx/${txHash}" target="_blank">${txHash}</a></p>
+        <p><b>Tx Hash: </b><a href="https://sepolia.etherscan.io/tx/${txHash}" target="_blank">${txHash}</a></p>
         <p style="font-size: 0.8em;">${JSON.stringify(tx_params)}</p>
         `
     })

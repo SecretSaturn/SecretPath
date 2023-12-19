@@ -1,5 +1,5 @@
 [package]
-name = "secret-credit-score"
+name = "secret_rng"
 version = "0.1.0"
 authors = ["kent-3"]
 edition = "2021"
@@ -34,10 +34,10 @@ cosmwasm-storage = { package = "secret-cosmwasm-storage", version = "1.0.0" }
 schemars = "0.8.11"
 secret-toolkit = { version = "0.10.0", default-features = false, features = ["utils", "storage", "serialization", "viewing-key", "permit"] }
 serde = { version = "1.0.144", default-features = false, features = ["derive"] }
-serde-json-wasm = "0.5.0"
+serde-json-wasm = "1.0.0"
 # snafu = { version = "0.7.1" }
 # thiserror = { version = "1.0.31" }
-tnls = { path = "../../TNLS-Gateways/secret", package = "secret_gateway", default-features = false }
+tnls = { git = "https://github.com/SecretSaturn/TNLS", branch = "main", package = "secret_gateway", default-features = false }
 # cw-storage-plus = { version = "0.14.0", default-features = false }
 
 [[bin]]

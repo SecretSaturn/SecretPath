@@ -47,7 +47,7 @@ jobs:
           touch secret-deploy/.env
           echo MNEMONIC="$MNEMONIC" >> secret-deploy/.env
           echo GRPC_WEB_URL='"https://grpc.testnet.secretsaturn.net"' >> secret-deploy/.env
-          echo CHAIN_ID='"pulsar-2"' >> secret-deploy/.env
+          echo CHAIN_ID='"pulsar-3"' >> secret-deploy/.env
           cat secret-deploy/.env
       - name: Deploy Secret contracts
         working-directory: ./secret-deploy

@@ -6,15 +6,13 @@ import "forge-std/Vm.sol";
 import "forge-std/console2.sol";
 import "forge-std/Script.sol";
 import {Gateway} from "../src/Gateway.sol";
-import {Client} from "../src/Client.sol";
-import {Util} from "../src/Util.sol";
+import {Util} from "../script/Util.sol";
 
 contract DeployScript is Script {
     function setUp() public {}
 
     Gateway gatewayAddress;
-    Client clientAddress;
-
+    
     uint256 privKey = vm.envUint("ETH_PRIVATE_KEY");
     address deployer = vm.rememberKey(privKey);
 
@@ -22,10 +20,8 @@ contract DeployScript is Script {
         vm.startBroadcast();
 
         gatewayAddress = new Gateway();
-        clientAddress = new Client(address(gatewayAddress));
 
         console2.logAddress(address(gatewayAddress));
-        console2.logAddress(address(clientAddress));
         console2.logAddress(deployer);
 
         // Initialize master verification Address

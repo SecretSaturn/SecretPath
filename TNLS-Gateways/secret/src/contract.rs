@@ -1,5 +1,5 @@
 use cosmwasm_std::{
-    entry_point, to_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdError,
+    from_binary, entry_point, to_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdError,
     StdResult,
 };
 use secret_toolkit::{
@@ -16,6 +16,7 @@ use crate::{
     state::{KeyPair, State, TaskInfo, CONFIG, CREATOR, MY_ADDRESS, TASK_MAP},
     PrivContractHandleMsg,
 };
+use crate::types::Payload;
 
 use hex::ToHex;
 use sha3::{Digest, Keccak256};
@@ -145,7 +146,7 @@ fn pre_execution(deps: DepsMut, _env: Env, msg: PreExecutionMsg) -> StdResult<Re
     let config = CONFIG.load(deps.storage)?;
 
     // decrypt payload
-    let payload = msg.decrypt_payload(config.encryption_keys.sk)?;
+    let payload: Payload = from_binary(&Binary::from(msg.payload.as_slice()))?;
     let input_values = payload.data;
 
     // combine input values and task ID to create verification hash
