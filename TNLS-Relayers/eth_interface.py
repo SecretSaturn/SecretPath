@@ -12,7 +12,7 @@ import eth_abi
 
 from base_interface import BaseChainInterface, BaseContractInterface, Task
 
-clientAddress = "0x0Caa1352A7B212dC04e536787E25573FeDEa7448"
+gatewayAddress = "0xcda7Cdaa9d53c04fb6135423f17FBDe5390d49bA"
 
 class EthInterface(BaseChainInterface):
     """
@@ -125,7 +125,7 @@ class EthInterface(BaseChainInterface):
         correct_transactions = []
         for transaction in transactions:
             try:
-                if transaction.to == clientAddress:
+                if transaction.to == gatewayAddress:
                     tx_receipt = self.provider.eth.get_transaction_receipt(transaction['hash'])
                     correct_transactions.append(tx_receipt)
             except Exception as e:

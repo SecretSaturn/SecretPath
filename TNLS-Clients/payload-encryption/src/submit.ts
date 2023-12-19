@@ -63,7 +63,7 @@ export async function setupSubmit(element: HTMLButtonElement) {
         <h2>Raw Payload</h2>
         <p>${thePayload}</p>
 
-        <h2>Encrypted Payload</h2>
+        <h2>TNLS Payload</h2>
         <p>${ciphertext.toString('base64')}</p>
 
         <h2>Payload Hash</h2>
@@ -122,7 +122,7 @@ export async function setupSubmit(element: HTMLButtonElement) {
         <h2>Raw Payload</h2>
         <p>${thePayload}</p>
 
-        <h2>Encrypted Payload</h2>
+        <h2>TNLS Payload</h2>
         <p>${ciphertext.toString('base64')}</p>
 
         <h2>Payload Hash</h2>
@@ -189,7 +189,7 @@ export async function setupSubmit(element: HTMLButtonElement) {
         <h2>Raw Payload</h2>
         <p>${thePayload}</p>
 
-        <h2>Encrypted Payload</h2>
+        <h2>TNLS Payload</h2>
         <p>${ciphertext.toString('base64')}</p>
 
         <h2>Payload Hash</h2>
@@ -201,7 +201,6 @@ export async function setupSubmit(element: HTMLButtonElement) {
         <h2>Other Info</h2>
         <p>
 
-        <b>Encryption method:</b> ChaCha20Poly1305 <br>
         <b>Public key used during encryption:</b> ${userPublicKey} <br>
         <b>Nonce used during encryption:</b> ${nonce} <br>
 
@@ -209,6 +208,7 @@ export async function setupSubmit(element: HTMLButtonElement) {
 
         <h2>Transaction Parameters</h2>
         <p><b>Tx Hash: </b><a href="https://sepolia.etherscan.io/tx/${txHash}" target="_blank">${txHash}</a></p>
+        <p><b>Gateway Address (to check the postExecution callback) </b><a href="https://sepolia.etherscan.io/address/${publicClientAddress}" target="_blank">${publicClientAddress}</a></p>
         <p style="font-size: 0.8em;">${JSON.stringify(tx_params)}</p>
         `
     })
