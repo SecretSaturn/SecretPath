@@ -267,13 +267,13 @@ contract Gateway {
             revert InvalidResultSignature();
         } */
 
-        //Packet signature verification
+/*         //Packet signature verification
         verifySig = true;
         recoveredSigner = modifiedRecoverSigner(_info.packet_hash, _info.packet_signature, checkerAddress);
         verifySig = recoveredSigner == checkerAddress;
         if (!verifySig) {
             revert InvalidPacketSignature();
-        }
+        } */
 
         (bool val,) = address(tasks[_taskId].callback_address).call(abi.encodeWithSelector(tasks[_taskId].callback_selector, _taskId, _info.result));
         require(val == true, "Callback error");
