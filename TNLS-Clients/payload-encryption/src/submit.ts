@@ -1,6 +1,6 @@
 import { encrypt_payload } from "./wasm";
 import { ethers } from "ethers";
-import { arrayify, hexlify, SigningKey, keccak256, recoverPublicKey, computeAddress } from "ethers/lib/utils";
+import { arrayify, hexlify, SigningKey, keccak256, recoverPublicKey, computeAddress, sha256 } from "ethers/lib/utils";
 import { Buffer } from "buffer/";
 import secureRandom from "secure-random";
 
@@ -8,6 +8,20 @@ export async function setupSubmit(element: HTMLButtonElement) {
     // @ts-ignore
     const provider = new ethers.providers.Web3Provider(window.ethereum);
     const [myAddress] = await provider.send("eth_requestAccounts", []);
+
+    //0x3309086633802E71fa00388cc0b86F809C910515
+    const Resulthash = Buffer.from("3d4a8be14564eed3fee4e450b49efed92e1639d09e31cb46fe878b96e89d456f",'hex')
+    console.log(Resulthash)
+    console.log(sha256(Resulthash))
+    const resultSignature = Buffer.from("124dc63b82e50aaeee4faebd2872322929e0e490b529756b583c531c0806722e0122cef840dc43c087745581c291e93acb9563eb31a184c86cd666e3fc4801631b",'hex')
+    const pubkey_resultl = recoverPublicKey(sha256(sha256(Resulthash)), resultSignature)
+    console.log(`Verify this matches the pubkey_result address: ${computeAddress(pubkey_resultl)}`)
+
+    const pubkey_result = recoverPublicKey(sha256(Resulthash), resultSignature)
+    console.log(`Verify this matches the pubkey_result address: ${computeAddress(pubkey_result)}`)
+
+    const pubkey_result2 = recoverPublicKey(Resulthash, resultSignature)
+    console.log(`Verify this matches the pubkey_result address: ${computeAddress(pubkey_result2)}`)
 
     // generating ephemeral keys
     const wallet = ethers.Wallet.createRandom();
@@ -26,7 +40,7 @@ export async function setupSubmit(element: HTMLButtonElement) {
         const data = JSON.stringify({
         })
 
-        const routing_info = "secret17cejw0fm5nk9mqkrkxptjnn8g9ujx6sv0q5p6e"
+        const routing_info = "secret16cv5wll9ed5dqww47g0u5grprpn0eertuzg3cu"
         const routing_code_hash = "12f9880e67d423742dd1009ae1764d1f113510baf427bdfae3ea2a5607a7c63a"
         const user_address = myAddress
         const user_key = Buffer.from(userPublicKeyBytes)
@@ -154,7 +168,7 @@ export async function setupSubmit(element: HTMLButtonElement) {
             _info: ${JSON.stringify(_info)}`)
                 
         // create the abi interface and encode the function data
-        const publicClientAddress = '0xA24d9E7aD7F98B935f0762C14b8e8c7F4ED7CbbD'
+        const publicClientAddress = '0xd206771a502Bc88Da8cfDdf567cF6E325d5274d1'
         const abi = [{"inputs":[{"internalType":"address","name":"_gatewayAddress","type":"address"}],"stateMutability":"nonpayable","type":"constructor"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"uint256","name":"taskId","type":"uint256"},{"indexed":false,"internalType":"bytes","name":"result","type":"bytes"}],"name":"ComputedResult","type":"event"},{"inputs":[],"name":"GatewayAddress","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"_taskId","type":"uint256"},{"internalType":"bytes","name":"_result","type":"bytes"}],"name":"callback","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"_userAddress","type":"address"},{"internalType":"string","name":"_sourceNetwork","type":"string"},{"internalType":"string","name":"_routingInfo","type":"string"},{"internalType":"bytes32","name":"_payloadHash","type":"bytes32"},{"components":[{"internalType":"bytes","name":"user_key","type":"bytes"},{"internalType":"bytes","name":"user_pubkey","type":"bytes"},{"internalType":"string","name":"routing_code_hash","type":"string"},{"internalType":"string","name":"handle","type":"string"},{"internalType":"bytes12","name":"nonce","type":"bytes12"},{"internalType":"bytes","name":"payload","type":"bytes"},{"internalType":"bytes","name":"payload_signature","type":"bytes"}],"internalType":"struct Util.ExecutionInfo","name":"_info","type":"tuple"}],"name":"send","outputs":[],"stateMutability":"nonpayable","type":"function"}]
         const iface= new ethers.utils.Interface( abi )
         const FormatTypes = ethers.utils.FormatTypes;

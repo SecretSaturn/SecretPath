@@ -77,18 +77,19 @@ contract Gateway {
      /// @notice Recover the signer from message hash
     /// @param _ethSignedMessageHash The message hash from getEthSignedMessageHash()
     /// @param _signature The signature that needs to be verified
-    /// @param _checkingAddress address for trial/error for v value
-    function modifiedRecoverSigner(bytes32 _ethSignedMessageHash, bytes memory _signature, address _checkingAddress) internal pure returns (address) {
+
+    function modifiedRecoverSigner(bytes32 _ethSignedMessageHash, bytes memory _signature) internal pure returns (address) {
         (bytes32 r, bytes32 s, uint8 v) = splitSignature(_signature);
-        v = 27;
-        if (ecrecover(_ethSignedMessageHash, v, r, s) == _checkingAddress) {
-            return ecrecover(_ethSignedMessageHash, v, r, s);
+
+        if (v < 27) {
+            v += 27;
         }
-        v = 28;
-        if (ecrecover(_ethSignedMessageHash, v, r, s) == _checkingAddress) {
-            return ecrecover(_ethSignedMessageHash, v, r, s);
+        // If the version is correct return the signer address
+        if (v != 27 && v != 28) {
+            return (address(0));
         } else {
-            return address(0);
+
+            return ecrecover(_ethSignedMessageHash, v, r, s);
         }
     }
 
@@ -141,6 +142,9 @@ contract Gateway {
     );
 
     event logCompletedTask(uint256 indexed task_id, bytes32 payload_hash, bytes32 result_hash);
+
+    /// @notice Emitted when we recieve callback for our result of the computation
+    event ComputedResult(uint256 taskId, bytes result);
 
     /*//////////////////////////////////////////////////////////////
                              Constructor
@@ -209,13 +213,13 @@ contract Gateway {
     function preExecution(Task memory _task, ExecutionInfo memory _info) internal {
         bool verifySig;
 
-       /*  // Payload hash signature verification
+        // Payload hash signature verification
         verifySig = true;
         verifySig = recoverSigner(_task.payload_hash, _info.payload_signature) == _task.user_address;
 
         if (!verifySig) {
             revert InvalidSignature();
-        } */
+        }
 
         // persisting the task
         tasks[taskId] = ReducedTask(_task.payload_hash, _task.callback_address, _task.callback_selector, false);
@@ -247,6 +251,9 @@ contract Gateway {
     /// @param _sourceNetwork Source network of the message
     /// @param _info PostExecutionInfo struct
     function postExecution(uint256 _taskId, string memory _sourceNetwork, PostExecutionInfo memory _info) public {
+
+        //require(tasks[_taskId].completed == false, "Task already completed");
+
         bool verifySig;
         address recoveredSigner;
 
@@ -259,21 +266,21 @@ contract Gateway {
             revert InvalidPayloadHash();
         }
 
-        /* // Result signature verification
+         //Packet signature verification
         verifySig = true;
-        recoveredSigner = modifiedRecoverSigner(_info.result_hash, _info.result_signature, checkerAddress);
-        verifySig = recoveredSigner == checkerAddress;
-        if (!verifySig) {
-            revert InvalidResultSignature();
-        } */
-
-/*         //Packet signature verification
-        verifySig = true;
-        recoveredSigner = modifiedRecoverSigner(_info.packet_hash, _info.packet_signature, checkerAddress);
+        recoveredSigner = modifiedRecoverSigner(_info.packet_hash, _info.packet_signature);
         verifySig = recoveredSigner == checkerAddress;
         if (!verifySig) {
             revert InvalidPacketSignature();
-        } */
+        } 
+
+        // Result signature verification
+        verifySig = true;
+        recoveredSigner = modifiedRecoverSigner(_info.result_hash, _info.result_signature);
+        verifySig = recoveredSigner == checkerAddress;
+        if (!verifySig) {
+            revert InvalidResultSignature();
+        }
 
         (bool val,) = address(tasks[_taskId].callback_address).call(abi.encodeWithSelector(tasks[_taskId].callback_selector, _taskId, _info.result));
         require(val == true, "Callback error");
@@ -282,9 +289,6 @@ contract Gateway {
 
         emit logCompletedTask(_taskId, _info.payload_hash, _info.result_hash);
     }
-
-     /// @notice Emitted when we recieve callback for our result of the computation
-    event ComputedResult(uint256 taskId, bytes result);
 
     /// @param _userAddress  User address
     /// @param _sourceNetwork Source network of msg

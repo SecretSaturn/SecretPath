@@ -12,7 +12,7 @@ import eth_abi
 
 from base_interface import BaseChainInterface, BaseContractInterface, Task
 
-gatewayAddress = "0xA24d9E7aD7F98B935f0762C14b8e8c7F4ED7CbbD"
+gatewayAddress = "0xd206771a502Bc88Da8cfDdf567cF6E325d5274d1"
 
 class EthInterface(BaseChainInterface):
     """
@@ -187,11 +187,14 @@ class EthContract(BaseContractInterface):
             txn = self.interface.create_transaction(function, *args, **kwargs)
         return self.interface.sign_and_send_transaction(txn)
 
-    def parse_event_from_txn(self, event_name, txn) -> List[Task]:
-        """
-        See base_interface.py for documentation
-        """
+    """def parse_event_from_txn(self, event_name, txn) -> List[Task]:
+
         try:
+            event = self.contract.events[event_name]()
+            tasks = event.process_receipt(txn)
+            print("dgsdgdfhgsghdg")
+            print(tasks)
+
 
             data = txn.logs[0].data
             task_id = int.from_bytes(txn.logs[0].topics[1], 'big')
@@ -225,8 +228,24 @@ class EthContract(BaseContractInterface):
 
         except Exception as e:
             self.logger.warning(e)
-            return []
+            return []"""
 
+
+    def parse_event_from_txn(self, event_name, txn) -> List[Task]:
+        """
+        See base_interface.py for documentation
+        """
+        event = self.contract.events[event_name]()
+        try:
+            tasks = event.process_receipt(txn)
+        except Exception as e:
+            self.logger.warning(e)
+            return []
+        task_list = []
+        for task in tasks:
+            args = task['args']
+            task_list.append(Task(args))
+        return task_list
 
 if __name__ == "__main__":
     """interface = EthInterface(address='0xEB7D94Cefa561E83901aD87cB91eFcA73a1Fc812')"""

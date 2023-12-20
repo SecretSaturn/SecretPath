@@ -241,7 +241,9 @@ fn post_execution(deps: DepsMut, _env: Env, msg: PostExecutionMsg) -> StdResult<
     let routing_info = task_info.source_network;
 
     // "hasher" is used to perform multiple Keccak256 hashes
-    let mut hasher = Keccak256::new();
+    let mut result_hasher = Keccak256::new();
+
+    let mut packet_hasher = Keccak256::new();
 
     // requirement of Ethereum's `ecrecover` function
     let prefix = "\x19Ethereum Signed Message:\n32".as_bytes();
@@ -256,10 +258,10 @@ fn post_execution(deps: DepsMut, _env: Env, msg: PostExecutionMsg) -> StdResult<
         &task_info.input_hash,
     ]
     .concat();
-    hasher.update(&data);
-    let result_hash = hasher.finalize_reset();
-    hasher.update([prefix, &result_hash].concat());
-    let result_hash = hasher.finalize_reset();
+    result_hasher.update(&data);
+    let result_hash = result_hasher.finalize_reset();
+    result_hasher.update([prefix, &result_hash].concat());
+    let result_hash = result_hasher.finalize();
 
     // load this gateway's signing key
     let private_key = CONFIG.load(deps.storage)?.signing_keys.sk;
@@ -308,10 +310,10 @@ fn post_execution(deps: DepsMut, _env: Env, msg: PostExecutionMsg) -> StdResult<
         &result_signature,                 // result signature
     ]
     .concat();
-    hasher.update(&data);
-    let packet_hash = hasher.finalize_reset();
-    hasher.update([prefix, &packet_hash].concat());
-    let packet_hash = hasher.finalize();
+    packet_hasher.update(&data);
+    let packet_hash = packet_hasher.finalize_reset();
+    packet_hasher.update([prefix, &packet_hash].concat());
+    let packet_hash = packet_hasher.finalize();
 
     // used in production to create signature
     // NOTE: api.secp256k1_sign() will perform an additional sha_256 hash operation on the given data
@@ -350,8 +352,10 @@ fn post_execution(deps: DepsMut, _env: Env, msg: PostExecutionMsg) -> StdResult<
     );
     let result = format!("0x{}", msg.result.encode_hex::<String>());
     let result_hash = format!("0x{}", sha_256(&result_hash).encode_hex::<String>());
+    //let result_hash = format!("0x{}", &result_hash.encode_hex::<String>());
     let result_signature = format!("0x{}{:x}", &result_signature.encode_hex::<String>(), 27);
     let packet_hash = format!("0x{}", sha_256(&packet_hash).encode_hex::<String>());
+   // let packet_hash = format!("0x{}", &packet_hash.encode_hex::<String>());
     let packet_signature = format!("0x{}{:x}", &packet_signature.encode_hex::<String>(), 27);
 
     Ok(Response::new()
