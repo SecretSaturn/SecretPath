@@ -1,4 +1,4 @@
-import { encrypt_payload } from "./wasm";
+//import { encrypt_payload } from "./wasm";
 import { ethers } from "ethers";
 import { arrayify, hexlify, SigningKey, keccak256, recoverPublicKey, computeAddress, sha256 } from "ethers/lib/utils";
 import { Buffer } from "buffer/";
@@ -9,30 +9,17 @@ export async function setupSubmit(element: HTMLButtonElement) {
     const provider = new ethers.providers.Web3Provider(window.ethereum);
     const [myAddress] = await provider.send("eth_requestAccounts", []);
 
-    //0x3309086633802E71fa00388cc0b86F809C910515
-    const Resulthash = Buffer.from("3d4a8be14564eed3fee4e450b49efed92e1639d09e31cb46fe878b96e89d456f",'hex')
-    console.log(Resulthash)
-    console.log(sha256(Resulthash))
-    const resultSignature = Buffer.from("124dc63b82e50aaeee4faebd2872322929e0e490b529756b583c531c0806722e0122cef840dc43c087745581c291e93acb9563eb31a184c86cd666e3fc4801631b",'hex')
-    const pubkey_resultl = recoverPublicKey(sha256(sha256(Resulthash)), resultSignature)
-    console.log(`Verify this matches the pubkey_result address: ${computeAddress(pubkey_resultl)}`)
-
-    const pubkey_result = recoverPublicKey(sha256(Resulthash), resultSignature)
-    console.log(`Verify this matches the pubkey_result address: ${computeAddress(pubkey_result)}`)
-
-    const pubkey_result2 = recoverPublicKey(Resulthash, resultSignature)
-    console.log(`Verify this matches the pubkey_result address: ${computeAddress(pubkey_result2)}`)
-
     // generating ephemeral keys
     const wallet = ethers.Wallet.createRandom();
-    const userPrivateKeyBytes = arrayify(wallet.privateKey);
+   // const userPrivateKeyBytes = arrayify(wallet.privateKey);
     const userPublicKey: string = new SigningKey(wallet.privateKey).compressedPublicKey;
     const userPublicKeyBytes = arrayify(userPublicKey)
     //
 
-    const gatewayPublicKey = "BMbTfKh++E0vBd+jXejZvMc8hZNGEzZ8JjMgr8Wbc76zEHqQbcgV1+6z1G8GsmwaF18L7CCGbx6phF9Sbni8WxQ="; // TODO get this key
-    const gatewayPublicKeyBuffer = Buffer.from(gatewayPublicKey, "base64");
-    const gatewayPublicKeyBytes = arrayify(gatewayPublicKeyBuffer);
+    //unencrypted input 
+    //const gatewayPublicKey = "BMbTfKh++E0vBd+jXejZvMc8hZNGEzZ8JjMgr8Wbc76zEHqQbcgV1+6z1G8GsmwaF18L7CCGbx6phF9Sbni8WxQ="; // TODO get this key
+    //const gatewayPublicKeyBuffer = Buffer.from(gatewayPublicKey, "base64");
+    //const gatewayPublicKeyBytes = arrayify(gatewayPublicKeyBuffer);
 
     element.addEventListener("click", async function(event: Event){
         event.preventDefault()
