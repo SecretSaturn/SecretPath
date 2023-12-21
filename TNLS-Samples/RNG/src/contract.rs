@@ -83,8 +83,10 @@ fn return_random(
     _info: MessageInfo,
 ) -> StdResult<Response> {
 
-    let result = serde_json_wasm::to_string(&env.block.random)
-    .map_err(|err| StdError::generic_err(err.to_string()))?;
+    let result = match env.block.random {
+        Some(random_value) => random_value.to_base64(),
+        None => return Err(StdError::generic_err("No random value available")),
+    };
 
     Ok(Response::new().add_attribute("random", result))
 }
@@ -98,8 +100,11 @@ fn try_random(
 ) -> StdResult<Response> {
     let config = CONFIG.load(deps.storage)?;
 
-    let result = serde_json_wasm::to_string(&env.block.random)
-    .map_err(|err| StdError::generic_err(err.to_string()))?;
+    let result = match env.block.random {
+        //Some(random_value) => format!("{{\"random\":{}}}", random_value.to_base64()),
+        Some(random_value) => random_value.to_base64(),
+        None => return Err(StdError::generic_err("No random value available")),
+    };
 
     let callback_msg = GatewayMsg::Output {
         outputs: PostExecutionMsg {

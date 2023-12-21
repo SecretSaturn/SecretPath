@@ -84,46 +84,17 @@ export async function setupSubmit(element: HTMLButtonElement) {
         <p>${payloadHash}<p>
         `
         
-        // eth_sign
-        const msgParams = payloadHash
-
-        // eth_signTypedData_v4 (not working yet)
-        //
-        // const msgParams = JSON.stringify({
-        //     domain: {
-        //         chainId: 5,
-        //         name: 'Credit Score Demo',
-        //         verifyingContract: '0x2C1d60e34727a773799F9820C06b6fda2FEfcA7B',
-        //         version: '1',
-        //     },
-        //     // Defining the message signing data content.
-        //     message: {
-        //         payloadHash: payloadHash
-        //     },
-        //     // Refers to the keys of the *types* object below.
-        //     primaryType: 'Message',
-        //     types: {
-        //       EIP712Domain: [
-        //         { name: 'name', type: 'string' },
-        //         { name: 'version', type: 'string' },
-        //         { name: 'chainId', type: 'uint256' },
-        //         { name: 'verifyingContract', type: 'address' },
-        //       ],  
-        //       // Refer to PrimaryType
-        //       Message: [
-        //         { name: 'payloadHash', type: 'string' },
-        //       ],
-        //     },
-        // })
+        // // get Metamask to sign the payloadHash with eth_sign
+        // const msgParams = payloadHash
         // const from = myAddress;
         // const params = [from, msgParams];
-        // const method = 'eth_signTypedData_v4';
-        // const payload_signature = await provider.send(method, params)
+        // const method = 'eth_sign';
 
-        // get Metamask to sign the payloadHash
+        //get Metamask to sign the payloadHash with personal_sign
+        const msgParams = ciphertext
         const from = myAddress;
         const params = [from, msgParams];
-        const method = 'eth_sign';
+        const method = 'personal_sign';
 
         const payloadSignature = await provider.send(method, params)
         console.log(`Payload Signature: ${payloadSignature}`)
@@ -148,7 +119,8 @@ export async function setupSubmit(element: HTMLButtonElement) {
 
         // function data to be abi encoded
         const _userAddress = myAddress
-        const _sourceNetwork = "ethereum"
+        //const _sourceNetwork = "ethereum"
+        const _sourceNetwork = "arbitrum"
         const _routingInfo = routing_info
         const _payloadHash = payloadHash
         const _info = {
