@@ -15,7 +15,7 @@
     "buffer": "^6.0.3",
     "ethers": "^5.6.9",
     "secure-random": "^1.1.2",
-    "vite-plugin-top-level-await": "^1.1.1"
+    "vite-plugin-top-level-await": "^1.4.1"
   },
   "devDependencies": {
     "@rushstack/eslint-patch": "^1.1.4",
