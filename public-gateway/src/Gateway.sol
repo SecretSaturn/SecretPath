@@ -39,15 +39,6 @@ contract Gateway {
         bytes packet_signature;
     }
 
-    /// @notice Recover the signer from message hash
-    /// @param _ethSignedMessageHash The message hash from getEthSignedMessageHash()
-    /// @param _signature The signature that needs to be verified
-    function recoverSigner(bytes32 _ethSignedMessageHash, bytes memory _signature) internal pure returns (address) {
-        (bytes32 r, bytes32 s, uint8 v) = splitSignature(_signature);
-
-        return ecrecover(_ethSignedMessageHash, v, r, s);
-    }
-
     /// @notice Splitting signature util for recovery
     /// @param _sig The signature
     function splitSignature(bytes memory _sig) internal pure returns (bytes32 r, bytes32 s, uint8 v) {
@@ -74,7 +65,7 @@ contract Gateway {
         // implicitly return (r, s, v)
     }
 
-     /// @notice Recover the signer from message hash
+    /// @notice Recover the signer from message hash
     /// @param _ethSignedMessageHash The message hash from getEthSignedMessageHash()
     /// @param _signature The signature that needs to be verified
 
@@ -84,13 +75,7 @@ contract Gateway {
         if (v < 27) {
             v += 27;
         }
-        // If the version is correct return the signer address
-        if (v != 27 && v != 28) {
-            return (address(0));
-        } else {
-
-            return ecrecover(_ethSignedMessageHash, v, r, s);
-        }
+        return ecrecover(_ethSignedMessageHash, v, r, s);
     }
 
      /// @notice Hashes the encoded message hash
@@ -113,14 +98,17 @@ contract Gateway {
     /// @notice thrown when the signature is invalid
     error InvalidSignature();
 
-    /// @notice thrown when the signature is invalid
+    /// @notice thrown when the ResultSignature is invalid
     error InvalidResultSignature();
 
-    /// @notice thrown when the signature is invalid
+    /// @notice thrown when the PacketSignature is invalid
     error InvalidPacketSignature();
 
     /// @notice thrown when the PayloadHash is invalid
     error InvalidPayloadHash();
+
+    /// @notice thrown when the Task was already completed
+    error TaskAlreadyCompleted();
 
     /*//////////////////////////////////////////////////////////////
                               Events
@@ -150,7 +138,7 @@ contract Gateway {
                              Constructor
     //////////////////////////////////////////////////////////////*/
 
-    address public owner;
+    address public immutable owner;
 
     constructor() {
         owner = msg.sender;
@@ -188,8 +176,7 @@ contract Gateway {
         bytes32 routeHash = getRouteHash(_route, _verificationAddress);
         bytes32 ethSignedMessageHash = getEthSignedMessageHash(routeHash);
 
-        bool verifySig;
-        verifySig = recoverSigner(ethSignedMessageHash, _signature) == masterVerificationAddress;
+        bool verifySig = modifiedRecoverSigner(ethSignedMessageHash, _signature) == masterVerificationAddress;
 
         if (!verifySig) {
             revert InvalidSignature();
@@ -211,11 +198,9 @@ contract Gateway {
     /// @param _task Task struct
     /// @param _info ExecutionInfo struct
     function preExecution(Task memory _task, ExecutionInfo memory _info) internal {
-        bool verifySig;
 
         // Payload hash signature verification
-        verifySig = true;
-        verifySig = recoverSigner(_task.payload_hash, _info.payload_signature) == _task.user_address;
+        bool verifySig = modifiedRecoverSigner(_task.payload_hash, _info.payload_signature) == _task.user_address;
 
         if (!verifySig) {
             revert InvalidSignature();
@@ -252,33 +237,32 @@ contract Gateway {
     /// @param _info PostExecutionInfo struct
     function postExecution(uint256 _taskId, string memory _sourceNetwork, PostExecutionInfo memory _info) public {
 
-        //require(tasks[_taskId].completed == false, "Task already completed");
+        if (tasks[_taskId].completed == true) {
+            revert TaskAlreadyCompleted();
+        }
 
-        bool verifySig;
+        bool verify;
         address recoveredSigner;
 
         address checkerAddress = route[_sourceNetwork];
 
         // Payload hash verification from tasks struct
-        bool verifyPayloadHash;
-        verifyPayloadHash = _info.payload_hash == tasks[_taskId].payload_hash;
-        if (!verifyPayloadHash) {
+        verify = _info.payload_hash == tasks[_taskId].payload_hash;
+        if (!verify) {
             revert InvalidPayloadHash();
         }
 
-         //Packet signature verification
-        verifySig = true;
+        //Packet signature verification
         recoveredSigner = modifiedRecoverSigner(_info.packet_hash, _info.packet_signature);
-        verifySig = recoveredSigner == checkerAddress;
-        if (!verifySig) {
+        verify = recoveredSigner == checkerAddress;
+        if (!verify) {
             revert InvalidPacketSignature();
         } 
 
         // Result signature verification
-        verifySig = true;
         recoveredSigner = modifiedRecoverSigner(_info.result_hash, _info.result_signature);
-        verifySig = recoveredSigner == checkerAddress;
-        if (!verifySig) {
+        verify = recoveredSigner == checkerAddress;
+        if (!verify) {
             revert InvalidResultSignature();
         }
 
@@ -318,5 +302,4 @@ contract Gateway {
     function callback(uint256 _taskId, bytes memory _result) external {
         emit ComputedResult(_taskId, _result);
     }
-
 }

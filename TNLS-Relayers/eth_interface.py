@@ -12,7 +12,7 @@ import eth_abi
 
 from base_interface import BaseChainInterface, BaseContractInterface, Task
 
-gatewayAddress = "0xd206771a502Bc88Da8cfDdf567cF6E325d5274d1"
+gatewayAddress = "0x7D2933889Ba1c25153A109236783C3C94Fec6880"
 
 class EthInterface(BaseChainInterface):
     """

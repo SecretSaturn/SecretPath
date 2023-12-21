@@ -4,10 +4,14 @@ import { arrayify, hexlify, SigningKey, keccak256, recoverPublicKey, computeAddr
 import { Buffer } from "buffer/";
 import secureRandom from "secure-random";
 
-export async function setupSubmit(element: HTMLButtonElement) {
+export function setupSubmit(element: HTMLButtonElement) {
+
+    const publicClientAddress = '0x7D2933889Ba1c25153A109236783C3C94Fec6880'
+    const routing_info = "secret16cv5wll9ed5dqww47g0u5grprpn0eertuzg3cu"
+    const routing_code_hash = "12f9880e67d423742dd1009ae1764d1f113510baf427bdfae3ea2a5607a7c63a"
+
     // @ts-ignore
     const provider = new ethers.providers.Web3Provider(window.ethereum);
-    const [myAddress] = await provider.send("eth_requestAccounts", []);
 
     // generating ephemeral keys
     const wallet = ethers.Wallet.createRandom();
@@ -23,12 +27,11 @@ export async function setupSubmit(element: HTMLButtonElement) {
 
     element.addEventListener("click", async function(event: Event){
         event.preventDefault()
+        const [myAddress] = await provider.send("eth_requestAccounts", []);
 
         const data = JSON.stringify({
         })
 
-        const routing_info = "secret16cv5wll9ed5dqww47g0u5grprpn0eertuzg3cu"
-        const routing_code_hash = "12f9880e67d423742dd1009ae1764d1f113510baf427bdfae3ea2a5607a7c63a"
         const user_address = myAddress
         const user_key = Buffer.from(userPublicKeyBytes)
 
@@ -55,9 +58,21 @@ export async function setupSubmit(element: HTMLButtonElement) {
 
         const ciphertext = plaintext
     
-        // const ciphertextHash = keccak256(ciphertext)
-        // const payloadHash = '0x' + sha3.keccak256("\x19Ethereum Signed Message:\n" + 32 + ciphertextHash.substring(2))
-        const payloadHash = keccak256(ciphertext)
+        // // get Metamask to sign the payloadHash with eth_sign
+        // const payloadHash = keccak256(ciphertext)
+        // const msgParams = payloadHash
+        // const from = myAddress;
+        // const params = [from, msgParams];
+        // const method = 'eth_sign';
+
+        //get Metamask to sign the payload with personal_sign
+        const cyphertextHash = keccak256(Buffer.from(ciphertext))
+        //const payloadHash = keccak256(Buffer.from("\x19Ethereum Signed Message:\n" + "32" + cyphertextHash.substring(2)))
+        const payloadHash = keccak256(Buffer.from("\x19Ethereum Signed Message:\n" + ciphertext.length + ciphertext))
+        const msgParams = ciphertext.toString('ASCII')
+        const from = myAddress;
+        const params = [from, msgParams];
+        const method = 'personal_sign';
         console.log(`Payload Hash: ${payloadHash}`)
 
         document.querySelector<HTMLDivElement>('#preview')!.innerHTML = `
@@ -70,18 +85,6 @@ export async function setupSubmit(element: HTMLButtonElement) {
         <h2>Payload Hash</h2>
         <p>${payloadHash}<p>
         `
-        
-        // // get Metamask to sign the payloadHash with eth_sign
-        // const msgParams = payloadHash
-        // const from = myAddress;
-        // const params = [from, msgParams];
-        // const method = 'eth_sign';
-
-        //get Metamask to sign the payloadHash with personal_sign
-        const msgParams = ciphertext
-        const from = myAddress;
-        const params = [from, msgParams];
-        const method = 'personal_sign';
 
         const payloadSignature = await provider.send(method, params)
         console.log(`Payload Signature: ${payloadSignature}`)
@@ -107,7 +110,7 @@ export async function setupSubmit(element: HTMLButtonElement) {
         // function data to be abi encoded
         const _userAddress = myAddress
         //const _sourceNetwork = "ethereum"
-        const _sourceNetwork = "arbitrum"
+        const _sourceNetwork = "ethereum"
         const _routingInfo = routing_info
         const _payloadHash = payloadHash
         const _info = {
@@ -127,7 +130,6 @@ export async function setupSubmit(element: HTMLButtonElement) {
             _info: ${JSON.stringify(_info)}`)
                 
         // create the abi interface and encode the function data
-        const publicClientAddress = '0xd206771a502Bc88Da8cfDdf567cF6E325d5274d1'
         const abi = [{"inputs":[{"internalType":"address","name":"_gatewayAddress","type":"address"}],"stateMutability":"nonpayable","type":"constructor"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"uint256","name":"taskId","type":"uint256"},{"indexed":false,"internalType":"bytes","name":"result","type":"bytes"}],"name":"ComputedResult","type":"event"},{"inputs":[],"name":"GatewayAddress","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"_taskId","type":"uint256"},{"internalType":"bytes","name":"_result","type":"bytes"}],"name":"callback","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"_userAddress","type":"address"},{"internalType":"string","name":"_sourceNetwork","type":"string"},{"internalType":"string","name":"_routingInfo","type":"string"},{"internalType":"bytes32","name":"_payloadHash","type":"bytes32"},{"components":[{"internalType":"bytes","name":"user_key","type":"bytes"},{"internalType":"bytes","name":"user_pubkey","type":"bytes"},{"internalType":"string","name":"routing_code_hash","type":"string"},{"internalType":"string","name":"handle","type":"string"},{"internalType":"bytes12","name":"nonce","type":"bytes12"},{"internalType":"bytes","name":"payload","type":"bytes"},{"internalType":"bytes","name":"payload_signature","type":"bytes"}],"internalType":"struct Util.ExecutionInfo","name":"_info","type":"tuple"}],"name":"send","outputs":[],"stateMutability":"nonpayable","type":"function"}]
         const iface= new ethers.utils.Interface( abi )
         const FormatTypes = ethers.utils.FormatTypes;

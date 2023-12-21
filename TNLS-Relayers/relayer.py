@@ -40,7 +40,7 @@ class Relayer:
         eth_abi = json.load(open("eth_abi.json", 'r'))
         scrt_abi = json.dumps(json.load(open("secret_abi.json", 'r')))
         eth_base_interface = EthInterface(private_key="a9afa5cda00e31eae3883f847f4e5dee78e66086786e656124eef2380433c580", address="0x50FcF0c327Ee4341313Dd5Cb987f0Cd289Be6D4D")
-        eth_contract_interface = EthContract(interface=eth_base_interface,address="0xd206771a502Bc88Da8cfDdf567cF6E325d5274d1",abi=eth_abi)
+        eth_contract_interface = EthContract(interface=eth_base_interface,address="0x7D2933889Ba1c25153A109236783C3C94Fec6880",abi=eth_abi)
         scrt_base_interface = SCRTInterface(private_key="d3215fc169d65a39ddb610b97f074da359436def1abc0f56fd1dd2b83adcb9af", address="secret1w3s62kcqlhv3l3rplegnyvp0e5hlrsyrw79htv", api_url="https://api.pulsar.scrttestnet.com", chain_id="pulsar-3", provider=None)
         scrt_contract_interface = SCRTContract(interface=scrt_base_interface, address="secret1khfjv7d84qcly0ceg2eup7lcemnparu7zxd605",abi=scrt_abi)
         keys_dict = {'secret': {'verification': '0x4183e0FC9a37EDf99d4387B2ecD97E581cbedc42','encryption': 'AjvNv1VH/B96I4vi6jdhS3vHsjxvXK4VS6tylhpW7keg'}}
