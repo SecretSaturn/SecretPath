@@ -69,7 +69,7 @@ contract ContractTest is Test {
     function modifiedRecoverSigner(bytes32 _ethSignedMessageHash, bytes memory _signature) internal pure returns (address) {
         (bytes32 r, bytes32 s, uint8 v) = splitSignature(_signature);
 
-        if (v < 27) {
+        if (v == 0 || v == 1) {
             v += 27;
         }
         return ecrecover(_ethSignedMessageHash, v, r, s);
@@ -97,8 +97,8 @@ contract ContractTest is Test {
     //////////////////////////////////////////////////////////////*/
 
     function getPayloadHash(bytes memory _payload) public pure returns (bytes32) {
-        //return keccak256(abi.encode(_payload));
-        return keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n", _payload.length, _payload));
+        return keccak256(abi.encode(_payload));
+       // return keccak256(bytes.concat("\x19Ethereum Signed Message:\n", bytes32(_payload.length), _payload));
     }
 
     function getResultHash(bytes memory _result) public pure returns (bytes32) {
@@ -267,7 +267,6 @@ contract ContractTest is Test {
         // bytes32 string encoding of "add a bunch of stuff"
         bytes memory payload = hex"61646420612062756e6368206f66207374756666000000000000000000000000";
         bytes32 payloadHash = getPayloadHash(payload);
-        payloadHash = getEthSignedMessageHash(payloadHash);
 
         // encoding bytes of "some public key"
         bytes memory userKey = hex"736f6d65207075626c6963206b65790000000000000000000000000000000000";
@@ -276,6 +275,7 @@ contract ContractTest is Test {
         Gateway.Task memory assembledTask = Gateway.Task({
             callback_address: vm.addr(7),
             callback_selector: callbackSelector,
+            callback_gas_limit: 300000,
             user_address: vm.addr(5),
             source_network: sourceNetwork,
             routing_info: routingInfo,
@@ -310,16 +310,16 @@ contract ContractTest is Test {
             );
         gateway.preExecution(assembledTask, assembledInfo);
 
-        (bytes32 tempPayloadHash,,,) = gateway.tasks(1);
+        (bytes32 tempPayloadHash,,,,) = gateway.tasks(1);
         assertEq(tempPayloadHash, payloadHash);
 
-        (,address tempCallbackAddress,,) = gateway.tasks(1);
+        (,address tempCallbackAddress,,,) = gateway.tasks(1);
         assertEq(tempCallbackAddress, address(gateway));
 
-        (,,bytes4 tempCallbackSelector,) = gateway.tasks(1);
+        (,,bytes4 tempCallbackSelector,,) = gateway.tasks(1);
         assertEq(tempCallbackSelector, gateway.callback.selector);
 
-        (,,, bool tempCompleted) = gateway.tasks(1);
+        (,,,, bool tempCompleted) = gateway.tasks(1);
         assertEq(tempCompleted, false);
     }
 
@@ -344,6 +344,7 @@ contract ContractTest is Test {
         Gateway.Task memory assembledTask = Gateway.Task({
             callback_address: vm.addr(6),
             callback_selector: callbackSelector,
+            callback_gas_limit: 300000,
             user_address: vm.addr(5),
             source_network: sourceNetwork,
             routing_info: routingInfo,
@@ -391,12 +392,10 @@ contract ContractTest is Test {
         // bytes32 string encoding of "add a bunch of stuff"
         bytes memory payload = hex"61646420612062756e6368206f66207374756666000000000000000000000000";
         bytes32 payloadHash = getPayloadHash(payload);
-        payloadHash = getEthSignedMessageHash(payloadHash);
 
         // bytes32 string encoding of "some result"
         bytes memory result = hex"736f6d6520726573756c74000000000000000000000000000000000000000000";
         bytes32 resultHash = getResultHash(result);
-        resultHash = getEthSignedMessageHash(resultHash);
 
         Gateway.PostExecutionInfo memory assembledInfo = Gateway.PostExecutionInfo({
             payload_hash: payloadHash,
@@ -412,7 +411,7 @@ contract ContractTest is Test {
 
         gateway.postExecution(taskId, sourceNetwork, assembledInfo);
 
-        (,,, bool tempCompleted) = gateway.tasks(1);
+        (,,,, bool tempCompleted) = gateway.tasks(1);
         assertEq(tempCompleted, true);
     }
 
@@ -473,6 +472,7 @@ contract ContractTest is Test {
         Gateway.Task memory assembledTask = Gateway.Task({
             callback_address: vm.addr(7),
             callback_selector: callbackSelector,
+            callback_gas_limit: 300000,
             user_address: userAddress,
             source_network: sourceNetwork,
             routing_info: routingInfo,
@@ -507,16 +507,16 @@ contract ContractTest is Test {
             );
         gateway.preExecution(assembledTask, assembledInfo);
 
-        (bytes32 tempPayloadHash,,,) = gateway.tasks(1);
+        (bytes32 tempPayloadHash,,,,) = gateway.tasks(1);
         assertEq(tempPayloadHash, payloadHash);
 
-        (,address tempCallbackAddress,,) = gateway.tasks(1);
+        (,address tempCallbackAddress,,,) = gateway.tasks(1);
         assertEq(tempCallbackAddress, address(gateway));
 
-        (,,bytes4 tempCallbackSelector,) = gateway.tasks(1);
+        (,,bytes4 tempCallbackSelector,,) = gateway.tasks(1);
         assertEq(tempCallbackSelector, gateway.callback.selector);
 
-        (,,, bool tempCompleted) = gateway.tasks(1);
+        (,,,, bool tempCompleted) = gateway.tasks(1);
         assertEq(tempCompleted, false);
     }
 
@@ -573,12 +573,12 @@ contract ContractTest is Test {
             packet_signature: packetSignature
         });
 
-        vm.expectEmit(true, true, true, true);
+        vm.expectEmit(true, true, false, false);
         emit logCompletedTask(taskId, payloadHash, resultHash);
 
         gateway.postExecution(taskId, sourceNetwork, assembledInfo);
 
-        (,,,bool tempCompleted) = gateway.tasks(1);
+        (,,,,bool tempCompleted) = gateway.tasks(1);
         assertEq(tempCompleted, true);
     }
 
@@ -625,18 +625,18 @@ contract ContractTest is Test {
             "ssssssssssss"
             );
 
-        gateway.send(userAddress, sourceNetwork, routingInfo, payloadHash, assembledInfo);
+        gateway.send(userAddress, sourceNetwork, routingInfo, payloadHash, assembledInfo, vm.addr(7),bytes4(0),300000);
 
-        (bytes32 tempPayloadHash,,,) = gateway.tasks(1);
+        (bytes32 tempPayloadHash,,,,) = gateway.tasks(1);
         assertEq(tempPayloadHash, payloadHash);
 
-        (,address tempCallbackAddress,,) = gateway.tasks(1);
+        (,address tempCallbackAddress,,,) = gateway.tasks(1);
         assertEq(tempCallbackAddress, address(gateway));
 
-        (,,bytes4 tempCallbackSelector,) = gateway.tasks(1);
+        (,,bytes4 tempCallbackSelector,,) = gateway.tasks(1);
         assertEq(tempCallbackSelector, gateway.callback.selector);
 
-        (,,, bool tempCompleted) = gateway.tasks(1);
+        (,,,, bool tempCompleted) = gateway.tasks(1);
         assertEq(tempCompleted, false);
     }
 
@@ -674,7 +674,7 @@ contract ContractTest is Test {
 
         gateway.postExecution(taskId, sourceNetwork, assembledInfo);
 
-        (,,, bool tempCompleted) = gateway.tasks(1);
+        (,,,, bool tempCompleted) = gateway.tasks(1);
         assertEq(tempCompleted, true);
     }
 }

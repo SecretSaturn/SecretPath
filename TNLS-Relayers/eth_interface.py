@@ -187,7 +187,7 @@ class EthContract(BaseContractInterface):
             txn = self.interface.create_transaction(function, *args, **kwargs)
         return self.interface.sign_and_send_transaction(txn)
 
-    """def parse_event_from_txn(self, event_name, txn) -> List[Task]:
+    def parse_event_from_txn(self, event_name, txn) -> List[Task]:
 
         try:
             event = self.contract.events[event_name]()
@@ -207,8 +207,6 @@ class EthContract(BaseContractInterface):
             decodedABI = eth_abi.decode(types,data,strict=False)
 
             task_list = []
-            prefix = 2 + (decodedABI[8][64] % 2)  # Determine the prefix 0x02 or 0x03
-            compressed_public_key = bytes([prefix]) + decodedABI[8][1:33]  # Concatenate the prefix and x coordinate
             args = {'task_id': task_id, 'task_destination_network': 'secret',
                     'source_network': decodedABI[0],
                     'user_address': decodedABI[1],
@@ -228,24 +226,8 @@ class EthContract(BaseContractInterface):
 
         except Exception as e:
             self.logger.warning(e)
-            return []"""
-
-
-    def parse_event_from_txn(self, event_name, txn) -> List[Task]:
-        """
-        See base_interface.py for documentation
-        """
-        event = self.contract.events[event_name]()
-        try:
-            tasks = event.process_receipt(txn)
-        except Exception as e:
-            self.logger.warning(e)
             return []
-        task_list = []
-        for task in tasks:
-            args = task['args']
-            task_list.append(Task(args))
-        return task_list
+
 
 if __name__ == "__main__":
     """interface = EthInterface(address='0xEB7D94Cefa561E83901aD87cB91eFcA73a1Fc812')"""

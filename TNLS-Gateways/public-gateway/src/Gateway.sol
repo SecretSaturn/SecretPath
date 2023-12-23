@@ -10,6 +10,7 @@ contract Gateway {
     struct Task {
         address callback_address;
         bytes4 callback_selector;
+        uint32 callback_gas_limit;
         address user_address;
         string source_network;
         string routing_info;
@@ -21,6 +22,7 @@ contract Gateway {
         bytes32 payload_hash;
         address callback_address;
         bytes4 callback_selector;
+        uint32 callback_gas_limit;
         bool completed;
     }
 
@@ -71,9 +73,11 @@ contract Gateway {
     function modifiedRecoverSigner(bytes32 _ethSignedMessageHash, bytes memory _signature) internal pure returns (address) {
         (bytes32 r, bytes32 s, uint8 v) = splitSignature(_signature);
 
-        if (v < 27) {
+
+        if (v == 0 || v == 1) {
             v += 27;
         }
+
         return ecrecover(_ethSignedMessageHash, v, r, s);
     }
 
@@ -101,7 +105,7 @@ contract Gateway {
     /// @notice thrown when the signature is invalid
     error InvalidSignature();
 
-    /// @notice thrown when the ResultSignature is invalid
+    /// @notice Thrown when the ResultSignature is invalid
     error InvalidResultSignature();
 
     /// @notice thrown when the PacketSignature is invalid
@@ -213,7 +217,7 @@ contract Gateway {
         }
 
         // persisting the task
-        tasks[taskId] = ReducedTask(_task.payload_hash, _task.callback_address, _task.callback_selector, false);
+        tasks[taskId] = ReducedTask(_task.payload_hash, _task.callback_address, _task.callback_selector, _task.callback_gas_limit, false);
 
         emit logNewTask(
             taskId,
@@ -230,7 +234,7 @@ contract Gateway {
             _info.nonce
             );
 
-        taskId++;
+	        taskId++;
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -243,32 +247,36 @@ contract Gateway {
     /// @param _info PostExecutionInfo struct
    function postExecution(uint256 _taskId, string memory _sourceNetwork, PostExecutionInfo memory _info) external {
     // First, check if the task is already completed
-    if (tasks[_taskId].completed) {
+    ReducedTask memory task = tasks[_taskId];
+    address checkerAddress = route[_sourceNetwork];
+
+    if (task.completed) {
         revert TaskAlreadyCompleted();
     }
 
     // Payload hash verification from tasks struct
-    if (_info.payload_hash != tasks[_taskId].payload_hash) {
+    if (_info.payload_hash != task.payload_hash) {
         revert InvalidPayloadHash();
     }
 
-    // Packet signature verification
-    if (modifiedRecoverSigner(_info.packet_hash, _info.packet_signature) != route[_sourceNetwork]) {
-        revert InvalidPacketSignature();
+    // Result signature verification
+    if (modifiedRecoverSigner(_info.result_hash, _info.result_signature) != checkerAddress) {
+        revert InvalidResultSignature();
     }
 
-    // Result signature verification
-    if (modifiedRecoverSigner(_info.result_hash, _info.result_signature) != route[_sourceNetwork]) {
-        revert InvalidResultSignature();
+    // Packet signature verification
+    if (modifiedRecoverSigner(_info.packet_hash, _info.packet_signature) != checkerAddress) {
+        revert InvalidPacketSignature();
     }
 
     // All checks passed, continue with the function execution
     tasks[_taskId].completed = true;
+    tasks[_taskId].payload_hash = bytes32(0);
 
     emit logCompletedTask(_taskId, _info.payload_hash, _info.result_hash);
 
-    (bool val, ) = address(tasks[_taskId].callback_address).call(
-        abi.encodeWithSelector(tasks[_taskId].callback_selector, _taskId, _info.result)
+    (bool val, ) = address(task.callback_address).call{gas: task.callback_gas_limit}(
+        abi.encodeWithSelector(task.callback_selector, _taskId, _info.result)
     );
     if (!val) {
         revert CallbackError();
@@ -286,12 +294,14 @@ contract Gateway {
         string memory _sourceNetwork,
         string memory _routingInfo,
         bytes32 _payloadHash,
-        ExecutionInfo memory _info
+        ExecutionInfo memory _info,
+        address _callbackAddress, 
+        bytes4 _callbackSelector,
+        uint32 _callbackGasLimit
     )
         external
     {
-
-        preExecution(Task(address(this), this.callback.selector, _userAddress, _sourceNetwork, _routingInfo, _payloadHash, false), _info);
+        preExecution(Task(_callbackAddress, _callbackSelector, _callbackGasLimit ,_userAddress, _sourceNetwork, _routingInfo, _payloadHash, false), _info);
     }
 
     /*//////////////////////////////////////////////////////////////
