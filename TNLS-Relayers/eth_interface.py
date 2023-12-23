@@ -12,7 +12,6 @@ import eth_abi
 
 from base_interface import BaseChainInterface, BaseContractInterface, Task
 
-gatewayAddress = "0x7D2933889Ba1c25153A109236783C3C94Fec6880"
 
 class EthInterface(BaseChainInterface):
     """
@@ -20,7 +19,7 @@ class EthInterface(BaseChainInterface):
     """
 
 
-    def __init__(self, private_key="", address="", provider=None, **_kwargs):
+    def __init__(self, private_key="", address="", provider=None, contract_address = "", **_kwargs):
         if provider is None:
             """
             If we don't have a set provider, read it from config.
@@ -37,6 +36,7 @@ class EthInterface(BaseChainInterface):
         self.private_key = private_key
         self.provider = provider
         self.address = address
+        self.contract_address = contract_address
         basicConfig(
             level=INFO,
             format="%(asctime)s [Eth Interface: %(levelname)8.8s] %(message)s",
@@ -125,7 +125,7 @@ class EthInterface(BaseChainInterface):
         correct_transactions = []
         for transaction in transactions:
             try:
-                if transaction.to == gatewayAddress:
+                if transaction.to == self.contract_address or self.contract_address == "":
                     tx_receipt = self.provider.eth.get_transaction_receipt(transaction['hash'])
                     correct_transactions.append(tx_receipt)
             except Exception as e:

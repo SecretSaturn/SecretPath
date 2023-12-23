@@ -18,10 +18,12 @@ out/
 !/broadcast
 /broadcast/*
 /broadcast/*/31337
-public-gateway/broadcast/*
 .vscode
 target/
 TNLS-Gateways/secret/contract.wasm
 TNLS-Gateways/secret/contract.wasm.gz
 .env
 __pycache__/
+*.example
+TNLS-Gateways/public-gateway/broadcast/*
+TNLS-Gateways/public-gateway/lib/*

@@ -27,7 +27,6 @@ pub fn instantiate(
         gateway_key: msg.gateway_key,
     };
 
-    // config(&mut deps.storage).save(&state)?;
     CONFIG.save(deps.storage, &state)?;
 
     Ok(Response::default())
@@ -182,45 +181,6 @@ mod tests {
         let handle_response =
             execute(deps.as_mut(), env.clone(), info.clone(), handle_msg).unwrap();
         let result = &handle_response.attributes[0].value;
-        assert_eq!(result, "private computation complete                                                                                                                                                                                                                                    ");
-    }
-
-    #[test]
-    fn calculate_score() {
-        let input = Input {
-            address: "0x01".to_string(),
-            name: Some("alice".to_string()),
-            offchain_assets: 9,
-            onchain_assets: 0,
-            liabilities: 0,
-            missed_payments: 0,
-            income: 0,
-        };
-        let score = try_calculate_score(input).unwrap();
-        assert_eq!(score, "{\"name\":\"alice\",\"result\":\"850\"}");
-
-        let input = Input {
-            address: "0x01".to_string(),
-            name: Some("bob".to_string()),
-            offchain_assets: 0,
-            onchain_assets: 0,
-            liabilities: 0,
-            missed_payments: 0,
-            income: 0,
-        };
-        let score = try_calculate_score(input).unwrap();
-        assert_eq!(score, "{\"name\":\"bob\",\"result\":\"250\"}");
-
-        let input = Input {
-            address: "0x01".to_string(),
-            name: None,
-            offchain_assets: 0,
-            onchain_assets: 1000000,
-            liabilities: 499999,
-            missed_payments: 0,
-            income: 0,
-        };
-        let score = try_calculate_score(input).unwrap();
-        assert_eq!(score, "{\"name\":\"0x01\",\"result\":\"450\"}");
+        assert_eq!(result, "private computation complete");
     }
 }

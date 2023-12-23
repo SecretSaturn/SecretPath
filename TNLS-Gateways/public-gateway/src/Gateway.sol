@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.10;
+pragma solidity ^0.8.23;
 
 contract Gateway {
+
+    /*//////////////////////////////////////////////////////////////
+                              Structs
+    //////////////////////////////////////////////////////////////*/
 
     struct Task {
         address callback_address;
@@ -39,20 +43,16 @@ contract Gateway {
         bytes packet_signature;
     }
 
+    /*//////////////////////////////////////////////////////////////
+                              Helpers
+    //////////////////////////////////////////////////////////////*/
+
     /// @notice Splitting signature util for recovery
     /// @param _sig The signature
     function splitSignature(bytes memory _sig) internal pure returns (bytes32 r, bytes32 s, uint8 v) {
         require(_sig.length == 65, "invalid signature length");
 
         assembly {
-            /*
-            First 32 bytes stores the length of the signature
-
-            add(sig, 32) = pointer of sig + 32
-            effectively, skips first 32 bytes of signature
-
-            mload(p) loads next 32 bytes starting at the memory address p into memory
-            */
 
             // first 32 bytes, after the length prefix
             r := mload(add(_sig, 32))
@@ -62,7 +62,6 @@ contract Gateway {
             v := byte(0, mload(add(_sig, 96)))
         }
 
-        // implicitly return (r, s, v)
     }
 
     /// @notice Recover the signer from message hash
@@ -95,6 +94,10 @@ contract Gateway {
         return keccak256(abi.encode(_routeInput, _verificationAddressInput));
     }
 
+    /*//////////////////////////////////////////////////////////////
+                              Errors
+    //////////////////////////////////////////////////////////////*/
+
     /// @notice thrown when the signature is invalid
     error InvalidSignature();
 
@@ -109,6 +112,9 @@ contract Gateway {
 
     /// @notice thrown when the Task was already completed
     error TaskAlreadyCompleted();
+
+        /// @notice thrown when the Task was already completed
+    error CallbackError();
 
     /*//////////////////////////////////////////////////////////////
                               Events
@@ -189,7 +195,7 @@ contract Gateway {
                              Pre Execution
     //////////////////////////////////////////////////////////////*/
 
-    uint256 public taskId = 1;
+    uint256 internal taskId = 1;
 
     /// @dev Task ID ====> Task
     mapping(uint256 => ReducedTask) public tasks;
@@ -197,7 +203,7 @@ contract Gateway {
     /// @notice Pre-Execution
     /// @param _task Task struct
     /// @param _info ExecutionInfo struct
-    function preExecution(Task memory _task, ExecutionInfo memory _info) internal {
+    function preExecution(Task memory _task, ExecutionInfo memory _info) public {
 
         // Payload hash signature verification
         bool verifySig = modifiedRecoverSigner(_task.payload_hash, _info.payload_signature) == _task.user_address;
@@ -235,44 +241,39 @@ contract Gateway {
     /// @param _taskId Task Id of the executed message
     /// @param _sourceNetwork Source network of the message
     /// @param _info PostExecutionInfo struct
-    function postExecution(uint256 _taskId, string memory _sourceNetwork, PostExecutionInfo memory _info) public {
-
-        if (tasks[_taskId].completed == true) {
-            revert TaskAlreadyCompleted();
-        }
-
-        bool verify;
-        address recoveredSigner;
-
-        address checkerAddress = route[_sourceNetwork];
-
-        // Payload hash verification from tasks struct
-        verify = _info.payload_hash == tasks[_taskId].payload_hash;
-        if (!verify) {
-            revert InvalidPayloadHash();
-        }
-
-        //Packet signature verification
-        recoveredSigner = modifiedRecoverSigner(_info.packet_hash, _info.packet_signature);
-        verify = recoveredSigner == checkerAddress;
-        if (!verify) {
-            revert InvalidPacketSignature();
-        } 
-
-        // Result signature verification
-        recoveredSigner = modifiedRecoverSigner(_info.result_hash, _info.result_signature);
-        verify = recoveredSigner == checkerAddress;
-        if (!verify) {
-            revert InvalidResultSignature();
-        }
-
-        (bool val,) = address(tasks[_taskId].callback_address).call(abi.encodeWithSelector(tasks[_taskId].callback_selector, _taskId, _info.result));
-        require(val == true, "Callback error");
-
-        tasks[_taskId].completed = true;
-
-        emit logCompletedTask(_taskId, _info.payload_hash, _info.result_hash);
+   function postExecution(uint256 _taskId, string memory _sourceNetwork, PostExecutionInfo memory _info) external {
+    // First, check if the task is already completed
+    if (tasks[_taskId].completed) {
+        revert TaskAlreadyCompleted();
     }
+
+    // Payload hash verification from tasks struct
+    if (_info.payload_hash != tasks[_taskId].payload_hash) {
+        revert InvalidPayloadHash();
+    }
+
+    // Packet signature verification
+    if (modifiedRecoverSigner(_info.packet_hash, _info.packet_signature) != route[_sourceNetwork]) {
+        revert InvalidPacketSignature();
+    }
+
+    // Result signature verification
+    if (modifiedRecoverSigner(_info.result_hash, _info.result_signature) != route[_sourceNetwork]) {
+        revert InvalidResultSignature();
+    }
+
+    // All checks passed, continue with the function execution
+    tasks[_taskId].completed = true;
+
+    emit logCompletedTask(_taskId, _info.payload_hash, _info.result_hash);
+
+    (bool val, ) = address(tasks[_taskId].callback_address).call(
+        abi.encodeWithSelector(tasks[_taskId].callback_selector, _taskId, _info.result)
+    );
+    if (!val) {
+        revert CallbackError();
+    }
+}
 
     /// @param _userAddress  User address
     /// @param _sourceNetwork Source network of msg
@@ -287,7 +288,7 @@ contract Gateway {
         bytes32 _payloadHash,
         ExecutionInfo memory _info
     )
-        public
+        external
     {
 
         preExecution(Task(address(this), this.callback.selector, _userAddress, _sourceNetwork, _routingInfo, _payloadHash, false), _info);

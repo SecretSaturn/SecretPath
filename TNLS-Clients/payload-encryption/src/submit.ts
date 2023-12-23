@@ -6,7 +6,7 @@ import secureRandom from "secure-random";
 
 export function setupSubmit(element: HTMLButtonElement) {
 
-    const publicClientAddress = '0x7D2933889Ba1c25153A109236783C3C94Fec6880'
+    const publicClientAddress = '0x1E2d6bd7cE302DAe284373514c5Ca6826f6f214B'
     const routing_info = "secret16cv5wll9ed5dqww47g0u5grprpn0eertuzg3cu"
     const routing_code_hash = "12f9880e67d423742dd1009ae1764d1f113510baf427bdfae3ea2a5607a7c63a"
 
@@ -66,7 +66,7 @@ export function setupSubmit(element: HTMLButtonElement) {
         // const method = 'eth_sign';
 
         //get Metamask to sign the payload with personal_sign
-        const cyphertextHash = keccak256(Buffer.from(ciphertext))
+        //const cyphertextHash = keccak256(Buffer.from(ciphertext))
         //const payloadHash = keccak256(Buffer.from("\x19Ethereum Signed Message:\n" + "32" + cyphertextHash.substring(2)))
         const payloadHash = keccak256(Buffer.from("\x19Ethereum Signed Message:\n" + ciphertext.length + ciphertext))
         const msgParams = ciphertext.toString('ASCII')
