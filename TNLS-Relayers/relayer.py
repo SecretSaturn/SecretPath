@@ -27,6 +27,8 @@ from eth_interface import EthInterface
 from eth_interface import EthContract
 from scrt_interface import SCRTInterface
 from scrt_interface import SCRTContract
+from dotenv import load_dotenv
+import os
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -36,15 +38,43 @@ class Relayer:
                  dict_of_names_to_interfaces: Dict[str, Tuple[BaseChainInterface, BaseContractInterface, str, str]],
                  num_loops=None):
 
-        gatewayAddress = "0x5327cE8CD4Dfafb24C2a058A98d66e5f6483EaE1"
+        # Load .env file
+        load_dotenv()
 
+        # Read variables from .env
+        gatewayAddress = os.getenv('GATEWAY_ADDRESS')
+        eth_private_key = os.getenv('ETH_PRIVATE_KEY')
+        eth_address = os.getenv('ETH_ADDRESS')
+        scrt_private_key = os.getenv('SCRT_PRIVATE_KEY')
+        scrt_address = os.getenv('SCRT_ADDRESS')
+        scrt_contract_address = os.getenv('SCRT_CONTRACT_ADDRESS')
+        scrt_api_url = os.getenv('SCRT_API_URL')
+        scrt_chain_id = os.getenv('SCRT_CHAIN_ID')
+        verification_key = os.getenv('VERIFICATION_KEY')
+        encryption_key = os.getenv('ENCRYPTION_KEY')
+
+        # Load ABI files
         eth_abi = json.load(open("eth_abi.json", 'r'))
         scrt_abi = json.dumps(json.load(open("secret_abi.json", 'r')))
-        eth_base_interface = EthInterface(private_key="a9afa5cda00e31eae3883f847f4e5dee78e66086786e656124eef2380433c580", address="0x50FcF0c327Ee4341313Dd5Cb987f0Cd289Be6D4D", contract_address = gatewayAddress)
-        eth_contract_interface = EthContract(interface=eth_base_interface,address=gatewayAddress,abi=eth_abi)
-        scrt_base_interface = SCRTInterface(private_key="d3215fc169d65a39ddb610b97f074da359436def1abc0f56fd1dd2b83adcb9af", address="secret1w3s62kcqlhv3l3rplegnyvp0e5hlrsyrw79htv", api_url="https://api.pulsar.scrttestnet.com", chain_id="pulsar-3", provider=None)
-        scrt_contract_interface = SCRTContract(interface=scrt_base_interface, address="secret1s9j8ejmhwfjytdrh8sxg05gn9jpuuzxmf2eulz",abi=scrt_abi)
-        keys_dict = {'secret': {'verification': '0x4183e0FC9a37EDf99d4387B2ecD97E581cbedc42','encryption': 'AjvNv1VH/B96I4vi6jdhS3vHsjxvXK4VS6tylhpW7keg'}}
+
+        # Initialize Ethereum Interface and Contract
+        eth_base_interface = EthInterface(private_key=eth_private_key, address=eth_address,
+                                          contract_address=gatewayAddress)
+        eth_contract_interface = EthContract(interface=eth_base_interface, address=gatewayAddress, abi=eth_abi)
+
+        # Initialize Secret Interface and Contract
+        scrt_base_interface = SCRTInterface(private_key=scrt_private_key, address=scrt_address, api_url=scrt_api_url,
+                                            chain_id=scrt_chain_id, provider=None)
+        scrt_contract_interface = SCRTContract(interface=scrt_base_interface,
+                                               address=scrt_contract_address, abi=scrt_abi)
+
+        # Setup keys dictionary
+        keys_dict = {
+            'secret': {
+                'verification': verification_key,
+                'encryption': encryption_key
+            }
+        }
         """
         Encryption key: AjvNv1VH/B96I4vi6jdhS3vHsjxvXK4VS6tylhpW7keg
         Public key: 0x043bcdbf5547fc1f7a238be2ea37614b7bc7b23c6f5cae154bab72961a56ee47a0b711ae0f62f0a6955045fa9e424379c296085cd8f1511caf33685f430ab15dde

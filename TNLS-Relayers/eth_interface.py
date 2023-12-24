@@ -185,40 +185,6 @@ class EthContract(BaseContractInterface):
             txn = self.interface.create_transaction(function, *args, **kwargs)
         return self.interface.sign_and_send_transaction(txn)
 
-    """def parse_event_from_txn(self, event_name, txn) -> List[Task]:
-
-        try:
-
-            data = txn.logs[0].data
-            task_id = int.from_bytes(txn.logs[0].topics[1], 'big')
-            print(task_id)
-
-            types = ['string', 'address', 'string', 'string', 'bytes', 'bytes32', 'bytes', 'bytes', 'bytes',
-                     'string', 'bytes12']
-
-            ## With array inputs
-            decodedABI = eth_abi.decode(types,data,strict=False)
-
-            task_list = []
-            args = {'task_id': task_id, 'task_destination_network': 'secret',
-                    'source_network': decodedABI[0],
-                    'user_address': decodedABI[1],
-                    'routing_info': decodedABI[2],
-                    'routing_code_hash':decodedABI[3],
-                    'payload':base64.b64encode(decodedABI[4]).decode('ASCII'),
-                    'payload_hash':base64.b64encode(decodedABI[5]).decode('ASCII'),
-                    'payload_signature':base64.b64encode(decodedABI[6][:-1]).decode('ASCII'),
-                    'user_key': base64.b64encode(decodedABI[7]).decode('ASCII'),
-                    'user_pubkey': base64.b64encode(decodedABI[8]).decode('ASCII'),
-                    'handle': decodedABI[9],
-                    'nonce': base64.b64encode(decodedABI[10]).decode('ASCII')}
-            task_list.append(Task(args))
-
-            return task_list
-
-        except Exception as e:
-            self.logger.warning(e)
-            return []"""
     def parse_event_from_txn(self, event_name, txn) -> List[Task]:
 
             event = self.contract.events[event_name]()
