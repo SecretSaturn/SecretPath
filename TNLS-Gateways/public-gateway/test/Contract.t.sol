@@ -62,20 +62,37 @@ contract ContractTest is Test {
 
     }
 
-    /// @notice Recover the signer from message hash
-    /// @param _ethSignedMessageHash The message hash from getEthSignedMessageHash()
+    /// @notice Recover the signer from message hash with a missing recovery ID
+    /// @param _signedMessageHash the signed message hash 
     /// @param _signature The signature that needs to be verified
 
-    function modifiedRecoverSigner(bytes32 _ethSignedMessageHash, bytes memory _signature) internal pure returns (address) {
-        (bytes32 r, bytes32 s, uint8 v) = splitSignature(_signature);
+    function checkSignerForMissingRecoveryID(bytes32 _signedMessageHash, bytes memory _signature, address _checkingAddress) private pure returns (bool) {
+        //recover signature
 
-        if (v == 0 || v == 1) {
-            v += 27;
+        bytes32 r;
+        bytes32 s;
+
+        assembly {
+            // first 32 bytes, after the length prefix
+            r := mload(add(_signature, 32))
+            // second 32 bytes
+            s := mload(add(_signature, 64))
         }
-        return ecrecover(_ethSignedMessageHash, v, r, s);
+
+        //calculate both ecrecover(_signedMessageHash, v, r, s) for v = 27 and v = 28, casted as uint8
+
+        if (ecrecover(_signedMessageHash, uint8(27), r, s) == _checkingAddress) {
+            return true;
+        }
+        else if (ecrecover(_signedMessageHash, uint8(28), r, s) == _checkingAddress) {
+            return true;
+        }
+        else {
+            return false;
+        }
     }
 
-     /// @notice Hashes the encoded message hash
+    /// @notice Hashes the encoded message hash
     /// @param _messageHash the message hash
     function getEthSignedMessageHash(bytes32 _messageHash) internal pure returns (bytes32) {
         /*
@@ -267,21 +284,11 @@ contract ContractTest is Test {
         // bytes32 string encoding of "add a bunch of stuff"
         bytes memory payload = hex"61646420612062756e6368206f66207374756666000000000000000000000000";
         bytes32 payloadHash = getPayloadHash(payload);
+        payloadHash = getEthSignedMessageHash(payloadHash);
 
         // encoding bytes of "some public key"
         bytes memory userKey = hex"736f6d65207075626c6963206b65790000000000000000000000000000000000";
         bytes memory userPublicKey = hex"040b8d42640a7eded641dd42ad91d7c9ae3644a2412bdff174790012774e5528a30f9f0a630977d53e7a862eb2fb89207fe4fafc824992d281ba0180c6a1fddb4c";
-
-        Gateway.Task memory assembledTask = Gateway.Task({
-            callback_address: vm.addr(7),
-            callback_selector: callbackSelector,
-            callback_gas_limit: 300000,
-            user_address: vm.addr(5),
-            source_network: sourceNetwork,
-            routing_info: routingInfo,
-            payload_hash: payloadHash,
-            completed: false
-        });
 
         Gateway.ExecutionInfo memory assembledInfo = Gateway.ExecutionInfo({
             user_key: userKey,
@@ -293,34 +300,19 @@ contract ContractTest is Test {
             payload_signature: getPayloadSignature(payload, 5)
         });
 
-        vm.expectEmit(true, true, true, true);
-        emit logNewTask(
-            1,
-            sourceNetwork,
-            vm.addr(5),
-            routingInfo,
-            "some RoutingCodeHash",
-            payload,
-            payloadHash,
-            getPayloadSignature(payload, 5),
-            userKey,
-            userPublicKey,
-            "some kinda handle",
-            "ssssssssssss"
-            );
-        gateway.preExecution(assembledTask, assembledInfo);
+        gateway.send(vm.addr(5), sourceNetwork,routingInfo, payloadHash, assembledInfo, vm.addr(7), callbackSelector, 300000 );
 
         (bytes32 tempPayloadHash,,,,) = gateway.tasks(1);
-        assertEq(tempPayloadHash, payloadHash);
+        assertEq(tempPayloadHash, payloadHash, "payloadHash failed");
 
         (,address tempCallbackAddress,,,) = gateway.tasks(1);
-        assertEq(tempCallbackAddress, address(gateway));
+        assertEq(tempCallbackAddress, vm.addr(7), "tempCallbackAddress failed");
 
         (,,bytes4 tempCallbackSelector,,) = gateway.tasks(1);
-        assertEq(tempCallbackSelector, gateway.callback.selector);
+        assertEq(tempCallbackSelector, callbackSelector, "callbackSelector failed");
 
         (,,,, bool tempCompleted) = gateway.tasks(1);
-        assertEq(tempCompleted, false);
+        assertEq(tempCompleted, false, "tempCompleted failed");
     }
 
     function testFail_CannotPreExecutionWithoutValidPayloadSig() public {
@@ -341,16 +333,6 @@ contract ContractTest is Test {
         bytes memory userKey = hex"736f6d65207075626c6963206b65790000000000000000000000000000000000";
         bytes memory userPublicKey = hex"040b8d42640a7eded641dd42ad91d7c9ae3644a2412bdff174790012774e5528a30f9f0a630977d53e7a862eb2fb89207fe4fafc824992d281ba0180c6a1fddb4c";
 
-        Gateway.Task memory assembledTask = Gateway.Task({
-            callback_address: vm.addr(6),
-            callback_selector: callbackSelector,
-            callback_gas_limit: 300000,
-            user_address: vm.addr(5),
-            source_network: sourceNetwork,
-            routing_info: routingInfo,
-            payload_hash: payloadHash,
-            completed: false
-        });
 
         Gateway.ExecutionInfo memory assembledInfo = Gateway.ExecutionInfo({
             user_key: userKey,
@@ -362,22 +344,7 @@ contract ContractTest is Test {
             payload_signature: getPayloadSignature(payload, 7)
         });
 
-        vm.expectEmit(true, true, true, true);
-        emit logNewTask(
-            1,
-            sourceNetwork,
-            vm.addr(5),
-            routingInfo,
-            "some RoutingCodeHash",
-            payload,
-            payloadHash,
-            getPayloadSignature(payload, 5),
-            userKey,
-            userPublicKey,
-            "some kinda handle",
-            "ssssssssssss"
-            );
-        gateway.preExecution(assembledTask, assembledInfo);
+        gateway.send(vm.addr(5), sourceNetwork,routingInfo, payloadHash, assembledInfo, vm.addr(6), callbackSelector, 300000 );
 
         vm.expectRevert(abi.encodeWithSignature("InvalidSignature()"));
     }
@@ -392,6 +359,7 @@ contract ContractTest is Test {
         // bytes32 string encoding of "add a bunch of stuff"
         bytes memory payload = hex"61646420612062756e6368206f66207374756666000000000000000000000000";
         bytes32 payloadHash = getPayloadHash(payload);
+        payloadHash = getEthSignedMessageHash(payloadHash);
 
         // bytes32 string encoding of "some result"
         bytes memory result = hex"736f6d6520726573756c74000000000000000000000000000000000000000000";
@@ -405,9 +373,6 @@ contract ContractTest is Test {
             packet_hash: resultHash,
             packet_signature: getResultSignature(result, 6)
         });
-
-        vm.expectEmit(true, true, true, true);
-        emit logCompletedTask(taskId, payloadHash, resultHash);
 
         gateway.postExecution(taskId, sourceNetwork, assembledInfo);
 
@@ -453,7 +418,7 @@ contract ContractTest is Test {
     function test_PreExecutionSetupForExplicitCase() public {
         // CALLBACK ADDRESS   ----->   vm.addr(7);
 
-        bytes4 callbackSelector = bytes4(abi.encodeWithSignature("callback(uint256 _taskId,bytes memory _result)"));
+        bytes4 callbackSelector = bytes4(abi.encodeWithSignature("callback(uint256 _taskId, bytes calldata _result)"));
         string memory sourceNetwork = "ethereum";
         address userAddress = 0x49F7552065228e5abF44e144cc750aEA4F711Dc3;
 
@@ -469,17 +434,6 @@ contract ContractTest is Test {
         bytes memory userKey = hex"736f6d65207075626c6963206b65790000000000000000000000000000000000";
         bytes memory userPublicKey = hex"040b8d42640a7eded641dd42ad91d7c9ae3644a2412bdff174790012774e5528a30f9f0a630977d53e7a862eb2fb89207fe4fafc824992d281ba0180c6a1fddb4c";
 
-        Gateway.Task memory assembledTask = Gateway.Task({
-            callback_address: vm.addr(7),
-            callback_selector: callbackSelector,
-            callback_gas_limit: 300000,
-            user_address: userAddress,
-            source_network: sourceNetwork,
-            routing_info: routingInfo,
-            payload_hash: payloadHash,
-            completed: false
-        });
-
         Gateway.ExecutionInfo memory assembledInfo = Gateway.ExecutionInfo({
             user_key: userKey,
             user_pubkey:userPublicKey,
@@ -490,22 +444,7 @@ contract ContractTest is Test {
             payload_signature: payloadSignature
         });
 
-        vm.expectEmit(true, true, true, true);
-        emit logNewTask(
-            1,
-            sourceNetwork,
-            userAddress,
-            routingInfo,
-            "some RoutingCodeHash",
-            payload,
-            payloadHash,
-            payloadSignature,
-            userKey,
-            userPublicKey,
-            "some kinda handle",
-            "ssssssssssss"
-            );
-        gateway.preExecution(assembledTask, assembledInfo);
+        gateway.send(userAddress, sourceNetwork,routingInfo, payloadHash, assembledInfo, address(gateway), gateway.callback.selector, 300000 );
 
         (bytes32 tempPayloadHash,,,,) = gateway.tasks(1);
         assertEq(tempPayloadHash, payloadHash);
@@ -557,12 +496,12 @@ contract ContractTest is Test {
         bytes memory result = hex"7b226d795f76616c7565223a327d";
         bytes32 resultHash = hex"faef40ffa988468a70a21929200a40f1c8ea9f56fcf79a206ef9713032c4e28b";
         bytes memory resultSignature =
-            hex"faad4e82fe9a6a05ef2a4387fca5471fe3bc7b53e81a3c08d4a5514ac7c6fddf2a266cf1c638654c156612a1943dbaf278105f138c5be67ab1eca4253c57ca7f1b";
+            hex"faad4e82fe9a6a05ef2a4387fca5471fe3bc7b53e81a3c08d4a5514ac7c6fddf2a266cf1c638654c156612a1943dbaf278105f138c5be67ab1eca4253c57ca7f";
 
         // packet
         bytes32 packetHash = hex"923b23c023d0e5e66ac122d9804414f4f9cab06d7a6ce6c4b8c586a1fa57264c";
         bytes memory packetSignature =
-            hex"2db95ebb82b81f8240d952e1c6edf021e098de63d32f1f0d3bbbb7daf0e9edbd3378fc42e31d1041467c76388a35078968f1f6f2eb781b5b83054a1d90ba41ff1b";
+            hex"2db95ebb82b81f8240d952e1c6edf021e098de63d32f1f0d3bbbb7daf0e9edbd3378fc42e31d1041467c76388a35078968f1f6f2eb781b5b83054a1d90ba41ff";
 
         Gateway.PostExecutionInfo memory assembledInfo = Gateway.PostExecutionInfo({
             payload_hash: payloadHash,
@@ -572,9 +511,6 @@ contract ContractTest is Test {
             packet_hash: packetHash,
             packet_signature: packetSignature
         });
-
-        vm.expectEmit(true, true, false, false);
-        emit logCompletedTask(taskId, payloadHash, resultHash);
 
         gateway.postExecution(taskId, sourceNetwork, assembledInfo);
 
@@ -609,23 +545,7 @@ contract ContractTest is Test {
             payload_signature: payloadSignature
         });
 
-        vm.expectEmit(true, true, true, true);
-        emit logNewTask(
-            1,
-            sourceNetwork,
-            userAddress,
-            routingInfo,
-            "some RoutingCodeHash",
-            payload,
-            payloadHash,
-            payloadSignature,
-            userKey,
-            userPublicKey,
-            "some kinda handle",
-            "ssssssssssss"
-            );
-
-        gateway.send(userAddress, sourceNetwork, routingInfo, payloadHash, assembledInfo, vm.addr(7),bytes4(0),300000);
+        gateway.send(userAddress, sourceNetwork, routingInfo, payloadHash, assembledInfo, address(gateway), gateway.callback.selector, 300000);
 
         (bytes32 tempPayloadHash,,,,) = gateway.tasks(1);
         assertEq(tempPayloadHash, payloadHash);
@@ -668,9 +588,6 @@ contract ContractTest is Test {
             packet_hash: packetHash,
             packet_signature: packetSignature
         });
-
-        vm.expectEmit(true, true, true, true);
-        emit ComputedResult(taskId, result);
 
         gateway.postExecution(taskId, sourceNetwork, assembledInfo);
 

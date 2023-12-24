@@ -6,9 +6,18 @@ import secureRandom from "secure-random";
 
 export function setupSubmit(element: HTMLButtonElement) {
 
-    const publicClientAddress = '0x5749b422f34ec5177f09CF7c321fbC73546EB8C8'
-    const routing_info = "secret1guad7jcwdata8lmrr8c4v2av8y32fd97pf9hl0"
+    const publicClientAddress = '0x5327cE8CD4Dfafb24C2a058A98d66e5f6483EaE1'
+    const routing_info = "secret1djxudt8x4pgwr3n20xpjymuk4pdvysdh50uq0q"
     const routing_code_hash = "288e2d7d77122540cefb1264002f101f0375e3dd77618668bee097ef0d2acf3f"
+
+     //0x3309086633802E71fa00388cc0b86F809C910515
+     const Resulthash = Buffer.from("d2f0251ba51a3d077b9e771adf992258f9f5360bedef6fc214158cdc3bb1fdfc",'hex')
+     console.log(Resulthash)
+     const resultSignature = Buffer.from("77c823d555b51476d14cbd2da9f51e28f4da70fc645094a6a5f61a650380251d08bfe884662215bb41dd693a69242bec4164edde2682ed08654496a613ba2ce21b",'hex')
+ 
+     const pubkey_result = recoverPublicKey(Resulthash, resultSignature)
+     console.log(`Verify this matches the pubkey_result address: ${computeAddress(pubkey_result)}`)
+ 
 
     // @ts-ignore
     const provider = new ethers.providers.Web3Provider(window.ethereum);
@@ -65,14 +74,19 @@ export function setupSubmit(element: HTMLButtonElement) {
         // const params = [from, msgParams];
         // const method = 'eth_sign';
 
-        //get Metamask to sign the payload with personal_sign
+         //get Metamask to sign the payload with personal_sign
+         //const ciphertextHash = keccak256(Buffer.from(ciphertext))
+         //const payloadHash = keccak256(Buffer.concat([Buffer.from("\x19Ethereum Signed Message:\n"),Buffer.from(`${ciphertext.length}`),ciphertext]))
+         //const msgParams = ciphertextHash
+
+        //get Metamask to sign the payloadhash with personal_sign
         const ciphertextHash = keccak256(Buffer.from(ciphertext))
-        //this is what metamask really signs with personal_sign
+        //this is what metamask really signs with personal_sign, it prepends the ethereum signed message here
         const payloadHash = keccak256(Buffer.concat([Buffer.from("\x19Ethereum Signed Message:\n32"),Buffer.from(ciphertextHash.substring(2),'hex')]))
         //this is what we provide to metamask
         const msgParams = ciphertextHash;
         const from = myAddress;
-        const params = [from, ciphertextHash];
+        const params = [from, msgParams];
         const method = 'personal_sign';
         console.log(`Payload Hash: ${payloadHash}`)
 

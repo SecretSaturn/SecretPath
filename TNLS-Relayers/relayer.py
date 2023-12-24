@@ -36,14 +36,14 @@ class Relayer:
                  dict_of_names_to_interfaces: Dict[str, Tuple[BaseChainInterface, BaseContractInterface, str, str]],
                  num_loops=None):
 
-        gatewayAddress = "0x5749b422f34ec5177f09CF7c321fbC73546EB8C8"
+        gatewayAddress = "0x5327cE8CD4Dfafb24C2a058A98d66e5f6483EaE1"
 
         eth_abi = json.load(open("eth_abi.json", 'r'))
         scrt_abi = json.dumps(json.load(open("secret_abi.json", 'r')))
         eth_base_interface = EthInterface(private_key="a9afa5cda00e31eae3883f847f4e5dee78e66086786e656124eef2380433c580", address="0x50FcF0c327Ee4341313Dd5Cb987f0Cd289Be6D4D", contract_address = gatewayAddress)
         eth_contract_interface = EthContract(interface=eth_base_interface,address=gatewayAddress,abi=eth_abi)
         scrt_base_interface = SCRTInterface(private_key="d3215fc169d65a39ddb610b97f074da359436def1abc0f56fd1dd2b83adcb9af", address="secret1w3s62kcqlhv3l3rplegnyvp0e5hlrsyrw79htv", api_url="https://api.pulsar.scrttestnet.com", chain_id="pulsar-3", provider=None)
-        scrt_contract_interface = SCRTContract(interface=scrt_base_interface, address="secret1fwgnn9nylz82anneyej586lv06ek8v4d2vcyg0",abi=scrt_abi)
+        scrt_contract_interface = SCRTContract(interface=scrt_base_interface, address="secret1s9j8ejmhwfjytdrh8sxg05gn9jpuuzxmf2eulz",abi=scrt_abi)
         keys_dict = {'secret': {'verification': '0x4183e0FC9a37EDf99d4387B2ecD97E581cbedc42','encryption': 'AjvNv1VH/B96I4vi6jdhS3vHsjxvXK4VS6tylhpW7keg'}}
         """
         Encryption key: AjvNv1VH/B96I4vi6jdhS3vHsjxvXK4VS6tylhpW7keg
@@ -102,7 +102,6 @@ class Relayer:
                 transactions = chain_interface.get_transactions(contract_interface.address, height=block_num)
                 for transaction in transactions:
                     tasks = contract_interface.parse_event_from_txn(evt_name, transaction)
-                    print(tasks)
                     for task in tasks:
                         task_id = task.task_data['task_id']
                         self.task_ids_to_statuses[task_id] = 'Received from {}'.format(name)
@@ -145,7 +144,6 @@ class Relayer:
         def _thread_func():
             while len(self.task_list) > 0:
                 task = self.task_list.pop()
-                print(task)
                 self.route_transaction(task)
 
         if len(self.task_threads) < 5 and len(self.task_list) > 0:

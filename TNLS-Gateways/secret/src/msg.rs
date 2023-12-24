@@ -115,14 +115,6 @@ impl PreExecutionMsg {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum SecretMsg {
-    CreateRn {
-        cb_msg: Binary,
-        entropy: String,
-        max_blk_delay: Option<u64>,
-        purpose: Option<String>,
-        receiver_addr: Option<Addr>,
-        receiver_code_hash: String,
-    },
     Input {
         message: PrivContractHandleMsg,
     },

@@ -83,10 +83,9 @@ class EthInterface(BaseChainInterface):
         """
         # sign task
         signed_tx = self.provider.eth.account.sign_transaction(tx, self.private_key)
-        print(signed_tx)
         # send task
         tx_hash = self.provider.eth.send_raw_transaction(signed_tx.rawTransaction)
-        print(tx_hash.hex())
+        print('Tx Hash:', tx_hash.hex())
         return tx_hash
 
     def get_transactions(self, address, height=None):
@@ -143,7 +142,6 @@ class EthContract(BaseContractInterface):
     def __init__(self, interface, address, abi, **_kwargs):
         self.address = address
         self.abi = abi
-        print(abi)
         self.interface = interface
         self.contract = interface.provider.eth.contract(address=self.address, abi=self.abi)
         basicConfig(
@@ -187,18 +185,13 @@ class EthContract(BaseContractInterface):
             txn = self.interface.create_transaction(function, *args, **kwargs)
         return self.interface.sign_and_send_transaction(txn)
 
-    def parse_event_from_txn(self, event_name, txn) -> List[Task]:
+    """def parse_event_from_txn(self, event_name, txn) -> List[Task]:
 
         try:
-            event = self.contract.events[event_name]()
-            tasks = event.process_receipt(txn)
-            print("dgsdgdfhgsghdg")
-            print(tasks)
-
 
             data = txn.logs[0].data
             task_id = int.from_bytes(txn.logs[0].topics[1], 'big')
-            print(data)
+            print(task_id)
 
             types = ['string', 'address', 'string', 'string', 'bytes', 'bytes32', 'bytes', 'bytes', 'bytes',
                      'string', 'bytes12']
@@ -219,14 +212,26 @@ class EthContract(BaseContractInterface):
                     'user_pubkey': base64.b64encode(decodedABI[8]).decode('ASCII'),
                     'handle': decodedABI[9],
                     'nonce': base64.b64encode(decodedABI[10]).decode('ASCII')}
-            print(args)
             task_list.append(Task(args))
 
             return task_list
 
         except Exception as e:
             self.logger.warning(e)
-            return []
+            return []"""
+    def parse_event_from_txn(self, event_name, txn) -> List[Task]:
+
+            event = self.contract.events[event_name]()
+            try:
+                tasks = event.process_receipt(txn)
+            except Exception as e:
+                self.logger.warning(e)
+                return []
+            task_list = []
+            for task in tasks:
+                args = task['args']
+                task_list.append(Task(args))
+            return task_list
 
 
 if __name__ == "__main__":
