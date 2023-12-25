@@ -206,8 +206,8 @@ export function setupSubmit(element: HTMLButtonElement) {
         </p>
 
         <h2>Transaction Parameters</h2>
-        <p><b>Tx Hash: </b><a href="https://arbiscan.io/tx/${txHash}" target="_blank">${txHash}</a></p>
-        <p><b>Gateway Address (to check the postExecution callback) </b><a href="https://arbiscan.io/address/${publicClientAddress}" target="_blank">${publicClientAddress}</a></p>
+        <p><b>Tx Hash: </b><a href="https://polygonscan.com/tx/${txHash}" target="_blank">${txHash}</a></p>
+        <p><b>Gateway Address (to check the postExecution callback) </b><a href="https://polygonscan.com/address/${publicClientAddress}" target="_blank">${publicClientAddress}</a></p>
         <p style="font-size: 0.8em;">${JSON.stringify(tx_params)}</p>
         `
     })
