@@ -11,9 +11,9 @@ export function setupSubmit(element: HTMLButtonElement) {
     const routing_code_hash = "288e2d7d77122540cefb1264002f101f0375e3dd77618668bee097ef0d2acf3f"
 
      //0x3309086633802E71fa00388cc0b86F809C910515
-     const Resulthash = Buffer.from("323e22748f8dcb2a276a0b2853e229ed5291aad567214a8d8d6245b3e8244ade",'hex')
+     const Resulthash = Buffer.from("923b23c023d0e5e66ac122d9804414f4f9cab06d7a6ce6c4b8c586a1fa57264c",'hex')
      console.log(Resulthash)
-     const resultSignature = Buffer.from("84763a5b8478039bc068eeffbd55b98ecf7ea65b3adddc38a55f2885fc830e9c0729585758b4c84d1b0cc8e606752f30f535bda6b2166ef0a17b8a396f4f7fd71c",'hex')
+     const resultSignature = Buffer.from("2db95ebb82b81f8240d952e1c6edf021e098de63d32f1f0d3bbbb7daf0e9edbd3378fc42e31d1041467c76388a35078968f1f6f2eb781b5b83054a1d90ba41ff1c",'hex')
  
      const pubkey_result = recoverPublicKey(Resulthash, resultSignature)
      console.log(`Verify this matches the pubkey_result address: ${computeAddress(pubkey_result)}`)

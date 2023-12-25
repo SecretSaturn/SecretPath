@@ -4,7 +4,7 @@ import { setupSubmit } from './submit'
 
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
 <header>
-  <h1>Fortress Labs</h1>
+  <h1>Atbash Labs</h1>
   <div id="links">
     <a href="">
     <div class="card">
