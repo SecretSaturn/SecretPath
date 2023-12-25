@@ -292,12 +292,12 @@ contract Gateway {
     }
 
     // Result signature verification
-    if (checkSignerForMissingRecoveryID(_info.result_hash, _info.result_signature, checkerAddress)) {
+    if (!checkSignerForMissingRecoveryID(_info.result_hash, _info.result_signature, checkerAddress)) {
         revert InvalidResultSignature();
     }
 
     // Packet signature verification
-    if (checkSignerForMissingRecoveryID(_info.packet_hash, _info.packet_signature, checkerAddress)) {
+    if (!checkSignerForMissingRecoveryID(_info.packet_hash, _info.packet_signature, checkerAddress)) {
         revert InvalidPacketSignature();
     }
 

@@ -40,7 +40,8 @@ const initializeGateway = async (
       builder: "",
     },
     {
-      gasLimit: 5000000,
+      gasLimit: 3000000,
+      gasPriceInFeeDenom: 0.05,
     }
   );
 
@@ -75,7 +76,8 @@ const initializeGateway = async (
       label: "test_secret_gateway" + Math.ceil(Math.random() * 10000), // The label should be unique for every contract, add random string in order to maintain uniqueness
     },
     {
-      gasLimit: 5000000,
+      gasLimit: 100000,
+      gasPriceInFeeDenom: 0.05,
     }
   );
 
@@ -117,7 +119,8 @@ const initializeContract = async (
       builder: "",
     },
     {
-      gasLimit: 5000000,
+      gasLimit: 1500000,
+      gasPriceInFeeDenom: 0.05,
     }
   );
 
@@ -155,7 +158,8 @@ const initializeContract = async (
       label: "test_sample_contract" + Math.ceil(Math.random() * 10000),
     },
     {
-      gasLimit: 5000000,
+      gasLimit: 100000,
+      gasPriceInFeeDenom: 0.05,
     }
   );
 

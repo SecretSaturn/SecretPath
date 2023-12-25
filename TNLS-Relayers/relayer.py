@@ -198,7 +198,7 @@ class Relayer:
             self.logger.info('Polled for transactions, now have {} remaining'.format(len(self.task_list)))
             self.task_list_handle()
             self.loops_run += 1
-            sleep(5)
+            sleep(1)
         pass
 
     def __str__(self):

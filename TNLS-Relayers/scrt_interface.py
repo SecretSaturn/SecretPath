@@ -175,7 +175,7 @@ class SCRTContract(BaseContractInterface):
         tx_options = CreateTxOptions(
             msgs=[txn_msgs],
             gas=500000,
-            gas_prices='1uscrt',
+            gas_prices='0.05uscrt',
             gas_adjustment=1,
             sequence=None,
             account_number=None

@@ -6,6 +6,7 @@ from pprint import pprint
 from typing import List, Mapping, Sequence
 
 from web3 import Web3
+from web3.middleware import geth_poa_middleware
 from eth_abi import abi
 import eth_abi
 
@@ -30,9 +31,11 @@ class EthInterface(BaseChainInterface):
             """API_URL = infura_endpoint.replace("{ENDPOINT}",
                                               "mainnet") if API_MODE != "dev" else infura_endpoint.replace(
                 "{ENDPOINT}", "goerli")"""
-            API_URL= "https://sepolia.infura.io/v3/9aa3d95b3bc440fa88ea12eaa4456161"
+            API_URL= "https://polygon-bor.publicnode.com"
 
             provider = Web3(Web3.HTTPProvider(API_URL))
+            provider.middleware_onion.inject(geth_poa_middleware, layer=0)
+        
         self.private_key = private_key
         self.provider = provider
         self.address = address
@@ -55,7 +58,7 @@ class EthInterface(BaseChainInterface):
         if kwargs is {}:
             tx = contract_function(*args).build_transaction({
                 'from': self.address,
-                'gas': 300000,
+                'gas': 3000000,
                 'nonce': nonce,
                 #'maxFeePerGas': self.provider.eth.max_priority_fee
                 #'maxPriorityFeePerGas': self.provider.eth.max_priority_fee,
@@ -63,14 +66,14 @@ class EthInterface(BaseChainInterface):
         elif len(args) == 0:
             tx = contract_function(**kwargs).build_transaction({
                 'from': self.address,
-                'gas': 300000,
+                'gas': 3000000,
                 'nonce': nonce,
                 #'maxPriorityFeePerGas': self.provider.eth.max_priority_fee,
             })
         else:
             tx = contract_function(*args, **kwargs).build_transaction({
                 'from': self.address,
-                'gas': 300000,
+                'gas': 3000000,
                 'nonce': nonce,
                 #'maxPriorityFeePerGas': self.provider.eth.max_priority_fee,
             })
@@ -201,8 +204,5 @@ class EthContract(BaseContractInterface):
 
 
 if __name__ == "__main__":
-    """interface = EthInterface(address='0xEB7D94Cefa561E83901aD87cB91eFcA73a1Fc812')"""
-    interface = EthInterface(private_key="a9afa5cda00e31eae3883f847f4e5dee78e66086786e656124eef2380433c580", address="0x50FcF0c327Ee4341313Dd5Cb987f0Cd289Be6D4D")
-    txs = interface.get_last_txs()
-    pprint(txs)
+    interface = EthInterface(address='0xEB7D94Cefa561E83901aD87cB91eFcA73a1Fc812')
 
