@@ -25,17 +25,11 @@ class EthInterface(BaseChainInterface):
             """
             If we don't have a set provider, read it from config.
             """
-            infura_endpoint = os.environ.get('INFURA_ENDPOINT')
+            api_endpoint = os.environ.get('API_ENDPOINT')
 
-            API_MODE = "dev"
-            """API_URL = infura_endpoint.replace("{ENDPOINT}",
-                                              "mainnet") if API_MODE != "dev" else infura_endpoint.replace(
-                "{ENDPOINT}", "goerli")"""
-            API_URL= "https://polygon-bor.publicnode.com"
-
-            provider = Web3(Web3.HTTPProvider(API_URL))
+            provider = Web3(Web3.HTTPProvider(api_endpoint))
             provider.middleware_onion.inject(geth_poa_middleware, layer=0)
-        
+
         self.private_key = private_key
         self.provider = provider
         self.address = address

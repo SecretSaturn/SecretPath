@@ -301,9 +301,8 @@ contract Gateway {
         revert InvalidPacketSignature();
     }
 
-    task.completed = true;
-    task.payload_hash = bytes32(0);
-    tasks[_taskId] = task;
+    tasks[_taskId].completed = true;
+    tasks[_taskId].payload_hash = bytes32(0);
 
     emit logCompletedTask(_taskId, _info.payload_hash, _info.result_hash);
 
