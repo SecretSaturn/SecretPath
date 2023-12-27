@@ -343,41 +343,44 @@ fn post_execution(deps: DepsMut, _env: Env, msg: PostExecutionMsg) -> StdResult<
     // convert the hashes and signatures into hex byte strings
     // NOTE: we need to perform the additional sha_256 because that is what the secret network API method does
     // NOTE: The result_signature and packet_signature are both missing the recovery ID (v = 0 or 1), due to a Ethereum bug (v = 27 or 28).
-    // we need to manually check both recovery IDs (v = 27 && v = 28) in the solidity contract. (i've leaved this the hard way.)
+    // we need to either manually check both recovery IDs (v = 27 && v = 28) in the solidity contract. (i've leaved this the hard way.)
 
-        // Load the original public key
-    let public_key = CONFIG.load(deps.storage)?.signing_keys.pk;
+    // or we can find out the two recovery IDs inside of this contract here and keep the solidity contract slim (which is probably the better way when it comes to gas costs):
 
-    // Recover and compare public keys for result
-    let result_public_key_27 = deps.api.secp256k1_recover_pubkey(&result_hash, &result_signature, 27).unwrap_or(Vec::new());
-    let result_public_key_28 = deps.api.secp256k1_recover_pubkey(&result_hash, &result_signature, 28).unwrap_or(Vec::new());
+    // Load the original public key from storage
+    let public_key_data = CONFIG.load(deps.storage)?.signing_keys.pk;
+ 
+    // Deserialize the uncompressed public key
+    let uncompressed_public_key = PublicKey::parse(&public_key_data).map_err(|err| StdError::generic_err(err.to_string()))?;
+ 
+    // Compress the public key
+    let compressed_public_key = uncompressed_public_key.serialize_compressed();
 
-    let result_recovery_id = if result_public_key_27 == public_key {
+    // Recover and compare public keys for result, do v = 0 (= 27 in ethereum) and v = 1 (= 28 in ethereum)
+    let result_public_key_27 = {deps.api.secp256k1_recover_pubkey(&sha_256(&result_hash), &result_signature, 0).map_err(|err| StdError::generic_err(err.to_string()))?};
+    let result_public_key_28 = {deps.api.secp256k1_recover_pubkey(&sha_256(&result_hash), &result_signature, 1).map_err(|err| StdError::generic_err(err.to_string()))?};
+
+    let result_recovery_id = if result_public_key_27 == compressed_public_key {
         27
-    } else if result_public_key_28 == public_key {
+    } else if result_public_key_28 == compressed_public_key {
         28
     }
     else {
-        27
+        return Err(StdError::generic_err("Generation of Recovery ID for Result Signature failed"));
     };
 
-    // Recover and compare public keys for packet
-    let packet_public_key_27 = deps.api.secp256k1_recover_pubkey(&packet_hash, &packet_signature, 27).unwrap_or(Vec::new());
-    let packet_public_key_28 = deps.api.secp256k1_recover_pubkey(&packet_hash, &packet_signature, 28).unwrap_or(Vec::new());
+    // Recover and compare public keys for packet, do v = 0 (= 27 in ethereum) and v = 1 (= 28 in ethereum)
+    let packet_public_key_27 = {deps.api.secp256k1_recover_pubkey(&sha_256(&packet_hash), &packet_signature, 0).map_err(|err| StdError::generic_err(err.to_string()))?};
+    let packet_public_key_28 = {deps.api.secp256k1_recover_pubkey(&sha_256(&packet_hash), &packet_signature, 1).map_err(|err| StdError::generic_err(err.to_string()))?};
 
-    let packet_recovery_id = if packet_public_key_27 == public_key {
+    let packet_recovery_id = if packet_public_key_27 == compressed_public_key {
         27
-    } else if packet_public_key_28 == public_key {
+    } else if packet_public_key_28 == compressed_public_key {
         28
     }
     else {
-        27
+        return Err(StdError::generic_err("Generation of Recovery ID for Packet Signature failed"));
     };
-
-    // convert the hashes and signatures into hex byte strings
-    // NOTE: we need to perform the additional sha_256 because that is what the secret network API method does
-    // NOTE: The result_signature and packet_signature are both missing the recovery ID (v = 0 or 1), due to a Ethereum bug (v = 27 or 28).
-    // we need to manually check both recovery IDs (v = 27 && v = 28) in the solidity contract (i've leaved this the hard way).
 
     let payload_hash = format!(
         "0x{}",

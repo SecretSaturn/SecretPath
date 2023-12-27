@@ -102,36 +102,6 @@ contract Gateway {
         return ecrecover(_signedMessageHash, v, r, s);
     }
 
-    /// @notice Recover the signer from message hash with a missing recovery ID
-    /// @param _signedMessageHash the signed message hash 
-    /// @param _signature The signature that needs to be verified
-
-    function checkSignerForMissingRecoveryID(bytes32 _signedMessageHash, bytes memory _signature, address _checkingAddress) private pure returns (bool) {
-        //recover signature
-
-        bytes32 r;
-        bytes32 s;
-
-        assembly {
-            // first 32 bytes, after the length prefix
-            r := mload(add(_signature, 32))
-            // second 32 bytes
-            s := mload(add(_signature, 64))
-        }
-
-        //calculate both ecrecover(_signedMessageHash, v, r, s) for v = 27 and v = 28, casted as uint8
-
-        if (ecrecover(_signedMessageHash, uint8(27), r, s) == _checkingAddress) {
-            return true;
-        }
-        else if (ecrecover(_signedMessageHash, uint8(28), r, s) == _checkingAddress) {
-            return true;
-        }
-        else {
-            return false;
-        }
-    }
-
     /// @notice Hashes the encoded message hash
     /// @param _messageHash the message hash
     function getEthSignedMessageHash(bytes32 _messageHash) private pure returns (bytes32) {
@@ -240,9 +210,8 @@ contract Gateway {
     function preExecution(Task memory _task, ExecutionInfo memory _info) private {
 
         // Payload hash signature verification
-        bool verifySig = recoverSigner(_task.payload_hash, _info.payload_signature) == _task.user_address;
 
-        if (!verifySig) {
+        if (recoverSigner(_task.payload_hash, _info.payload_signature) != _task.user_address) {
             revert InvalidSignature();
         }
 
@@ -292,12 +261,12 @@ contract Gateway {
     }
 
     // Result signature verification
-    if (!checkSignerForMissingRecoveryID(_info.result_hash, _info.result_signature, checkerAddress)) {
+    if (recoverSigner(_info.result_hash, _info.result_signature) != checkerAddress) {
         revert InvalidResultSignature();
     }
 
     // Packet signature verification
-    if (!checkSignerForMissingRecoveryID(_info.packet_hash, _info.packet_signature, checkerAddress)) {
+    if (recoverSigner(_info.packet_hash, _info.packet_signature) != checkerAddress) {
         revert InvalidPacketSignature();
     }
 
@@ -327,10 +296,10 @@ contract Gateway {
 
     function send(
         address _userAddress,
-        string memory _sourceNetwork,
-        string memory _routingInfo,
+        string calldata _sourceNetwork,
+        string calldata _routingInfo,
         bytes32 _payloadHash,
-        ExecutionInfo memory _info,
+        ExecutionInfo calldata _info,
         address _callbackAddress, 
         bytes4 _callbackSelector,
         uint32 _callbackGasLimit
