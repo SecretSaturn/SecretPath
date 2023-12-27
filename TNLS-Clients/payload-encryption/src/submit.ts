@@ -6,8 +6,8 @@ import secureRandom from "secure-random";
 
 export function setupSubmit(element: HTMLButtonElement) {
 
-    const publicClientAddress = '0x6Df3Dbe48C8CE6DB408Cb44cc942cc05d7Dc48fB'
-    const routing_info = "secret19x9zmnrdl98nrgc24cmt227qx5svskg6qkf9k6"
+    const publicClientAddress = '0x3348CB2EC81AA9152c11fdf903821683463d9587'
+    const routing_info = "secret10g645mm34sqs02eljgau9mfuen9kfdvmq2glfz"
     const routing_code_hash = "288e2d7d77122540cefb1264002f101f0375e3dd77618668bee097ef0d2acf3f"
 
      //0x3309086633802E71fa00388cc0b86F809C910515
