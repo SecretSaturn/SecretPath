@@ -7,22 +7,8 @@ contract Gateway {
                               Structs
     //////////////////////////////////////////////////////////////*/
 
-    struct Task {
-        address callback_address;
-        bytes4 callback_selector;
-        uint32 callback_gas_limit;
-        address user_address;
-        bool completed;
-        bytes32 payload_hash;
-        string source_network;
-        string routing_info;
-    }
-
     struct ReducedTask {
-        bytes32 payload_hash;
-        address callback_address;
-        bytes4 callback_selector;
-        uint32 callback_gas_limit;
+        bytes31 payload_hash_reduced;
         bool completed;
     }
 
@@ -38,11 +24,14 @@ contract Gateway {
 
     struct PostExecutionInfo {
         bytes32 payload_hash;
-        bytes result;
         bytes32 result_hash;
-        bytes result_signature;
         bytes32 packet_hash;
+        bytes20 callback_address;
+        bytes4 callback_selector;
+        bytes4 callback_gas_limit;
         bytes packet_signature;
+        bytes result_signature;
+        bytes result;
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -58,7 +47,7 @@ contract Gateway {
     /// @notice thrown when the signature is invalid
     error InvalidSignature();
 
-    /// @notice Thrown when the ResultSignature is invalid
+    /// @notice Thrown when the recovered ResultHash or ResultSignature is invalid
     error InvalidResultSignature();
 
     /// @notice thrown when the PacketSignature is invalid
@@ -102,21 +91,15 @@ contract Gateway {
         return ecrecover(_signedMessageHash, v, r, s);
     }
 
-    /// @notice Hashes the encoded message hash
-    /// @param _messageHash the message hash
-    function getEthSignedMessageHash(bytes32 _messageHash) private pure returns (bytes32) {
-        /*
-        Signature is produced by signing a keccak256 hash with the following format:
-        "\x19Ethereum Signed Message\n" + len(msg) + msg
-        */
-        return keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", _messageHash));
-    }
-
     /// @notice Get the encoded hash of the inputs for signing
     /// @param _routeInput Route name
     /// @param _verificationAddressInput Address corresponding to the route
     function getRouteHash(string calldata _routeInput, address _verificationAddressInput) private pure returns (bytes32) {
         return keccak256(abi.encode(_routeInput, _verificationAddressInput));
+    }
+
+    function sliceLastByte(bytes32 data) private pure returns (bytes31) {
+        return bytes31(data & 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -128,14 +111,8 @@ contract Gateway {
         string source_network,
         address user_address,
         string routing_info,
-        string routing_code_hash,
-        bytes payload,
         bytes32 payload_hash,
-        bytes payload_signature,
-        bytes user_key,
-        bytes user_pubkey,
-        string handle,
-        bytes12 nonce
+        ExecutionInfo info
     );
 
     event logCompletedTask(uint256 indexed task_id, bytes32 payload_hash, bytes32 result_hash);
@@ -147,7 +124,7 @@ contract Gateway {
                              Constructor
     //////////////////////////////////////////////////////////////*/
 
-    address public immutable owner;
+    address private immutable owner;
 
     constructor() {
         owner = msg.sender;
@@ -175,7 +152,7 @@ contract Gateway {
     //////////////////////////////////////////////////////////////*/
 
     /// @dev mapping of chain name string to the verification address
-    mapping(string => address) public route;
+    mapping(string => address) private route;
 
     /// @notice Updating the route
     /// @param _route Route name
@@ -183,11 +160,9 @@ contract Gateway {
     /// @param _signature Signed hashed inputs(_route + _verificationAddress)
     function updateRoute(string calldata _route, address _verificationAddress, bytes calldata _signature) external onlyOwner {
         bytes32 routeHash = getRouteHash(_route, _verificationAddress);
-        bytes32 ethSignedMessageHash = getEthSignedMessageHash(routeHash);
+        bytes32 ethSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", routeHash));
 
-        bool verifySig = recoverSigner(ethSignedMessageHash, _signature) == masterVerificationAddress;
-
-        if (!verifySig) {
+        if (recoverSigner(ethSignedMessageHash, _signature) != masterVerificationAddress) {
             revert InvalidSignature();
         }
 
@@ -201,37 +176,40 @@ contract Gateway {
     uint256 private taskId = 1;
 
     /// @dev Task ID ====> Task
-    mapping(uint256 => ReducedTask) public tasks;
+    mapping(uint256 => ReducedTask) private tasks;
 
-    /// @notice Pre-Execution
-    /// @param _task Task struct
+    /// @notice Send
+    /// @param _userAddress  User address
+    /// @param _sourceNetwork Source network of msg
+    /// @param _routingInfo Routing info for computation
+    /// @param _payloadHash Payload hash
     /// @param _info ExecutionInfo struct
 
-    function preExecution(Task memory _task, ExecutionInfo memory _info) private {
+    function send(        
+        bytes32 _payloadHash,
+        address _userAddress,
+        string calldata _sourceNetwork,
+        string calldata _routingInfo,
+        ExecutionInfo calldata _info) 
+        external {
 
         // Payload hash signature verification
 
-        if (recoverSigner(_task.payload_hash, _info.payload_signature) != _task.user_address) {
+        if (recoverSigner(_payloadHash, _info.payload_signature) != _userAddress) {
             revert InvalidSignature();
         }
 
         // persisting the task
-        tasks[taskId] = ReducedTask(_task.payload_hash, _task.callback_address, _task.callback_selector, _task.callback_gas_limit, false);
+        tasks[taskId] = ReducedTask(sliceLastByte(_payloadHash), false);
 
         emit logNewTask(
             taskId,
-            _task.source_network,
-            _task.user_address,
-            _task.routing_info,
-            _info.routing_code_hash,
-            _info.payload,
-            _task.payload_hash,
-            _info.payload_signature,
-            _info.user_key,
-            _info.user_pubkey,
-            _info.handle,
-            _info.nonce
-            );
+            _sourceNetwork,
+            _userAddress,
+            _routingInfo,
+            _payloadHash,
+            _info
+        );
 
 	    taskId++;
     }
@@ -246,68 +224,57 @@ contract Gateway {
     /// @param _info PostExecutionInfo struct
 
     function postExecution(uint256 _taskId, string calldata _sourceNetwork, PostExecutionInfo calldata _info) external {
-    // First, check if the task is already completed
-    ReducedTask memory task = tasks[_taskId];
+    
+    ReducedTask storage task = tasks[_taskId];
 
+    // Check if the task is already completed
     if (task.completed) {
         revert TaskAlreadyCompleted();
     }
 
-    address checkerAddress = route[_sourceNetwork];
-
-    // Payload hash verification from tasks struct
-    if (_info.payload_hash != task.payload_hash) {
+    if (sliceLastByte(_info.payload_hash) != task.payload_hash_reduced) {
         revert InvalidPayloadHash();
     }
+
+    address checkerAddress = route[_sourceNetwork];
 
     // Result signature verification
     if (recoverSigner(_info.result_hash, _info.result_signature) != checkerAddress) {
         revert InvalidResultSignature();
     }
 
+    // Concatenate data elements
+    bytes memory data =  bytes.concat(
+    bytes(_sourceNetwork),
+    bytes32(_taskId),
+    bytes32(_info.payload_hash),
+    bytes(_info.result),
+    bytes32(_info.result_hash),
+    bytes(_info.result_signature[:64]), //we need to remove the last RecoveryID byte (65 bytes -> 64 bytes) because this wasn't included in the original signature (we added it later on)
+    bytes20(_info.callback_address),
+    bytes4(_info.callback_selector));
+
+    // Perform Keccak256 + sha256 hash
+    bytes32 packetHash = sha256(abi.encodePacked(keccak256(data)));
+
     // Packet signature verification
-    if (recoverSigner(_info.packet_hash, _info.packet_signature) != checkerAddress) {
+    if ((_info.packet_hash != packetHash) || recoverSigner(_info.packet_hash, _info.packet_signature) != checkerAddress) {
         revert InvalidPacketSignature();
     }
 
-    tasks[_taskId].completed = true;
-    tasks[_taskId].payload_hash = bytes32(0);
+    task.completed = true;
 
     emit logCompletedTask(_taskId, _info.payload_hash, _info.result_hash);
 
     // Continue with the function execution
 
-    (bool val, ) = address(task.callback_address).call{gas: task.callback_gas_limit}(
-        abi.encodeWithSelector(task.callback_selector, _taskId, _info.result)
+    (bool val, ) = address(_info.callback_address).call{gas: uint32(_info.callback_gas_limit)}(
+        abi.encodeWithSelector(_info.callback_selector, _taskId, _info.result)
     );
     if (!val) {
         revert CallbackError();
     }
 }
-
-    /// @param _userAddress  User address
-    /// @param _sourceNetwork Source network of msg
-    /// @param _routingInfo Routing info for computation
-    /// @param _payloadHash Payload hash
-    /// @param _info ExecutionInfo struct
-    /// @param _callbackAddress Callback Address for Post-Execution 
-    /// @param _callbackSelector Callback Selector for Post-Execution 
-    /// @param _callbackGasLimit Callback Gas Limit for Post-Execution 
-
-    function send(
-        address _userAddress,
-        string calldata _sourceNetwork,
-        string calldata _routingInfo,
-        bytes32 _payloadHash,
-        ExecutionInfo calldata _info,
-        address _callbackAddress, 
-        bytes4 _callbackSelector,
-        uint32 _callbackGasLimit
-    )
-        external 
-    {
-        preExecution(Task(_callbackAddress, _callbackSelector, _callbackGasLimit ,_userAddress, false, _payloadHash, _sourceNetwork, _routingInfo), _info);
-    }
 
     /*//////////////////////////////////////////////////////////////
                                Callback

@@ -6,6 +6,7 @@ from pprint import pprint
 from typing import List, Mapping, Sequence
 
 from web3 import Web3
+from web3.datastructures import AttributeDict
 from web3.middleware import geth_poa_middleware
 from eth_abi import abi
 import eth_abi
@@ -193,6 +194,11 @@ class EthContract(BaseContractInterface):
             task_list = []
             for task in tasks:
                 args = task['args']
+                # Convert to a regular dictionary
+                args_dict = dict(args)
+                info_part = args_dict.pop('info')
+                args_dict.update(info_part)
+                args = AttributeDict(args_dict)
                 task_list.append(Task(args))
             return task_list
 

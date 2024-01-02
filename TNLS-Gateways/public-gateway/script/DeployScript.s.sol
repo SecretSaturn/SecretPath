@@ -47,7 +47,7 @@ contract DeployScript is Script {
 
         string memory route = "secret";
         //address verificationAddress = vm.envAddress("SECRET_GATEWAY_ETH_ADDRESS");
-        address verificationAddress = 0xc1eE8F16231399d91667a49526914D0B27116130;
+        address verificationAddress = 0xb5F2Ef4a09acf294D2deDAE1fC84aDaF83ae49c5;
 
         // Update the route with with masterVerificationKey signature
         bytes32 routeHash = getRouteHash(route, verificationAddress);

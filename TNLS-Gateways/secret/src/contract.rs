@@ -150,7 +150,7 @@ fn pre_execution(deps: DepsMut, _env: Env, msg: PreExecutionMsg) -> StdResult<Re
     let input_values = payload.data;
 
     // combine input values and task ID to create verification hash
-    let input_hash = sha_256(&[input_values.as_bytes(), &msg.task_id.to_le_bytes()].concat());
+    let input_hash = sha_256(&[input_values.as_bytes(), &msg.task_id.to_be_bytes()].concat());
 
     // verify the internal verification key matches the user address
     if payload.user_key != msg.user_key {
@@ -168,6 +168,9 @@ fn pre_execution(deps: DepsMut, _env: Env, msg: PreExecutionMsg) -> StdResult<Re
         input_hash, // storing the DECRYPTED input_values hashed together with task ID
         source_network: msg.source_network,
         user_address: payload.user_address.clone(),
+        callback_address: payload.callback_address.clone(),
+        callback_selector: payload.callback_selector,
+        callback_gas_limit: payload.callback_gas_limit
     };
 
     // map task ID to task info
@@ -243,22 +246,14 @@ fn post_execution(deps: DepsMut, _env: Env, msg: PostExecutionMsg) -> StdResult<
     // "hasher" is used to perform multiple Keccak256 hashes
     let mut hasher = Keccak256::new();
 
-    // requirement of Ethereum's `ecrecover` function
-    let prefix = "\x19Ethereum Signed Message:\n32".as_bytes();
-
-    // the first hash guarantees the message lenth is 32
-    // the second hash prepends the Ethereum message
-
-    // create message hash of (result + payload + inputs)
+    //create message hash of (result + payload + inputs)
     let data = [
-        msg.result.as_bytes(),
-        task_info.payload.as_slice(),
-        &task_info.input_hash,
+         msg.result.as_bytes(),
+         task_info.payload.as_slice(),
+         &task_info.input_hash,
     ]
     .concat();
     hasher.update(&data);
-    let result_hash = hasher.finalize_reset();
-    hasher.update([prefix, &result_hash].concat());
     let result_hash = hasher.finalize_reset();
 
     // load this gateway's signing key
@@ -296,21 +291,26 @@ fn post_execution(deps: DepsMut, _env: Env, msg: PostExecutionMsg) -> StdResult<
         result_signature.1
     };
 
+    
+    let mut task_id_padded = [0u8; 32]; // Create a 32-byte array filled with zeros
+    // Convert the task_id to an 8-byte big-endian array & Copy the 8-byte big-endian representation to the end of the result array
+    task_id_padded[32 - msg.task_id.to_be_bytes().len()..].copy_from_slice(msg.task_id.to_be_bytes().as_slice());
+
     // create hash of entire packet (used to verify the message wasn't modified in transit)
     let data = [
         "secret".as_bytes(),               // source network
-        routing_info.as_bytes(),           // task_destination_network
-        &msg.task_id.to_le_bytes(),        // task ID
-        task_info.payload.as_slice(),      // payload (original encrypted payload)
+       // routing_info.as_bytes(),           // task_destination_network
+        task_id_padded.as_slice(), //msg.task_id.to_be_bytes().as_slice(),        // task ID
+        // task_info.payload.as_slice(),      // payload (original encrypted or unencrypted payload)
         task_info.payload_hash.as_slice(), // original payload message
         msg.result.as_bytes(),             // result
-        &result_hash,                      // result message
-        &result_signature,                 // result signature
+        sha_256(&result_hash).as_slice(),                      // result message
+        result_signature.as_slice(),                 // result signature
+        task_info.callback_address.as_slice(), // callback address
+        task_info.callback_selector.as_slice(), // callback selector
     ]
     .concat();
     hasher.update(&data);
-    let packet_hash = hasher.finalize_reset();
-    hasher.update([prefix, &packet_hash].concat());
     let packet_hash = hasher.finalize();
 
     // used in production to create signature
@@ -357,8 +357,10 @@ fn post_execution(deps: DepsMut, _env: Env, msg: PostExecutionMsg) -> StdResult<
     let compressed_public_key = uncompressed_public_key.serialize_compressed();
 
     // Recover and compare public keys for result, do v = 0 (= 27 in ethereum) and v = 1 (= 28 in ethereum)
-    let result_public_key_27 = {deps.api.secp256k1_recover_pubkey(&sha_256(&result_hash), &result_signature, 0).map_err(|err| StdError::generic_err(err.to_string()))?};
-    let result_public_key_28 = {deps.api.secp256k1_recover_pubkey(&sha_256(&result_hash), &result_signature, 1).map_err(|err| StdError::generic_err(err.to_string()))?};
+    let result_public_key_27 = {deps.api.secp256k1_recover_pubkey(&sha_256(&result_hash), &result_signature, 0)
+    .map_err(|err| StdError::generic_err(err.to_string()))?};
+    let result_public_key_28 = {deps.api.secp256k1_recover_pubkey(&sha_256(&result_hash), &result_signature, 1)
+    .map_err(|err| StdError::generic_err(err.to_string()))?};
 
     let result_recovery_id = if result_public_key_27 == compressed_public_key {
         27
@@ -370,8 +372,10 @@ fn post_execution(deps: DepsMut, _env: Env, msg: PostExecutionMsg) -> StdResult<
     };
 
     // Recover and compare public keys for packet, do v = 0 (= 27 in ethereum) and v = 1 (= 28 in ethereum)
-    let packet_public_key_27 = {deps.api.secp256k1_recover_pubkey(&sha_256(&packet_hash), &packet_signature, 0).map_err(|err| StdError::generic_err(err.to_string()))?};
-    let packet_public_key_28 = {deps.api.secp256k1_recover_pubkey(&sha_256(&packet_hash), &packet_signature, 1).map_err(|err| StdError::generic_err(err.to_string()))?};
+    let packet_public_key_27 = {deps.api.secp256k1_recover_pubkey(&sha_256(&packet_hash), &packet_signature, 0)
+    .map_err(|err| StdError::generic_err(err.to_string()))?};
+    let packet_public_key_28 = {deps.api.secp256k1_recover_pubkey(&sha_256(&packet_hash), &packet_signature, 1)
+    .map_err(|err| StdError::generic_err(err.to_string()))?};
 
     let packet_recovery_id = if packet_public_key_27 == compressed_public_key {
         27
@@ -386,11 +390,14 @@ fn post_execution(deps: DepsMut, _env: Env, msg: PostExecutionMsg) -> StdResult<
         "0x{}",
         task_info.payload_hash.as_slice().encode_hex::<String>()
     );
-    let result = format!("0x{}", msg.result.encode_hex::<String>());
+    let result = format!("0x{}", msg.result.as_bytes().encode_hex::<String>());
     let result_hash = format!("0x{}", sha_256(&result_hash).encode_hex::<String>());
     let result_signature = format!("0x{}{:x}", &result_signature.encode_hex::<String>(),result_recovery_id);
     let packet_hash = format!("0x{}", sha_256(&packet_hash).encode_hex::<String>());
     let packet_signature = format!("0x{}{:x}", &packet_signature.encode_hex::<String>(),packet_recovery_id);
+    let callback_address = format!("0x{}", task_info.callback_address.as_slice().encode_hex::<String>());
+    let callback_selector = format!("0x{}", task_info.callback_selector.as_slice().encode_hex::<String>());
+    let callback_gas_limit = format!("0x{}", task_info.callback_gas_limit.to_be_bytes().encode_hex::<String>());
 
     Ok(Response::new()
         .add_attribute_plaintext("source_network", "secret")
@@ -401,7 +408,10 @@ fn post_execution(deps: DepsMut, _env: Env, msg: PostExecutionMsg) -> StdResult<
         .add_attribute_plaintext("result_hash", result_hash)
         .add_attribute_plaintext("result_signature", result_signature)
         .add_attribute_plaintext("packet_hash", packet_hash)
-        .add_attribute_plaintext("packet_signature", packet_signature))
+        .add_attribute_plaintext("packet_signature", packet_signature)
+        .add_attribute_plaintext("callback_address", callback_address)
+        .add_attribute_plaintext("callback_selector", callback_selector)
+        .add_attribute_plaintext("callback_gas_limit", callback_gas_limit))
 }
 
 #[cfg(feature = "contract")]

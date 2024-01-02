@@ -10,8 +10,6 @@ pub static CONFIG: Item<State> = Item::new(b"config");
 pub static MY_ADDRESS: Item<CanonicalAddr> = Item::new(b"myaddr");
 /// Storage key for the contract instantiator.
 pub static CREATOR: Item<CanonicalAddr> = Item::new(b"creator");
-/// Storage key for prng seed.
-pub static PRNG_SEED: Item<Vec<u8>> = Item::new(b"prngseed");
 /// Storage key for task IDs.
 pub static TASK_MAP: Keymap<u64, TaskInfo> = Keymap::new(b"tasks");
 
@@ -41,6 +39,12 @@ pub struct TaskInfo {
     pub source_network: String,
     /// Public address of the user that sent the message.
     pub user_address: Addr,
+    /// Callback address for the post execution message.
+    pub callback_address: Binary,
+    /// Callback selector for the post execution message.
+    pub callback_selector: Binary,
+    /// Callback gas limit for the post execution message.
+    pub callback_gas_limit: u32,
 }
 /// A key pair using the [Binary] type
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, Default)]

@@ -5,13 +5,17 @@ from typing import List
 
 eth_task_keys_to_msg = {
     '_taskId': 'task_id', '_sourceNetwork': 'source_network', '_info': ['payload_hash',
-                                                                        'result',
                                                                         'result_hash',
-                                                                        'result_signature',
                                                                         'packet_hash',
-                                                                        'packet_signature']
+                                                                        'callback_address',
+                                                                        'callback_selector',
+                                                                        'callback_gas_limit',
+                                                                        'packet_signature',
+                                                                        'result_signature',
+                                                                        'result']
 
 }
+
 task_keys_to_msg = {'ethereum': eth_task_keys_to_msg}
 task_keys_in_order = {'ethereum': ['_taskId', '_sourceNetwork', '_info']}
 

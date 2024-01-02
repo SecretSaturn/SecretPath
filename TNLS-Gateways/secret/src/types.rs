@@ -17,4 +17,10 @@ pub struct Payload {
     pub user_address: Addr,
     /// User public key from payload encryption (not their wallet public key).
     pub user_key: Binary,
+    /// Callback address for the post execution message.
+    pub callback_address: Binary,
+    /// Callback selector for the post execution message.
+    pub callback_selector: Binary,
+    /// Callback gas limit for the post execution message.
+    pub callback_gas_limit: u32,
 }

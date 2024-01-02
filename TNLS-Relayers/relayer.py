@@ -124,7 +124,7 @@ class Relayer:
                 continue
             prev_height = self.dict_of_names_to_blocks[name]
             curr_height = chain_interface.get_last_block()
-            #curr_height = 4920754
+            #curr_height = 5002643
             if prev_height is None:
                 prev_height = curr_height - 1
             for block_num in range(prev_height + 1, curr_height + 1):
