@@ -125,6 +125,9 @@ contract Gateway {
     //////////////////////////////////////////////////////////////*/
 
     address private immutable owner;
+    string private chainIdentifier;
+    string private routing_info;
+    string private routing_code_hash;
 
     constructor() {
         owner = msg.sender;
@@ -139,12 +142,21 @@ contract Gateway {
                              Initialization
     //////////////////////////////////////////////////////////////*/
 
-    address public masterVerificationAddress;
+    address private masterVerificationAddress;
 
     /// @notice Initialize the verification address
     /// @param _masterVerificationAddress The input address
-    function initialize(address _masterVerificationAddress) external onlyOwner {
+    function setMasterVerificationAddress(address _masterVerificationAddress) external onlyOwner {
         masterVerificationAddress = _masterVerificationAddress;
+    }
+
+    function setContractAddressAndCodeHash(string calldata _contractAddress, string calldata _codeHash) external onlyOwner {
+        routing_info = _contractAddress;
+        routing_code_hash = _codeHash;
+    }
+
+    function setChainidentifier(string calldata _chainIdentifier) external onlyOwner {
+        chainIdentifier = _chainIdentifier;
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -214,6 +226,56 @@ contract Gateway {
 	    taskId++;
     }
 
+    function requestRandomWords(
+        uint32 _numWords,
+        uint32 _callbackGasLimit
+    ) external payable returns (uint256 requestId) {
+
+        require(_numWords <= 50, "Too many words requested");
+
+        string memory callback_address = Encoders.encodeBase64(abi.encodePacked(msg.sender));
+
+        bytes memory payload = abi.encodePacked(
+            bytes23(0x7b2264617461223a227b5c226e756d576f7264735c223a), //bytes representation of '{"data":"{\"numWords\":' because solidity has problems with correct string escaping of numWords
+            Encoders.uint256toString(_numWords),
+            '}","routing_info": "',routing_info,
+            '","routing_code_hash": "',routing_code_hash,
+            '","user_address": "0x0000000000000000000000000000000000000000",', //unused user_address here
+            '"user_key": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",', // 33 bytes of zeros in base64
+            '"callback_address": "', callback_address,
+            '","callback_selector": "OLpGFA==",', // 0x38ba4614 hex value already converted into base64, callback_selector of the fullfillRandomWords function
+            '"callback_gas_limit": ', Encoders.uint256toString(_callbackGasLimit),'}' // Corrected function call
+        );
+
+        bytes32 payloadHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32",keccak256(payload)));
+
+        // ExecutionInfo struct
+        ExecutionInfo memory executionInfo = ExecutionInfo({
+            user_key: new bytes(33), // equals AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA in base64
+            user_pubkey: new bytes(64), // Fill with 0 bytes
+            routing_code_hash: routing_code_hash,
+            handle: "request_random",
+            nonce: bytes12(0),
+            payload: payload, // Make sure payload is correctly formatted
+            payload_signature: new bytes(64) // empty signature, fill with 0 bytes
+        });
+
+        // persisting the task
+        tasks[taskId] = ReducedTask(sliceLastByte(payloadHash), false);
+
+        emit logNewTask(
+            taskId,
+            chainIdentifier,
+            msg.sender,
+            routing_info,
+            payloadHash,
+            executionInfo
+        );
+        uint256 oldTaskId = taskId;
+        taskId++;
+        return oldTaskId;
+    }
+
     /*//////////////////////////////////////////////////////////////
                              Post Execution
     //////////////////////////////////////////////////////////////*/
@@ -246,14 +308,14 @@ contract Gateway {
     // Concatenate data elements
     bytes memory data =  bytes.concat(
     bytes(_sourceNetwork),
+    bytes(chainIdentifier),
     bytes32(_taskId),
     bytes32(_info.payload_hash),
     bytes(_info.result),
     bytes32(_info.result_hash),
-    bytes(_info.result_signature[:64]), //we need to remove the last RecoveryID byte (65 bytes -> 64 bytes) because this wasn't included in the original signature (we added it later on)
     bytes20(_info.callback_address),
     bytes4(_info.callback_selector));
-
+    
     // Perform Keccak256 + sha256 hash
     bytes32 packetHash = sha256(abi.encodePacked(keccak256(data)));
 
@@ -261,16 +323,28 @@ contract Gateway {
     if ((_info.packet_hash != packetHash) || recoverSigner(_info.packet_hash, _info.packet_signature) != checkerAddress) {
         revert InvalidPacketSignature();
     }
-
+    
     task.completed = true;
 
     emit logCompletedTask(_taskId, _info.payload_hash, _info.result_hash);
 
     // Continue with the function execution
 
-    (bool val, ) = address(_info.callback_address).call{gas: uint32(_info.callback_gas_limit)}(
-        abi.encodeWithSelector(_info.callback_selector, _taskId, _info.result)
-    );
+    // Additional conversion for Secret VRF into uint256[] if callback_selector matches the fullfillRandomWords selector.
+
+    bool val; 
+
+    if (_info.callback_selector == bytes4(0x38ba4614)) {
+        uint256[] memory randomWords = Encoders.bytesToUint256Array(_info.result);
+        (val, ) = address(_info.callback_address).call{gas: uint32(_info.callback_gas_limit)}(
+            abi.encodeWithSelector(_info.callback_selector, _taskId, randomWords)
+        );
+    }
+    else {
+        (val, ) = address(_info.callback_address).call{gas: uint32(_info.callback_gas_limit)}(
+            abi.encodeWithSelector(_info.callback_selector, _taskId, _info.result)
+        );
+    }
     if (!val) {
         revert CallbackError();
     }
@@ -284,5 +358,80 @@ contract Gateway {
     /// @param _result  Privately computed result
     function callback(uint256 _taskId, bytes calldata _result) external {
         emit ComputedResult(_taskId, _result);
+    }
+}
+
+library Encoders {
+
+    function encodeBase64(bytes memory data) internal pure returns (string memory) {
+        if (data.length == 0) return "";
+        string memory table = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        string memory result = new string(4 * ((data.length + 2) / 3));
+        /// @solidity memory-safe-assembly
+        assembly {
+            let tablePtr := add(table, 1)
+            let resultPtr := add(result, 32)
+            for {
+                let dataPtr := data
+                let endPtr := add(data, mload(data))
+            } lt(dataPtr, endPtr) {
+            } {
+                dataPtr := add(dataPtr, 3)
+                let input := mload(dataPtr)
+                mstore8(resultPtr, mload(add(tablePtr, and(shr(18, input), 0x3F))))
+                resultPtr := add(resultPtr, 1)
+                mstore8(resultPtr, mload(add(tablePtr, and(shr(12, input), 0x3F))))
+                resultPtr := add(resultPtr, 1)
+                mstore8(resultPtr, mload(add(tablePtr, and(shr(6, input), 0x3F))))
+                resultPtr := add(resultPtr, 1)
+                mstore8(resultPtr, mload(add(tablePtr, and(input, 0x3F))))
+                resultPtr := add(resultPtr, 1)
+            }
+            switch mod(mload(data), 3)
+            case 1 {
+                mstore8(sub(resultPtr, 1), 0x3d)
+                mstore8(sub(resultPtr, 2), 0x3d)
+            }
+            case 2 {
+                mstore8(sub(resultPtr, 1), 0x3d)
+            }
+        }
+        return result;
+    }
+
+   function uint256toString(uint256 value) external pure returns (string memory ptr) {
+        assembly {
+            ptr := add(mload(0x40), 128)
+            mstore(0x40, ptr)
+            let end := ptr
+            for { 
+                let temp := value
+                ptr := sub(ptr, 1)
+                mstore8(ptr, add(48, mod(temp, 10)))
+                temp := div(temp, 10)
+            } temp { 
+                temp := div(temp, 10)
+            } { 
+                ptr := sub(ptr, 1)
+                mstore8(ptr, add(48, mod(temp, 10)))
+            }
+            let length := sub(end, ptr)
+            ptr := sub(ptr, 32)
+            mstore(ptr, length)
+        }
+    }
+    
+    function bytesToUint256Array(bytes memory data) internal pure returns (uint256[] memory) {
+        require(data.length % 32 == 0, "Data length must be a multiple of 32 bytes");
+        uint256[] memory uintArray = new uint256[](data.length / 32);
+        uint256 dataLength = data.length;
+        assembly {
+            let dataPtr := add(data, 0x20) 
+            let uintArrayPtr := add(uintArray, 0x20) 
+            for { let i := 0 } lt(i, dataLength) { i := add(i, 32) } {
+                mstore(add(uintArrayPtr, i), mload(add(dataPtr, i)))
+            }
+        }
+        return uintArray;
     }
 }

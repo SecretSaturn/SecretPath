@@ -266,7 +266,6 @@ contract ContractTest is Test {
             routing_code_hash: "some RoutingCodeHash",
             handle: "some kinda handle",
             nonce: "ssssssssssss",
-            payload_encrypted: true,
             payload: payload,
             payload_signature: getPayloadSignature(payload, 5)
         });
@@ -311,7 +310,6 @@ contract ContractTest is Test {
             routing_code_hash: "some RoutingCodeHash",
             handle: "some kinda handle",
             nonce: "ssssssssssss",
-            payload_encrypted: true,
             payload: payload,
             payload_signature: getPayloadSignature(payload, 7)
         });
@@ -413,7 +411,6 @@ contract ContractTest is Test {
             routing_code_hash: "some RoutingCodeHash",
             handle: "some kinda handle",
             nonce: "ssssssssssss",
-            payload_encrypted: true,
             payload: payload,
             payload_signature: payloadSignature
         });

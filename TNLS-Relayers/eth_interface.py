@@ -4,6 +4,7 @@ import os
 from logging import getLogger, basicConfig, INFO, StreamHandler
 from pprint import pprint
 from typing import List, Mapping, Sequence
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from web3 import Web3
 from web3.datastructures import AttributeDict
@@ -48,12 +49,14 @@ class EthInterface(BaseChainInterface):
         See base_interface.py for documentation
         """
         print("create TX")
+        print(*args)
+        print(**kwargs)
         # create task
         nonce = self.provider.eth.get_transaction_count(self.address)
         if kwargs is {}:
             tx = contract_function(*args).build_transaction({
                 'from': self.address,
-                'gas': 3000000,
+                'gas': 1000000,
                 'nonce': nonce,
                 #'maxFeePerGas': self.provider.eth.max_priority_fee
                 #'maxPriorityFeePerGas': self.provider.eth.max_priority_fee,
@@ -61,14 +64,14 @@ class EthInterface(BaseChainInterface):
         elif len(args) == 0:
             tx = contract_function(**kwargs).build_transaction({
                 'from': self.address,
-                'gas': 3000000,
+                'gas': 1000000,
                 'nonce': nonce,
                 #'maxPriorityFeePerGas': self.provider.eth.max_priority_fee,
             })
         else:
             tx = contract_function(*args, **kwargs).build_transaction({
                 'from': self.address,
-                'gas': 3000000,
+                'gas': 1000000,
                 'nonce': nonce,
                 #'maxPriorityFeePerGas': self.provider.eth.max_priority_fee,
             })
@@ -120,16 +123,30 @@ class EthInterface(BaseChainInterface):
             self.logger.warning(e)
             return []
         correct_transactions = []
-        for transaction in transactions:
-            try:
-                if transaction.to == self.contract_address or self.contract_address == "":
-                    tx_receipt = self.provider.eth.get_transaction_receipt(transaction['hash'])
-                    correct_transactions.append(tx_receipt)
-            except Exception as e:
-                self.logger.warning(e)
-                continue
+        try:
+            correct_transactions = []
+            max_workers = 50
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                # Create a future for each transaction
+                future_to_transaction = {executor.submit(self.process_transaction, tx): tx for tx in transactions}
+                for future in as_completed(future_to_transaction):
+                    result = future.result()
+                    if result is not None:
+                        correct_transactions.append(result)
+        except Exception as e:
+            self.logger.warning(e)
 
         return correct_transactions
+
+    def process_transaction(self, transaction):
+        try:
+            # Replace this line with your actual logic, for example:
+            tx_receipt = self.provider.eth.get_transaction_receipt(transaction['hash'])
+            return tx_receipt
+        except Exception as e:
+            self.logger.warning(e)
+            return None
+
 
 
 class EthContract(BaseContractInterface):
@@ -184,7 +201,6 @@ class EthContract(BaseContractInterface):
         return self.interface.sign_and_send_transaction(txn)
 
     def parse_event_from_txn(self, event_name, txn) -> List[Task]:
-
             event = self.contract.events[event_name]()
             try:
                 tasks = event.process_receipt(txn)

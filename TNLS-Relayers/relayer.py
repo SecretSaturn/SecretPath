@@ -31,6 +31,7 @@ from dotenv import load_dotenv
 import os
 import warnings
 warnings.filterwarnings("ignore")
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
 class Relayer:
@@ -114,28 +115,48 @@ class Relayer:
 
         pass
 
+    def process_task(self, task, name):
+        task_id = task.task_data['task_id']
+        self.task_ids_to_statuses[task_id] = 'Received from {}'.format(name)
+        return task
+
+    def process_transaction(self, transaction, name, contract_interface, evt_name):
+        tasks = contract_interface.parse_event_from_txn(evt_name, transaction)
+        processed_tasks = []
+
+        with ThreadPoolExecutor(max_workers=20) as executor:
+            future_to_task = {executor.submit(self.process_task, task, name): task for task in tasks}
+
+            for future in as_completed(future_to_task):
+                task = future.result()
+                if task is not None:
+                    processed_tasks.append(task)
+
+        return processed_tasks
+
     def poll_for_transactions(self):
-        """
-        Polls for transactions on all interfaces
-        Updates task list with found events
-        """
         for name, (chain_interface, contract_interface, evt_name, _) in self.dict_of_names_to_interfaces.items():
             if name == 'secret':
                 continue
             prev_height = self.dict_of_names_to_blocks[name]
             curr_height = chain_interface.get_last_block()
-            #curr_height = 5002643
+            #curr_height = 5021399
             if prev_height is None:
                 prev_height = curr_height - 1
+
             for block_num in range(prev_height + 1, curr_height + 1):
                 self.logger.info(f'Polling block {block_num} on {name}')
                 transactions = chain_interface.get_transactions(contract_interface.address, height=block_num)
-                for transaction in transactions:
-                    tasks = contract_interface.parse_event_from_txn(evt_name, transaction)
-                    for task in tasks:
-                        task_id = task.task_data['task_id']
-                        self.task_ids_to_statuses[task_id] = 'Received from {}'.format(name)
-                    self.task_list.extend(tasks)
+
+                with ThreadPoolExecutor(max_workers=20) as executor:
+                    future_to_transaction = {
+                        executor.submit(self.process_transaction, tx, name, contract_interface, evt_name): tx for tx in transactions
+                    }
+
+                    for future in as_completed(future_to_transaction):
+                        tasks = future.result()
+                        self.task_list.extend(tasks)
+
             self.dict_of_names_to_blocks[name] = curr_height
 
     def route_transaction(self, task: Task):

@@ -174,7 +174,7 @@ class SCRTContract(BaseContractInterface):
         print(function_schema)
         tx_options = CreateTxOptions(
             msgs=[txn_msgs],
-            gas=500000,
+            gas=1000000,
             gas_prices='0.05uscrt',
             gas_adjustment=1,
             sequence=None,

@@ -35,6 +35,9 @@ schemars = "0.8.11"
 secret-toolkit = { version = "0.10.0", default-features = false, features = ["utils", "storage", "serialization", "viewing-key", "permit"] }
 serde = { version = "1.0.144", default-features = false, features = ["derive"] }
 serde-json-wasm = "1.0.0"
+sha3 = "0.10.4"
+base64 = "0.21.0"
+secret-toolkit-serialization = { version = "0.10.0", features = ["base64"] }
 # snafu = { version = "0.7.1" }
 # thiserror = { version = "1.0.31" }
 tnls = { git = "https://github.com/SecretSaturn/TNLS", branch = "main", package = "secret_gateway", default-features = false }

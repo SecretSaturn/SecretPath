@@ -16,7 +16,6 @@ use crate::{
     state::{KeyPair, State, TaskInfo, CONFIG, CREATOR, MY_ADDRESS, TASK_MAP},
     PrivContractHandleMsg,
 };
-use crate::types::Payload;
 
 use hex::ToHex;
 use sha3::{Digest, Keccak256};
@@ -139,14 +138,32 @@ fn create_gateway_keys(deps: DepsMut, env: Env) -> StdResult<Response> {
 }
 
 fn pre_execution(deps: DepsMut, _env: Env, msg: PreExecutionMsg) -> StdResult<Response> {
-    // verify that signature is correct
-    msg.verify(&deps)?;
-
     // load config
     let config = CONFIG.load(deps.storage)?;
 
-    // decrypt payload
-    let payload: Payload = from_binary(&Binary::from(msg.payload.as_slice()))?;
+    // Attempt to decrypt the payload
+    let decrypted_payload_result = msg.decrypt_payload(config.encryption_keys.sk);
+    let mut unsafe_payload = false;
+    let payload = match decrypted_payload_result {
+        Ok(decrypted_payload) => {
+            // If decryption is successful, attempt to verify
+            match msg.verify(&deps) {
+                Ok(_) => decrypted_payload, // Both decryption and verification succeeded
+                Err(_) => {
+                    unsafe_payload = true;
+                    // Continue with the decrypted payload if only verification fails
+                    decrypted_payload
+                }
+            }
+        },
+        Err(_) => {
+            unsafe_payload = true;
+            // If decryption fails, continue with the original, encrypted payload
+            // Note: We are not verifying the payload in this case as it's already deemed unsafe
+            from_binary(&Binary::from(msg.payload.as_slice()))?
+        },
+    };
+
     let input_values = payload.data;
 
     // combine input values and task ID to create verification hash
@@ -163,9 +180,9 @@ fn pre_execution(deps: DepsMut, _env: Env, msg: PreExecutionMsg) -> StdResult<Re
 
     // create a task information store
     let task_info = TaskInfo {
-        payload: msg.payload, // storing the ENCRYPTED payload
+        payload: msg.payload, // storing the payload
         payload_hash: msg.payload_hash,
-        input_hash, // storing the DECRYPTED input_values hashed together with task ID
+        input_hash, // storing the input_values hashed together with task ID
         source_network: msg.source_network,
         user_address: payload.user_address.clone(),
         callback_address: payload.callback_address.clone(),
@@ -240,6 +257,11 @@ fn post_execution(deps: DepsMut, _env: Env, msg: PostExecutionMsg) -> StdResult<
         return Err(StdError::generic_err("input hash does not match task id"));
     }
 
+    let result = match base64::decode(msg.result) {
+        Ok(bytes) => bytes,
+        Err(_) => {return Err(StdError::generic_err("could not decode base64 result string"));}
+    };
+
     // rename for clarity (original source network is now the routing destination)
     let routing_info = task_info.source_network;
 
@@ -248,7 +270,7 @@ fn post_execution(deps: DepsMut, _env: Env, msg: PostExecutionMsg) -> StdResult<
 
     //create message hash of (result + payload + inputs)
     let data = [
-         msg.result.as_bytes(),
+         result.as_slice(),
          task_info.payload.as_slice(),
          &task_info.input_hash,
     ]
@@ -299,13 +321,13 @@ fn post_execution(deps: DepsMut, _env: Env, msg: PostExecutionMsg) -> StdResult<
     // create hash of entire packet (used to verify the message wasn't modified in transit)
     let data = [
         "secret".as_bytes(),               // source network
-       // routing_info.as_bytes(),           // task_destination_network
+        routing_info.as_bytes(),           // task_destination_network
         task_id_padded.as_slice(), //msg.task_id.to_be_bytes().as_slice(),        // task ID
         // task_info.payload.as_slice(),      // payload (original encrypted or unencrypted payload)
         task_info.payload_hash.as_slice(), // original payload message
-        msg.result.as_bytes(),             // result
-        sha_256(&result_hash).as_slice(),                      // result message
-        result_signature.as_slice(),                 // result signature
+        result.as_slice(),             // result
+        sha_256(&result_hash).as_slice(),      // result message
+        //result_signature.as_slice(),           // result signature
         task_info.callback_address.as_slice(), // callback address
         task_info.callback_selector.as_slice(), // callback selector
     ]
@@ -390,7 +412,7 @@ fn post_execution(deps: DepsMut, _env: Env, msg: PostExecutionMsg) -> StdResult<
         "0x{}",
         task_info.payload_hash.as_slice().encode_hex::<String>()
     );
-    let result = format!("0x{}", msg.result.as_bytes().encode_hex::<String>());
+    let result = format!("0x{}", result.as_slice().encode_hex::<String>());
     let result_hash = format!("0x{}", sha_256(&result_hash).encode_hex::<String>());
     let result_signature = format!("0x{}{:x}", &result_signature.encode_hex::<String>(),result_recovery_id);
     let packet_hash = format!("0x{}", sha_256(&packet_hash).encode_hex::<String>());

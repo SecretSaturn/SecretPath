@@ -6,11 +6,13 @@ import "forge-std/Vm.sol";
 import "forge-std/console2.sol";
 import "forge-std/Script.sol";
 import {Gateway} from "../src/Gateway.sol";
+import {RandomnessReciever} from "../src/RandomnessReciever.sol";
 
 contract DeployScript is Script {
     function setUp() public {}
 
     Gateway gatewayAddress;
+    RandomnessReciever randomnessAddress;
     
     uint256 privKey = vm.envUint("ETH_PRIVATE_KEY");
     address deployer = vm.rememberKey(privKey);
@@ -36,18 +38,22 @@ contract DeployScript is Script {
         vm.startBroadcast();
 
         gatewayAddress = new Gateway();
+        randomnessAddress = new RandomnessReciever();
 
         console2.logAddress(address(gatewayAddress));
         console2.logAddress(deployer);
 
+        randomnessAddress.setGatewayAddress(address(gatewayAddress));
         // Initialize master verification Address
-        gatewayAddress.initialize(deployer);
-
+        gatewayAddress.setMasterVerificationAddress(deployer);
+        gatewayAddress.setContractAddressAndCodeHash("secret1u3zsgg680f0fmjv7w6qkhpe6sh78wngzevvlvd", 
+        "866d57146b2d9cccde295b57d84f22995568ffb5dc31a795e73f351bbfb19dfb");
+        address verificationAddress = 0xBC0951b2f849020027921e7286aE134C8e159203;
+        gatewayAddress.setChainidentifier("ethereum");
         /// ------ Update Routes Param Setup ------- ///
 
         string memory route = "secret";
         //address verificationAddress = vm.envAddress("SECRET_GATEWAY_ETH_ADDRESS");
-        address verificationAddress = 0xb5F2Ef4a09acf294D2deDAE1fC84aDaF83ae49c5;
 
         // Update the route with with masterVerificationKey signature
         bytes32 routeHash = getRouteHash(route, verificationAddress);

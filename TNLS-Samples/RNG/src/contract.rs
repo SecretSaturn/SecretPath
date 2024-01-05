@@ -6,9 +6,11 @@ use secret_toolkit::utils::{pad_handle_result, pad_query_result, HandleCallback}
 
 use crate::{
     msg::{ExecuteMsg, GatewayMsg, InstantiateMsg, QueryMsg, QueryResponse},
-    state::{State, CONFIG},
+    state::{State, Input, CONFIG},
 };
 use tnls::msg::{PostExecutionMsg, PrivContractHandleMsg};
+
+use sha3::{Digest, Keccak256};
 
 /// pad handle responses and log attributes to blocks of 256 bytes to prevent leaking info based on
 /// response size
@@ -93,17 +95,34 @@ fn return_random(
 fn try_random(
     deps: DepsMut,
     env: Env,
-    _input_values: String,
+    input_values: String,
     task_id: u64,
     input_hash: Binary,
 ) -> StdResult<Response> {
     let config = CONFIG.load(deps.storage)?;
 
-    let result = match env.block.random {
-        //Some(random_value) => format!("{{\"random\":{}}}", random_value.to_base64()),
-        Some(random_value) => random_value.to_base64(),
+    let input: Input = serde_json_wasm::from_str(&input_values)
+    .map_err(|err| StdError::generic_err(err.to_string()))?;
+
+    let numWords = input.numWords;
+
+    let base_random = match env.block.random {
+        Some(random_value) => random_value,
         None => return Err(StdError::generic_err("No random value available")),
     };
+
+    let mut random_numbers = Vec::new();
+    let mut hasher = Keccak256::new();
+
+    for i in 0..numWords {
+        let mut data = base_random.0.clone(); 
+        data.extend_from_slice(&i.to_be_bytes()); 
+        hasher.update(&data); 
+        let result_hash = hasher.finalize_reset(); 
+        random_numbers.extend_from_slice(result_hash.as_slice()); 
+    }
+    
+    let result = base64::encode(random_numbers);
 
     let callback_msg = GatewayMsg::Output {
         outputs: PostExecutionMsg {
