@@ -1,10 +1,14 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.23;
 
+interface ISecretVRF {
+    function requestRandomness(uint32 _numWords, uint32 _callbackGasLimit) external payable returns (uint256 requestId);
+}
+
 contract RandomnessReciever {
 
-    address private RNGGateway;
-    address private immutable owner;
+    address public VRFGateway;
+    address public immutable owner;
 
     constructor() {
         owner = msg.sender;
@@ -15,34 +19,26 @@ contract RandomnessReciever {
         _;
     }
 
-    function setGatewayAddress(address _RNGGateway) external onlyOwner {
-        RNGGateway = _RNGGateway;
+    function setGatewayAddress(address _VRFGateway) external onlyOwner {
+        VRFGateway = _VRFGateway;
     }
 
 
-    function requestRandomWordsTest() external {
-        bool success;
-        bytes memory data;
-        uint256 requestId;
-        uint32 numWords = 50; // can be up to 50 words
-        uint32 callbackGasLimit = 1000000;   
-        (success, data) = RNGGateway.call(abi.encodeWithSelector(bytes4(0x967b2017), numWords, callbackGasLimit));
-        require(success, "External call failed");
-        if (data.length == 32) {
-            assembly {requestId := mload(add(data, 32))}
-        } else {
-            revert("Data returned is too short");
-        }
+    function requestRandomnessTest() external {
+        uint32 numWords = 2000; // can be up to 2000 words
+        uint32 callbackGasLimit = 2000000;   
+        ISecretVRF vrfContract = ISecretVRF(VRFGateway);
+        uint256 requestId = vrfContract.requestRandomness(numWords, callbackGasLimit);
     }
 
     event fulfilledRandomWords(uint256 requestId, uint256[] randomWords);
 
     /*//////////////////////////////////////////////////////////////
-                               Callback
+                   fulfillRandomWords Callback
     //////////////////////////////////////////////////////////////*/
 
-    function fulfillRandomWords(uint256 requestId, uint256[] memory randomWords) external {
-        require(msg.sender == address(RNGGateway), "only Secret Gateway can fulfill");
+    function fulfillRandomWords(uint256 requestId, uint256[] calldata randomWords) external {
+        require(msg.sender == address(VRFGateway), "only Secret Gateway can fulfill");
         //do your custom stuff here.
         emit fulfilledRandomWords(requestId, randomWords);
     }

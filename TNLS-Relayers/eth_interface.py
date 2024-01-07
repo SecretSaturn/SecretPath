@@ -56,7 +56,7 @@ class EthInterface(BaseChainInterface):
         if kwargs is {}:
             tx = contract_function(*args).build_transaction({
                 'from': self.address,
-                'gas': 1000000,
+                'gas': 3000000,
                 'nonce': nonce,
                 #'maxFeePerGas': self.provider.eth.max_priority_fee
                 #'maxPriorityFeePerGas': self.provider.eth.max_priority_fee,
@@ -64,14 +64,14 @@ class EthInterface(BaseChainInterface):
         elif len(args) == 0:
             tx = contract_function(**kwargs).build_transaction({
                 'from': self.address,
-                'gas': 1000000,
+                'gas': 3000000,
                 'nonce': nonce,
                 #'maxPriorityFeePerGas': self.provider.eth.max_priority_fee,
             })
         else:
             tx = contract_function(*args, **kwargs).build_transaction({
                 'from': self.address,
-                'gas': 1000000,
+                'gas': 3000000,
                 'nonce': nonce,
                 #'maxPriorityFeePerGas': self.provider.eth.max_priority_fee,
             })

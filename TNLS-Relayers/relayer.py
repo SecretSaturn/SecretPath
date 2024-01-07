@@ -71,7 +71,7 @@ class Relayer:
 
         # Setup keys dictionary
         keys_dict = {
-            'secret': {
+            'secret-4': {
                 'verification': verification_key,
                 'encryption': encryption_key
             }
@@ -90,7 +90,7 @@ class Relayer:
         scrt_tuple = (scrt_base_interface, scrt_contract_interface, 'wasm', 'inputs')
 
         # Create the dictionary and add the tuple
-        self.dict_of_names_to_interfaces = {'ethereum': eth_tuple,'secret': scrt_tuple}
+        self.dict_of_names_to_interfaces = {'11155111': eth_tuple,'secret-4': scrt_tuple}
         """
 
         Args:
@@ -136,11 +136,11 @@ class Relayer:
 
     def poll_for_transactions(self):
         for name, (chain_interface, contract_interface, evt_name, _) in self.dict_of_names_to_interfaces.items():
-            if name == 'secret':
+            if name == 'secret-4' or name == 'pulsar-3':
                 continue
             prev_height = self.dict_of_names_to_blocks[name]
             curr_height = chain_interface.get_last_block()
-            #curr_height = 5021399
+            #curr_height = 5029638
             if prev_height is None:
                 prev_height = curr_height - 1
 
@@ -176,7 +176,7 @@ class Relayer:
             return
         contract_for_txn = self.dict_of_names_to_interfaces[task.task_destination_network][1]
         function_name = self.dict_of_names_to_interfaces[task.task_destination_network][3]
-        if task.task_destination_network == 'secret':
+        if task.task_destination_network == 'secret-4':
             ntasks, _ = contract_for_txn.call_function(function_name, str(task))
             self.task_list.extend(ntasks)
         else:

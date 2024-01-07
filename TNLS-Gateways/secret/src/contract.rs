@@ -23,6 +23,7 @@ use sha3::{Digest, Keccak256};
 /// pad handle responses and log attributes to blocks of 256 bytes to prevent leaking info based on
 /// response size
 pub const BLOCK_SIZE: usize = 256;
+pub const CHAIN_ID: &str = "secret-4";
 
 #[cfg(feature = "contract")]
 ////////////////////////////////////// Init ///////////////////////////////////////
@@ -92,7 +93,7 @@ pub fn execute(
     match msg {
         ExecuteMsg::Input { inputs } => {
             pad_handle_result(pre_execution(deps, env, inputs), BLOCK_SIZE)
-        }
+        },
         ExecuteMsg::Output { outputs } => post_execution(deps, env, outputs),
     }
 }
@@ -320,7 +321,7 @@ fn post_execution(deps: DepsMut, _env: Env, msg: PostExecutionMsg) -> StdResult<
 
     // create hash of entire packet (used to verify the message wasn't modified in transit)
     let data = [
-        "secret".as_bytes(),               // source network
+        CHAIN_ID.as_bytes(),               // source network
         routing_info.as_bytes(),           // task_destination_network
         task_id_padded.as_slice(), //msg.task_id.to_be_bytes().as_slice(),        // task ID
         // task_info.payload.as_slice(),      // payload (original encrypted or unencrypted payload)
@@ -422,7 +423,7 @@ fn post_execution(deps: DepsMut, _env: Env, msg: PostExecutionMsg) -> StdResult<
     let callback_gas_limit = format!("0x{}", task_info.callback_gas_limit.to_be_bytes().encode_hex::<String>());
 
     Ok(Response::new()
-        .add_attribute_plaintext("source_network", "secret")
+        .add_attribute_plaintext("source_network", CHAIN_ID)
         .add_attribute_plaintext("task_destination_network", routing_info)
         .add_attribute_plaintext("task_id", msg.task_id.to_string())
         .add_attribute_plaintext("payload_hash", payload_hash)

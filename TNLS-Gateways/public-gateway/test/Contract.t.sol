@@ -51,7 +51,6 @@ contract ContractTest is Test {
         require(_sig.length == 65, "invalid signature length");
 
         assembly {
-
             // first 32 bytes, after the length prefix
             r := mload(add(_sig, 32))
             // second 32 bytes
@@ -135,16 +134,12 @@ contract ContractTest is Test {
                            Test Cases
     //////////////////////////////////////////////////////////////*/
 
-    function test_CheckTheOwnerOfTheContract() public {
-        address owner = gateway.owner();
-        assertEq(deployer, owner);
-    }
 
     function test_OwnerCanInitialize() public {
         vm.prank(deployer);
         address tempAddress = vm.addr(5);
 
-        gateway.initialize(tempAddress);
+        gateway.setMasterVerificationAddress(tempAddress);
 
         assertEq(tempAddress, gateway.masterVerificationAddress());
     }
@@ -152,7 +147,7 @@ contract ContractTest is Test {
     function testFail_NonOwnerCannotInitialize() public {
         vm.startPrank(notOwner);
         address tempAddress = vm.addr(5);
-        gateway.initialize(tempAddress);
+        gateway.setMasterVerificationAddress(tempAddress);
         vm.stopPrank();
     }
 
@@ -161,10 +156,10 @@ contract ContractTest is Test {
         vm.prank(deployer);
         address masterVerificationKey = vm.addr(2);
 
-        gateway.initialize(masterVerificationKey);
+        gateway.setMasterVerificationAddress(masterVerificationKey);
 
         address SampleVerificationAddress = vm.addr(6);
-        string memory sampleRoute = "secret";
+        string memory sampleRoute = "secret-4";
 
         // Update the route with with masterVerificationKey signature
         bytes32 routeHash = getRouteHash(sampleRoute, SampleVerificationAddress);
@@ -176,7 +171,7 @@ contract ContractTest is Test {
         vm.prank(deployer);
         gateway.updateRoute(sampleRoute, SampleVerificationAddress, sig);
 
-        assertEq(gateway.route("secret"), SampleVerificationAddress);
+        assertEq(gateway.route("secret-4"), SampleVerificationAddress);
     }
 
     function testFail_OwnerCannotUpdateRouteWithoutValidSignature() public {
@@ -184,7 +179,7 @@ contract ContractTest is Test {
         vm.prank(deployer);
         address masterVerificationKey = vm.addr(5);
 
-        gateway.initialize(masterVerificationKey);
+        gateway.setMasterVerificationAddress(masterVerificationKey);
 
         address SampleVerificationAddress = vm.addr(6);
         string memory sampleRoute = "secret";
@@ -207,7 +202,7 @@ contract ContractTest is Test {
         vm.prank(deployer);
         address masterVerificationKey = vm.addr(5);
 
-        gateway.initialize(masterVerificationKey);
+        gateway.setMasterVerificationAddress(masterVerificationKey);
 
         address SampleVerificationAddress = vm.addr(6);
         string memory sampleRoute = "secret";
@@ -227,7 +222,7 @@ contract ContractTest is Test {
         vm.prank(deployer);
         address masterVerificationKey = vm.addr(5);
 
-        gateway.initialize(masterVerificationKey);
+        gateway.setMasterVerificationAddress(masterVerificationKey);
 
         address SampleVerificationAddress = vm.addr(6);
         string memory sampleRoute = "secret";
@@ -272,16 +267,10 @@ contract ContractTest is Test {
 
         gateway.send(vm.addr(5), sourceNetwork,routingInfo, payloadHash, assembledInfo, vm.addr(7), callbackSelector, 300000 );
 
-        (bytes32 tempPayloadHash,,,,) = gateway.tasks(1);
+        (bytes31 tempPayloadHash,,,,) = gateway.tasks(1);
         assertEq(tempPayloadHash, payloadHash, "payloadHash failed");
 
-        (,address tempCallbackAddress,,,) = gateway.tasks(1);
-        assertEq(tempCallbackAddress, vm.addr(7), "tempCallbackAddress failed");
-
-        (,,bytes4 tempCallbackSelector,,) = gateway.tasks(1);
-        assertEq(tempCallbackSelector, callbackSelector, "callbackSelector failed");
-
-        (,,,, bool tempCompleted) = gateway.tasks(1);
+        (,bool tempCompleted) = gateway.tasks(1);
         assertEq(tempCompleted, false, "tempCompleted failed");
     }
 
@@ -435,7 +424,7 @@ contract ContractTest is Test {
         vm.prank(deployer);
         address masterVerificationKey = vm.addr(2);
 
-        gateway.initialize(masterVerificationKey);
+        gateway.setMasterVerificationAddress(masterVerificationKey);
 
         address SampleVerificationAddress = 0x49F7552065228e5abF44e144cc750aEA4F711Dc3;
         string memory sampleRoute = "secret";

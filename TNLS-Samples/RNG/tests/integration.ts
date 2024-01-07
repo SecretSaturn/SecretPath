@@ -46,8 +46,6 @@ const initializeClient = async (endpoint: string, chainId: string) => {
 const initializeGateway = async (
   client: SecretNetworkClient,
   contractPath: string,
-  scrtRngHash: string,
-  scrtRngAddress: string,
 ) => {
   const wasmCode = fs.readFileSync(contractPath);
   console.log("Uploading gateway contract...");
@@ -91,11 +89,7 @@ const initializeGateway = async (
     {
       sender: client.address,
       code_id: codeId,
-      init_msg: { 
-        entropy: "secret",
-        rng_hash: scrtRngHash,
-        rng_addr: scrtRngAddress,
-      },
+      init_msg: {},
       code_hash: contractCodeHash.code_hash,
       label: "My contract" + Math.ceil(Math.random() * 10000), // The label should be unique for every contract, add random string in order to maintain uniqueness
     },
@@ -170,7 +164,7 @@ const initializeScrtRng = async (
     {
       sender: client.address,
       code_id: codeId,
-      init_msg: { initseed: "secret", prng_seed: "secret" },
+      init_msg: {},
       code_hash: contractCodeHash.code_hash,
       label: "My contract" + Math.ceil(Math.random() * 10000), // The label should be unique for every contract, add random string in order to maintain uniqueness
     },

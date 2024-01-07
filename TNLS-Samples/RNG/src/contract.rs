@@ -37,8 +37,7 @@ pub fn instantiate(
 #[entry_point]
 pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> StdResult<Response> {
     let response = match msg {
-        ExecuteMsg::Input { message } => try_handle(deps, env, info, message),
-        ExecuteMsg::ReturnRandom {} => return_random(deps, env, info),
+        ExecuteMsg::Input { message } => try_handle(deps, env, info, message)
     };
     pad_handle_result(response, BLOCK_SIZE)
 }
@@ -46,7 +45,7 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
 #[entry_point]
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     let response = match msg {
-        QueryMsg::Query {} => try_query(deps),
+        QueryMsg::Query {} => try_query(deps)
     };
     pad_query_result(response, BLOCK_SIZE)
 }
@@ -76,20 +75,6 @@ fn try_handle(
         }
         _ => Err(StdError::generic_err("invalid handle".to_string())),
     }
-}
-
-fn return_random(
-    _deps: DepsMut,
-    env: Env,
-    _info: MessageInfo,
-) -> StdResult<Response> {
-
-    let result = match env.block.random {
-        Some(random_value) => random_value.to_base64(),
-        None => return Err(StdError::generic_err("No random value available")),
-    };
-
-    Ok(Response::new().add_attribute("random", result))
 }
 
 fn try_random(
