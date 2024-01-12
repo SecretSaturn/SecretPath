@@ -40,13 +40,6 @@ contract Gateway is Initializable {
         bytes payload_signature;
     }
 
-    struct VRFSecretContract {
-        bytes32 contract_address_1;
-        bytes13 contract_address_2;
-        bytes32 contract_code_hash_1;
-        bytes32 contract_code_hash_2;
-    }
-
     struct PostExecutionInfo {
         bytes32 payload_hash;
         bytes32 result_hash;
@@ -72,7 +65,6 @@ contract Gateway is Initializable {
 
     /// @dev mapping of chain name string to the verification address
     mapping(string => address) public route;
-
 
     /*//////////////////////////////////////////////////////////////
                               Errors
@@ -111,6 +103,7 @@ contract Gateway is Initializable {
     /// @return r The r component of the signature
     /// @return s The s component of the signature
     /// @return v The recovery byte of the signature
+
     function splitSignature(bytes memory _sig) private pure returns (bytes32 r, bytes32 s, uint8 v) {
         require(_sig.length == 65, "invalid signature length");
 
@@ -138,6 +131,7 @@ contract Gateway is Initializable {
     /// @param _routeInput The route name
     /// @param _verificationAddressInput The verification address
     /// @return The calculated hash
+
     function getRouteHash(string calldata _routeInput, address _verificationAddressInput) private pure returns (bytes32) {
         return keccak256(abi.encode(_routeInput, _verificationAddressInput));
     }
@@ -204,9 +198,8 @@ contract Gateway is Initializable {
         }
     }
     
-   function bytesToUint256Array(bytes memory data) public pure returns (uint256[] memory) {
+   function bytesToUint256Array(bytes memory data) private pure returns (uint256[] memory) {
         require(data.length % 32 == 0, "Data length must be a multiple of 32 bytes");
-
         uint256[] memory uintArray;
         assembly {
             // Cast the bytes array to a uint256[] array by setting the appropriate length
@@ -249,6 +242,7 @@ contract Gateway is Initializable {
     //////////////////////////////////////////////////////////////*/
 
     /// @notice Replaces the constructor for upgradeable contracts
+
     function initialize() public initializer {
         owner = msg.sender;
         taskId = 1;
@@ -260,6 +254,7 @@ contract Gateway is Initializable {
 
     /// @notice Initialize the verification address
     /// @param _masterVerificationAddress The input address
+
     function setMasterVerificationAddress(address _masterVerificationAddress) external onlyOwner {
         masterVerificationAddress = _masterVerificationAddress;
     }
@@ -344,7 +339,7 @@ contract Gateway is Initializable {
 
         //use hard coded contract values instead of storage variables, saves around 8,500 in gas per TX. 
         //Since contract is upgradeable, we can update these values as well with it.
-        bytes memory _routing_info = "secret10hwq375veu49khx9dkcl6249n6fc2u5tft50jp";
+        bytes memory _routing_info = "secret1jyu2qaentmvwvejm8wzghr8qms0yehukxmp75f";
         bytes memory _routing_code_hash = "d94d2cd7d22f0509c7ca0b80d6576ecfebf2618c6026204c30a35f6624cb3230";
 
         bytes memory payload = bytes.concat(
@@ -406,16 +401,12 @@ contract Gateway is Initializable {
             revert TaskAlreadyCompleted();
         }
 
+        // Check if the payload hashes match
         if (sliceLastByte(_info.payload_hash) != task.payload_hash_reduced) {
             revert InvalidPayloadHash();
         }
 
         address checkerAddress = route[_sourceNetwork];
-
-        // Result signature verification
-        if (recoverSigner(_info.result_hash, _info.result_signature) != checkerAddress) {
-            revert InvalidResultSignature();
-        }
 
         // Concatenate data elements
         bytes memory data =  bytes.concat(

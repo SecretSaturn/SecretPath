@@ -23,12 +23,14 @@ contract RandomnessReciever {
         VRFGateway = _VRFGateway;
     }
 
+    event requestRandomness(uint256 requestId);
 
     function requestRandomnessTest() external {
         uint32 numWords = 2000; // can be up to 2000 words
         uint32 callbackGasLimit = 2000000;   
         ISecretVRF vrfContract = ISecretVRF(VRFGateway);
         uint256 requestId = vrfContract.requestRandomness(numWords, callbackGasLimit);
+        emit requestRandomness(requestId);
     }
 
     event fulfilledRandomWords(uint256 requestId, uint256[] randomWords);

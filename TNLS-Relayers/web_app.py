@@ -9,9 +9,10 @@ from yaml import safe_load
 from eth_interface import EthInterface, EthContract
 from relayer import Relayer
 from scrt_interface import SCRTInterface, SCRTContract
+from dotenv import load_dotenv
 
 base_map = {'Ethereum': (EthInterface, EthContract), 'Secret': (SCRTInterface, SCRTContract)}
-
+load_dotenv()
 
 def generate_eth_config(config_dict, provider=None):
     """

@@ -39,58 +39,12 @@ class Relayer:
                  dict_of_names_to_interfaces: Dict[str, Tuple[BaseChainInterface, BaseContractInterface, str, str]],
                  num_loops=None):
 
-        # Load .env file
-        load_dotenv()
-
-        # Read variables from .env
-        gatewayAddress = os.getenv('GATEWAY_ADDRESS')
-        eth_private_key = os.getenv('ETH_PRIVATE_KEY')
-        eth_address = os.getenv('ETH_ADDRESS')
-        scrt_private_key = os.getenv('SCRT_PRIVATE_KEY')
-        scrt_address = os.getenv('SCRT_ADDRESS')
-        scrt_contract_address = os.getenv('SCRT_CONTRACT_ADDRESS')
-        scrt_api_url = os.getenv('SCRT_API_URL')
-        scrt_chain_id = os.getenv('SCRT_CHAIN_ID')
-        verification_key = os.getenv('VERIFICATION_KEY')
-        encryption_key = os.getenv('ENCRYPTION_KEY')
-
-        # Load ABI files
-        eth_abi = json.load(open("eth_abi.json", 'r'))
-        scrt_abi = json.dumps(json.load(open("secret_abi.json", 'r')))
-
-        # Initialize Ethereum Interface and Contract
-        eth_base_interface = EthInterface(private_key=eth_private_key, address=eth_address,
-                                          contract_address=gatewayAddress)
-        eth_contract_interface = EthContract(interface=eth_base_interface, address=gatewayAddress, abi=eth_abi)
-
-        # Initialize Secret Interface and Contract
-        scrt_base_interface = SCRTInterface(private_key=scrt_private_key, address=scrt_address, api_url=scrt_api_url,
-                                            chain_id=scrt_chain_id, provider=None)
-        scrt_contract_interface = SCRTContract(interface=scrt_base_interface,
-                                               address=scrt_contract_address, abi=scrt_abi)
-
-        # Setup keys dictionary
-        keys_dict = {
-            'secret-4': {
-                'verification': verification_key,
-                'encryption': encryption_key
-            }
-        }
         """
-        Encryption key: AjvNv1VH/B96I4vi6jdhS3vHsjxvXK4VS6tylhpW7keg
-        Public key: 0x043bcdbf5547fc1f7a238be2ea37614b7bc7b23c6f5cae154bab72961a56ee47a0b711ae0f62f0a6955045fa9e424379c296085cd8f1511caf33685f430ab15dde
-        Eth Address: 0x3211F7521F9d0eD3c4E45e4e7989df2652f2c0EC
-        Implementation of the BaseChainInterface standard for the Secret Network
-
         NOTE: the below default private key is for testing only, and does not correspond to any real account/wallet
         """
 
-        # Create the tuple
-        eth_tuple = (eth_base_interface, eth_contract_interface, 'logNewTask', 'postExecution')
-        scrt_tuple = (scrt_base_interface, scrt_contract_interface, 'wasm', 'inputs')
-
         # Create the dictionary and add the tuple
-        self.dict_of_names_to_interfaces = {'11155111': eth_tuple,'secret-4': scrt_tuple}
+        self.dict_of_names_to_interfaces = dict_of_names_to_interfaces
         """
 
         Args:
@@ -136,11 +90,10 @@ class Relayer:
 
     def poll_for_transactions(self):
         for name, (chain_interface, contract_interface, evt_name, _) in self.dict_of_names_to_interfaces.items():
-            if name == 'secret-4' or name == 'pulsar-3':
+            if name == 'secret-4' or name == 'pulsar-3' or name == 'secret':
                 continue
             prev_height = self.dict_of_names_to_blocks[name]
             curr_height = chain_interface.get_last_block()
-            #curr_height = 5029638
             if prev_height is None:
                 prev_height = curr_height - 1
 

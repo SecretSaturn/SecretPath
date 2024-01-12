@@ -164,12 +164,7 @@ fn pre_execution(deps: DepsMut, _env: Env, msg: PreExecutionMsg) -> StdResult<Re
             from_binary(&Binary::from(msg.payload.as_slice()))?
         },
     };
-
-    let input_values = payload.data;
-
-    // combine input values and task ID to create verification hash
-    let input_hash = sha_256(&[input_values.as_bytes(), &msg.task_id.to_be_bytes()].concat());
-
+    
     // verify the internal verification key matches the user address
     if payload.user_key != msg.user_key {
         return Err(StdError::generic_err("verification key mismatch"));
@@ -178,6 +173,31 @@ fn pre_execution(deps: DepsMut, _env: Env, msg: PreExecutionMsg) -> StdResult<Re
     if msg.routing_info != payload.routing_info {
         return Err(StdError::generic_err("routing info mismatch"));
     }
+
+    // check if the payload matches the payload hash
+    let mut hasher = Keccak256::new();
+
+    let prefix = "\x19Ethereum Signed Message:\n32".as_bytes();
+    hasher.update(msg.payload.as_slice());
+    let payload_hash_tmp = hasher.finalize_reset();
+    hasher.update([prefix, &payload_hash_tmp].concat());
+    let payload_hash_tmp = hasher.finalize();
+
+    if msg.payload_hash.as_slice() != payload_hash_tmp.as_slice() {
+        return Err(StdError::generic_err("Hashed Payload does not match payload hash"));
+    }
+
+    // check if the task wasn't executed before already
+    let map_contains_task = TASK_MAP.contains(deps.storage, &msg.task_id);
+
+    if map_contains_task {
+        return Err(StdError::generic_err("Task ID already exists, not executing again"));
+    }
+
+    let input_values = payload.data;
+
+    // combine input values and task ID to create verification hash
+    let input_hash = sha_256(&[input_values.as_bytes(), &msg.task_id.to_be_bytes()].concat());
 
     // create a task information store
     let task_info = TaskInfo {
@@ -200,14 +220,8 @@ fn pre_execution(deps: DepsMut, _env: Env, msg: PreExecutionMsg) -> StdResult<Re
 
     // used in production to create signature
     #[cfg(target_arch = "wasm32")]
-    let signature = deps
-        .api
-        .secp256k1_sign(&input_hash, &signing_key_bytes)
+    let signature = deps.api.secp256k1_sign(&input_hash, &signing_key_bytes)
         .map_err(|err| StdError::generic_err(err.to_string()))?;
-    // let signature = PrivateKey::parse(&signing_key_bytes)?
-    //     .sign(&input_hash, deps.api)
-    //     .serialize()
-    //     .to_vec();
 
     // used only in unit testing to create signatures
     #[cfg(not(target_arch = "wasm32"))]
@@ -249,10 +263,6 @@ fn post_execution(deps: DepsMut, _env: Env, msg: PostExecutionMsg) -> StdResult<
         .get(deps.storage, &msg.task_id)
         .ok_or_else(|| StdError::generic_err("task id not found"))?;
 
-    // this panics in unit tests
-    #[cfg(target_arch = "wasm32")]
-    TASK_MAP.remove(deps.storage, &msg.task_id)?;
-
     // verify that input hash is correct one for Task ID
     if msg.input_hash.as_slice() != task_info.input_hash.to_vec() {
         return Err(StdError::generic_err("input hash does not match task id"));
@@ -287,17 +297,8 @@ fn post_execution(deps: DepsMut, _env: Env, msg: PostExecutionMsg) -> StdResult<
     // used in production to create signatures
     // NOTE: api.secp256k1_sign() will perform an additional sha_256 hash operation on the given data
     #[cfg(target_arch = "wasm32")]
-    let result_signature = {
-        // let sk = PrivateKey::parse(&signing_key_bytes)?;
-        // let result_signature = sk.sign(&result_hash, deps.api).serialize().to_vec();
-
-        let result_signature = deps
-            .api
-            .secp256k1_sign(&result_hash, &signing_key_bytes)
-            .map_err(|err| StdError::generic_err(err.to_string()))?;
-
-        result_signature
-    };
+    let result_signature = deps.api.secp256k1_sign(&result_hash, &signing_key_bytes)
+        .map_err(|err| StdError::generic_err(err.to_string()))?;
 
     // used only in unit testing to create signatures
     #[cfg(not(target_arch = "wasm32"))]
@@ -344,12 +345,6 @@ fn post_execution(deps: DepsMut, _env: Env, msg: PostExecutionMsg) -> StdResult<
             .secp256k1_sign(&packet_hash, &signing_key_bytes)
             .map_err(|err| StdError::generic_err(err.to_string()))?
     };
-    // let packet_signature = {
-    //     PrivateKey::parse(&signing_key_bytes)?
-    //         .sign(&packet_hash, deps.api)
-    //         .serialize()
-    //         .to_vec()
-    // };
 
     // used only in unit testing to create signature
     #[cfg(not(target_arch = "wasm32"))]

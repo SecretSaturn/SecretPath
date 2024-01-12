@@ -5,6 +5,8 @@ import "forge-std/Test.sol";
 import "forge-std/Vm.sol";
 import "forge-std/console2.sol";
 import {Gateway} from "../src/Gateway.sol";
+import "@openzeppelin/contracts/proxy/transparent/ProxyAdmin.sol";
+import "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 
 contract ContractTest is Test {
     /*//////////////////////////////////////////////////////////////
@@ -13,7 +15,10 @@ contract ContractTest is Test {
 
     Gateway internal gateway;
     address deployer;
+    address gatewayOwner;
     address notOwner;
+    ProxyAdmin proxyAdmin;
+    TransparentUpgradeableProxy gatewayProxy;
 
     event logNewTask(
         uint256 indexed task_id,
@@ -36,9 +41,30 @@ contract ContractTest is Test {
 
     function setUp() public {
         deployer = vm.addr(3);
+        gatewayOwner = vm.addr(9);
         notOwner = vm.addr(4);
         vm.prank(deployer);
-        gateway = new Gateway();
+        // Deploy ProxyAdmin
+        proxyAdmin = new ProxyAdmin(msg.sender);
+
+        // Deploy Gateway Logic Contract
+        Gateway gatewayLogic = new Gateway();
+
+        // Prepare initializer data for Gateway
+        bytes memory initializerData = abi.encodeWithSelector(
+            Gateway.initialize.selector
+        );
+        
+        vm.prank(gatewayOwner);
+        // Deploy TransparentUpgradeableProxy
+        gatewayProxy = new TransparentUpgradeableProxy(
+            address(gatewayLogic),
+            address(proxyAdmin),
+            initializerData
+        );
+
+        // Cast the proxy address to the Gateway interface
+        gateway = Gateway(address(gatewayProxy));
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -78,17 +104,21 @@ contract ContractTest is Test {
         return keccak256(abi.encode(_routeInput, _verificationAddressInput));
     }
 
+    function sliceLastByte(bytes32 data) private pure returns (bytes31) {
+        return bytes31(data & 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00);
+    }
+
     /*//////////////////////////////////////////////////////////////
                            Helper Functions
     //////////////////////////////////////////////////////////////*/
 
     function getPayloadHash(bytes memory _payload) public pure returns (bytes32) {
-        return keccak256(abi.encode(_payload));
+        return keccak256(abi.encodePacked(_payload));
        // return keccak256(bytes.concat("\x19Ethereum Signed Message:\n", bytes32(_payload.length), _payload));
     }
 
     function getResultHash(bytes memory _result) public pure returns (bytes32) {
-        return keccak256(abi.encode(_result));
+        return keccak256(abi.encodePacked(_result));
     }
 
     function getRouteInfoHash(string memory _routingInfo) public pure returns (bytes32) {
@@ -136,7 +166,7 @@ contract ContractTest is Test {
 
 
     function test_OwnerCanInitialize() public {
-        vm.prank(deployer);
+        vm.prank(gatewayOwner);
         address tempAddress = vm.addr(5);
 
         gateway.setMasterVerificationAddress(tempAddress);
@@ -152,8 +182,8 @@ contract ContractTest is Test {
     }
 
     function test_OwnerCanUpdateRouteWithValidSignature() public {
-        // Set the Master Verrification Key below
-        vm.prank(deployer);
+        // Set the Master Verification Key below
+        vm.prank(gatewayOwner);
         address masterVerificationKey = vm.addr(2);
 
         gateway.setMasterVerificationAddress(masterVerificationKey);
@@ -168,7 +198,7 @@ contract ContractTest is Test {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(2, ethSignedMessageHash);
         bytes memory sig = abi.encodePacked(r, s, v);
 
-        vm.prank(deployer);
+        vm.prank(gatewayOwner);
         gateway.updateRoute(sampleRoute, SampleVerificationAddress, sig);
 
         assertEq(gateway.route("secret-4"), SampleVerificationAddress);
@@ -176,7 +206,7 @@ contract ContractTest is Test {
 
     function testFail_OwnerCannotUpdateRouteWithoutValidSignature() public {
         // Set the Master Verrification Key below
-        vm.prank(deployer);
+        vm.prank(gatewayOwner);
         address masterVerificationKey = vm.addr(5);
 
         gateway.setMasterVerificationAddress(masterVerificationKey);
@@ -191,7 +221,6 @@ contract ContractTest is Test {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(7, ethSignedMessageHash);
         bytes memory sig = abi.encodePacked(r, s, v);
 
-        vm.prank(deployer);
         gateway.updateRoute(sampleRoute, SampleVerificationAddress, sig);
 
         vm.expectRevert(abi.encodeWithSignature("InvalidSignature()"));
@@ -199,7 +228,7 @@ contract ContractTest is Test {
 
     function testFail_NonOwnerCannotUpdateRouteWithValidSignature() public {
         // Set the Master Verrification Key below
-        vm.prank(deployer);
+        vm.prank(gatewayOwner);
         address masterVerificationKey = vm.addr(5);
 
         gateway.setMasterVerificationAddress(masterVerificationKey);
@@ -219,7 +248,7 @@ contract ContractTest is Test {
 
     function testFail_NonOwnerCannotUpdateRouteWithoutValidSignature() public {
         // Set the Master Verrification Key below
-        vm.prank(deployer);
+        vm.prank(gatewayOwner);
         address masterVerificationKey = vm.addr(5);
 
         gateway.setMasterVerificationAddress(masterVerificationKey);
@@ -240,9 +269,6 @@ contract ContractTest is Test {
     function test_PreExecution() public {
         // USER ADDRESS       ----->   vm.addr(5);
         // CALLBACK ADDRESS   ----->   vm.addr(7);
-
-        bytes4 callbackSelector = bytes4(abi.encodeWithSignature("callback(uint256 _taskId,bytes memory _result)"));
-        string memory sourceNetwork = "ethereum";
 
         string memory routingInfo = "secret";
 
@@ -265,21 +291,16 @@ contract ContractTest is Test {
             payload_signature: getPayloadSignature(payload, 5)
         });
 
-        gateway.send(vm.addr(5), sourceNetwork,routingInfo, payloadHash, assembledInfo, vm.addr(7), callbackSelector, 300000 );
+        gateway.send(payloadHash, vm.addr(5), routingInfo, assembledInfo);
 
-        (bytes31 tempPayloadHash,,,,) = gateway.tasks(1);
-        assertEq(tempPayloadHash, payloadHash, "payloadHash failed");
+        (bytes31 tempPayloadHash,) = gateway.tasks(1);
+        assertEq(tempPayloadHash, sliceLastByte(payloadHash), "payloadHash failed");
 
         (,bool tempCompleted) = gateway.tasks(1);
         assertEq(tempCompleted, false, "tempCompleted failed");
     }
 
     function testFail_CannotPreExecutionWithoutValidPayloadSig() public {
-        // USER ADDRESS       ----->   vm.addr(5);
-        // CALLBACK ADDRESS   ----->   vm.addr(6);
-
-        bytes4 callbackSelector = bytes4(abi.encodeWithSignature("callback(uint256 _taskId,bytes memory _result)"));
-        string memory sourceNetwork = "ethereum";
 
         string memory routingInfo = "secret";
 
@@ -292,7 +313,6 @@ contract ContractTest is Test {
         bytes memory userKey = hex"736f6d65207075626c6963206b65790000000000000000000000000000000000";
         bytes memory userPublicKey = hex"040b8d42640a7eded641dd42ad91d7c9ae3644a2412bdff174790012774e5528a30f9f0a630977d53e7a862eb2fb89207fe4fafc824992d281ba0180c6a1fddb4c";
 
-
         Gateway.ExecutionInfo memory assembledInfo = Gateway.ExecutionInfo({
             user_key: userKey,
             user_pubkey:userPublicKey,
@@ -303,7 +323,7 @@ contract ContractTest is Test {
             payload_signature: getPayloadSignature(payload, 7)
         });
 
-        gateway.send(vm.addr(5), sourceNetwork,routingInfo, payloadHash, assembledInfo, vm.addr(6), callbackSelector, 300000 );
+        gateway.send(payloadHash, vm.addr(5), routingInfo, assembledInfo);
 
         vm.expectRevert(abi.encodeWithSignature("InvalidSignature()"));
     }
@@ -313,6 +333,7 @@ contract ContractTest is Test {
         test_PreExecution();
 
         string memory sourceNetwork = "secret";
+    
         uint256 taskId = 1;
 
         // bytes32 string encoding of "add a bunch of stuff"
@@ -329,14 +350,17 @@ contract ContractTest is Test {
             payload_hash: payloadHash,
             result: result,
             result_hash: resultHash,
-            result_signature: getResultSignature(result, 6),
+            result_signature: getResultSignature(result, 2),
             packet_hash: resultHash,
-            packet_signature: getResultSignature(result, 6)
+            packet_signature: getResultSignature(result, 2),
+            callback_address: bytes20(address(gateway)),
+            callback_selector: hex"faef40fe",
+            callback_gas_limit: bytes4(uint32(300000))
         });
 
         gateway.postExecution(taskId, sourceNetwork, assembledInfo);
 
-        (,,,, bool tempCompleted) = gateway.tasks(1);
+        (,bool tempCompleted) = gateway.tasks(1);
         assertEq(tempCompleted, true);
     }
 
@@ -363,7 +387,10 @@ contract ContractTest is Test {
             result_hash: resultHash,
             result_signature: getResultSignature(result, 6),
             packet_hash: resultHash,
-            packet_signature: getResultSignature(result, 6)
+            packet_signature: getResultSignature(result, 6),
+            callback_address: bytes20(address(gateway)),
+            callback_selector: hex"faef40fe",
+            callback_gas_limit: bytes4(uint32(300000))
         });
 
         gateway.postExecution(taskId, sourceNetwork, assembledInfo);
@@ -376,19 +403,16 @@ contract ContractTest is Test {
     //////////////////////////////////////////////////////////////*/
 
     function test_PreExecutionSetupForExplicitCase() public {
-        // CALLBACK ADDRESS   ----->   vm.addr(7);
 
-        bytes4 callbackSelector = bytes4(0xb2bcfb71);
-        string memory sourceNetwork = "ethereum";
-        address userAddress = 0x49F7552065228e5abF44e144cc750aEA4F711Dc3;
+        address userAddress = 0x50FcF0c327Ee4341313Dd5Cb987f0Cd289Be6D4D;
 
         string memory routingInfo = "secret";
 
         // bytes32 string encoding of "add a bunch of stuff"
-        bytes memory payload = hex"61646420612062756e6368206f66207374756666000000000000000000000000";
-        bytes32 payloadHash = hex"ea57f8cfce0dca7528ff349328b9a524dbbd49fe724026da575aed40cd3ac2c4";
+        bytes memory payload = hex"0e9cff93bb71eb6eaabb1d64dba1841ba9202784af250812f7588a42c53d7ff1866cc2c682fd8968a2a36a9a7b5f1721c69d761a6bd4a26ef6b1c2f82cd35a7d29369fbeab8ad35c9ce162560e9a5cf2a271d30bb5b3e86206396bc6973f30ecb87959d5310688cb5283cf6eec57d86bb3c0bcd2d29d341d686f66208d90f65223cc988ce5b8923bed3225847ddc5859eef515ffb8ea77e8faafc891c2bcf8c1898ad53081367c052c866444536972c58672a1994cfc0ed174eea0ec7b324f2c4214c658fd75d06180e0984546a838559b890220d41d1ee4882f6371b7352c49f10ce45c360c4a98f9c5bf988bc49392ac005edb8c8683258163acb87e989dee647fcbf4e94b7bb320525c054dadad82764c34d82fa3b10bfd9edf260224eb86275f5ad390ce42fd423689cbe45f42350ed23465112554857d25f12a00f33e1c202cd419f512ad842f1fef95fa5bfd4898a810e9f0ab4354453aca9bb516c49c8a88bc1134cc8f2fa1d7e5cb65ff23ffbc7727d091c0b1e18c7c6647a49e3e951c2e8ec87ca3cdeb3bedb5d5b1650d4b622bfc3e6ca7c3d5afa6cbe4f0d80ac8dbd966359d";
+        bytes32 payloadHash = hex"fa6ec6995359ca7c7ea6602443f212e8295b9407cfa9f1f04c4651df345453fa";
         bytes memory payloadSignature =
-            hex"293fb5fe48d81aadd26574aca54509804f628a851d7df4e3356b0e191ef5b11c33f07e7eeb0494384df6f3f636e2fc0fcf64ee3fb0d5e3d6f3302a81325bd06f1c";
+            hex"a6c728c5307ec4a84f15805f55d3827c6e58eb661fa5633956b500540e6b0b376cba788ef8ad19024ecc5c769cdd917ae07423f0724709e10fce0e3d7510da7c1c";
 
         // encoding bytes of "some public key"
         bytes memory userKey = hex"736f6d65207075626c6963206b65790000000000000000000000000000000000";
@@ -404,24 +428,18 @@ contract ContractTest is Test {
             payload_signature: payloadSignature
         });
 
-        gateway.send(userAddress, sourceNetwork,routingInfo, payloadHash, assembledInfo, address(gateway), callbackSelector, 300000 );
+        gateway.send(payloadHash, userAddress,routingInfo, assembledInfo );
 
-        (bytes32 tempPayloadHash,,,,) = gateway.tasks(1);
-        assertEq(tempPayloadHash, payloadHash);
+        (bytes31 tempPayloadHash,) = gateway.tasks(1);
+        assertEq(tempPayloadHash, sliceLastByte(payloadHash));
 
-        (,address tempCallbackAddress,,,) = gateway.tasks(1);
-        assertEq(tempCallbackAddress, address(gateway));
-
-        (,,bytes4 tempCallbackSelector,,) = gateway.tasks(1);
-        assertEq(tempCallbackSelector, callbackSelector);
-
-        (,,,, bool tempCompleted) = gateway.tasks(1);
+        (,bool tempCompleted) = gateway.tasks(1);
         assertEq(tempCompleted, false);
     }
 
     function test_addressKeySetupForPostExecutionExplicitValues() public {
         // Set the Master Verrification Key below
-        vm.prank(deployer);
+        vm.prank(gatewayOwner);
         address masterVerificationKey = vm.addr(2);
 
         gateway.setMasterVerificationAddress(masterVerificationKey);
@@ -436,7 +454,7 @@ contract ContractTest is Test {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(2, ethSignedMessageHash);
         bytes memory sig = abi.encodePacked(r, s, v);
 
-        vm.prank(deployer);
+        vm.prank(gatewayOwner);
         gateway.updateRoute(sampleRoute, SampleVerificationAddress, sig);
 
         assertEq(gateway.route("secret"), SampleVerificationAddress);
@@ -449,8 +467,13 @@ contract ContractTest is Test {
         string memory sourceNetwork = "secret";
         uint256 taskId = 1;
 
+        // callback
+        bytes20 callback_address = hex"7b226d795f76616c7565223a327d";
+        bytes4 callback_selector = hex"faef40fe";
+        bytes4 callback_gas_limit = bytes4(uint32(300000));
+
         // payload
-        bytes32 payloadHash = hex"ea57f8cfce0dca7528ff349328b9a524dbbd49fe724026da575aed40cd3ac2c4";
+        bytes32 payloadHash = hex"fa6ec6995359ca7c7ea6602443f212e8295b9407cfa9f1f04c4651df345453fa";
 
         // result
         bytes memory result = hex"7b226d795f76616c7565223a327d";
@@ -469,12 +492,15 @@ contract ContractTest is Test {
             result_hash: resultHash,
             result_signature: resultSignature,
             packet_hash: packetHash,
-            packet_signature: packetSignature
+            packet_signature: packetSignature,
+            callback_address: callback_address,
+            callback_selector: callback_selector,
+            callback_gas_limit: callback_gas_limit
         });
 
         gateway.postExecution(taskId, sourceNetwork, assembledInfo);
 
-        (,,,,bool tempCompleted) = gateway.tasks(1);
+        (,bool tempCompleted) = gateway.tasks(1);
         assertEq(tempCompleted, true);
     }
 }

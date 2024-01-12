@@ -20,6 +20,8 @@ contract DeployScript is Script {
     TransparentUpgradeableProxy gatewayProxy;
     RandomnessReciever randomnessAddress;
 
+    address verificationAddress = 0x5b5274c2ae6aA29B6e94048878a61814594D3409;
+
     uint256 privKey = vm.envUint("ETH_PRIVATE_KEY");
 
 
@@ -74,7 +76,6 @@ contract DeployScript is Script {
 
         // Initialize master verification Address
         gateway.setMasterVerificationAddress(deployer); // Replace gatewayAddress with gateway
-        address verificationAddress = 0x09362bF5bbA88948f8B9fCDbB5B56C8CdD2403ad;
         /// ------ Update Routes Param Setup ------- ///
 
         string memory route = "secret-4";
