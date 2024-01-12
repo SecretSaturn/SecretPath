@@ -349,8 +349,7 @@ contract ContractTest is Test {
         Gateway.PostExecutionInfo memory assembledInfo = Gateway.PostExecutionInfo({
             payload_hash: payloadHash,
             result: result,
-            result_hash: resultHash,
-            result_signature: getResultSignature(result, 2),
+            input_hash: resultHash,
             packet_hash: resultHash,
             packet_signature: getResultSignature(result, 2),
             callback_address: bytes20(address(gateway)),
@@ -384,8 +383,7 @@ contract ContractTest is Test {
         Gateway.PostExecutionInfo memory assembledInfo = Gateway.PostExecutionInfo({
             payload_hash: payloadHash,
             result: result,
-            result_hash: resultHash,
-            result_signature: getResultSignature(result, 6),
+            input_hash: resultHash,
             packet_hash: resultHash,
             packet_signature: getResultSignature(result, 6),
             callback_address: bytes20(address(gateway)),
@@ -477,9 +475,7 @@ contract ContractTest is Test {
 
         // result
         bytes memory result = hex"7b226d795f76616c7565223a327d";
-        bytes32 resultHash = hex"faef40ffa988468a70a21929200a40f1c8ea9f56fcf79a206ef9713032c4e28b";
-        bytes memory resultSignature =
-            hex"faad4e82fe9a6a05ef2a4387fca5471fe3bc7b53e81a3c08d4a5514ac7c6fddf2a266cf1c638654c156612a1943dbaf278105f138c5be67ab1eca4253c57ca7f1b";
+        bytes32 inputHash = hex"faef40ffa988468a70a21929200a40f1c8ea9f56fcf79a206ef9713032c4e28b";
 
         // packet
         bytes32 packetHash = hex"923b23c023d0e5e66ac122d9804414f4f9cab06d7a6ce6c4b8c586a1fa57264c";
@@ -489,8 +485,7 @@ contract ContractTest is Test {
         Gateway.PostExecutionInfo memory assembledInfo = Gateway.PostExecutionInfo({
             payload_hash: payloadHash,
             result: result,
-            result_hash: resultHash,
-            result_signature: resultSignature,
+            input_hash: inputHash,
             packet_hash: packetHash,
             packet_signature: packetSignature,
             callback_address: callback_address,

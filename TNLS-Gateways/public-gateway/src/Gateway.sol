@@ -42,13 +42,12 @@ contract Gateway is Initializable {
 
     struct PostExecutionInfo {
         bytes32 payload_hash;
-        bytes32 result_hash;
+        bytes32 input_hash;
         bytes32 packet_hash;
         bytes20 callback_address;
         bytes4 callback_selector;
         bytes4 callback_gas_limit;
         bytes packet_signature;
-        bytes result_signature;
         bytes result;
     }
 
@@ -79,8 +78,6 @@ contract Gateway is Initializable {
     /// @notice thrown when the signature is invalid
     error InvalidSignature();
 
-    /// @notice Thrown when the recovered ResultHash or ResultSignature is invalid
-    error InvalidResultSignature();
 
     /// @notice thrown when the PacketSignature is invalid
     error InvalidPacketSignature();
@@ -223,8 +220,6 @@ contract Gateway is Initializable {
         ExecutionInfo info
     );
 
-    event logCompletedTask(uint256 indexed task_id, bytes32 payload_hash, bytes32 result_hash);
-
     /// @notice Emitted when we recieve callback for our result of the computation
     event ComputedResult(uint256 taskId, bytes result);
 
@@ -249,7 +244,7 @@ contract Gateway is Initializable {
     }
 
     /*//////////////////////////////////////////////////////////////
-                             Initialization
+                        Maintainance Functions
     //////////////////////////////////////////////////////////////*/
 
     /// @notice Initialize the verification address
@@ -258,10 +253,6 @@ contract Gateway is Initializable {
     function setMasterVerificationAddress(address _masterVerificationAddress) external onlyOwner {
         masterVerificationAddress = _masterVerificationAddress;
     }
-
-    /*//////////////////////////////////////////////////////////////
-                             Update Routes
-    //////////////////////////////////////////////////////////////*/
 
     /// @notice Updating the route
     /// @param _route Route name
@@ -277,6 +268,14 @@ contract Gateway is Initializable {
         }
 
         route[_route] = _verificationAddress;
+    }
+
+    /// @notice Increase the task_id to check for problems 
+    /// @param _newTaskId Route name
+
+    function increaseTaskId(uint256 _newTaskId) external onlyOwner {
+        require (_newTaskId > taskId, "New task id must be higher than the old task_id");
+        taskId = _newTaskId;
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -408,14 +407,14 @@ contract Gateway is Initializable {
 
         address checkerAddress = route[_sourceNetwork];
 
-        // Concatenate data elements
+        // Concatenate packet data elements
         bytes memory data =  bytes.concat(
         bytes(_sourceNetwork),
         bytes(uint256toString(block.chainid)),
         bytes32(_taskId),
+        _info.input_hash,
         _info.payload_hash,
         _info.result,
-        _info.result_hash,
         _info.callback_address,
         _info.callback_selector);
         
@@ -428,8 +427,6 @@ contract Gateway is Initializable {
         }
         
         task.completed = true;
-
-        emit logCompletedTask(_taskId, _info.payload_hash, _info.result_hash);
 
         // Continue with the function execution
         // Additional conversion for Secret VRF into uint256[] if callback_selector matches the fullfillRandomWords selector.

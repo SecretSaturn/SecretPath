@@ -20,8 +20,7 @@ class EthInterface(BaseChainInterface):
     """
     Implementaion of BaseChainInterface for eth.
     """
-
-
+    
     def __init__(self, private_key="", address="", provider=None, contract_address = "", **_kwargs):
         if provider is None:
             """

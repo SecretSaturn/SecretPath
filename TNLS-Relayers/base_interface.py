@@ -5,19 +5,18 @@ from typing import List
 
 eth_task_keys_to_msg = {
     '_taskId': 'task_id', '_sourceNetwork': 'source_network', '_info': ['payload_hash',
-                                                                        'result_hash',
+                                                                        'input_hash',
                                                                         'packet_hash',
                                                                         'callback_address',
                                                                         'callback_selector',
                                                                         'callback_gas_limit',
                                                                         'packet_signature',
-                                                                        'result_signature',
                                                                         'result']
 
 }
 
-task_keys_to_msg = {'11155111': eth_task_keys_to_msg}
-task_keys_in_order = {'11155111': ['_taskId', '_sourceNetwork', '_info']}
+task_keys_to_msg = {'ethereum': eth_task_keys_to_msg}
+task_keys_in_order = {'ethereum': ['_taskId', '_sourceNetwork', '_info']}
 
 
 def to_dict(dict_to_parse, key_type=""):

@@ -13,7 +13,7 @@ use crate::{
         ExecuteMsg, InputResponse, InstantiateMsg, PostExecutionMsg, PreExecutionMsg,
         PublicKeyResponse, QueryMsg, ResponseStatus::Success, SecretMsg,
     },
-    state::{KeyPair, State, TaskInfo, CONFIG, CREATOR, MY_ADDRESS, TASK_MAP},
+    state::{KeyPair, State, Task, TaskInfo, CONFIG, CREATOR, MY_ADDRESS, TASK_MAP},
     PrivContractHandleMsg,
 };
 
@@ -23,7 +23,7 @@ use sha3::{Digest, Keccak256};
 /// pad handle responses and log attributes to blocks of 256 bytes to prevent leaking info based on
 /// response size
 pub const BLOCK_SIZE: usize = 256;
-pub const CHAIN_ID: &str = "secret-4";
+pub const CHAIN_ID: &str = "pulsar-3";
 
 #[cfg(feature = "contract")]
 ////////////////////////////////////// Init ///////////////////////////////////////
@@ -187,8 +187,13 @@ fn pre_execution(deps: DepsMut, _env: Env, msg: PreExecutionMsg) -> StdResult<Re
         return Err(StdError::generic_err("Hashed Payload does not match payload hash"));
     }
 
+    let new_task = Task {
+        network: msg.source_network.clone(),
+        task_id: msg.task_id.clone()
+    }.clone();
+
     // check if the task wasn't executed before already
-    let map_contains_task = TASK_MAP.contains(deps.storage, &msg.task_id);
+    let map_contains_task = TASK_MAP.contains(deps.storage, &new_task);
 
     if map_contains_task {
         return Err(StdError::generic_err("Task ID already exists, not executing again"));
@@ -197,12 +202,14 @@ fn pre_execution(deps: DepsMut, _env: Env, msg: PreExecutionMsg) -> StdResult<Re
     let input_values = payload.data;
 
     // combine input values and task ID to create verification hash
-    let input_hash = sha_256(&[input_values.as_bytes(), &msg.task_id.to_be_bytes()].concat());
+    let unsafe_payload_bytes = if unsafe_payload { [1u8] } else { [0u8] };
+    let input_hash = sha_256(&[input_values.as_bytes(), &new_task.task_id.to_be_bytes(),&unsafe_payload_bytes].concat());
 
     // create a task information store
-    let task_info = TaskInfo {
+    let task_info = TaskInfo { 
         payload: msg.payload, // storing the payload
         payload_hash: msg.payload_hash,
+        unsafe_payload: unsafe_payload,
         input_hash, // storing the input_values hashed together with task ID
         source_network: msg.source_network,
         user_address: payload.user_address.clone(),
@@ -212,7 +219,7 @@ fn pre_execution(deps: DepsMut, _env: Env, msg: PreExecutionMsg) -> StdResult<Re
     };
 
     // map task ID to task info
-    TASK_MAP.insert(deps.storage, &msg.task_id, &task_info)?;
+    TASK_MAP.insert(deps.storage, &new_task, &task_info)?;
 
     // load this gateway's signing key
     let mut signing_key_bytes = [0u8; 32];
@@ -239,7 +246,7 @@ fn pre_execution(deps: DepsMut, _env: Env, msg: PreExecutionMsg) -> StdResult<Re
             input_values,
             handle: msg.handle,
             user_address: payload.user_address,
-            task_id: msg.task_id,
+            task: new_task.clone(),
             input_hash: Binary(input_hash.to_vec()),
             signature: Binary(signature),
         },
@@ -252,7 +259,7 @@ fn pre_execution(deps: DepsMut, _env: Env, msg: PreExecutionMsg) -> StdResult<Re
 
     Ok(Response::new()
         .add_message(cosmos_msg)
-        .add_attribute_plaintext("task_id", msg.task_id.to_string())
+        .add_attribute_plaintext("task_id", &new_task.task_id.to_string())
         .add_attribute_plaintext("status", "sent to private contract")
         .set_data(to_binary(&InputResponse { status: Success })?))
 }
@@ -260,7 +267,7 @@ fn pre_execution(deps: DepsMut, _env: Env, msg: PreExecutionMsg) -> StdResult<Re
 fn post_execution(deps: DepsMut, _env: Env, msg: PostExecutionMsg) -> StdResult<Response> {
     // load task info and remove task ID from map
     let task_info = TASK_MAP
-        .get(deps.storage, &msg.task_id)
+        .get(deps.storage, &msg.task)
         .ok_or_else(|| StdError::generic_err("task id not found"))?;
 
     // verify that input hash is correct one for Task ID
@@ -279,63 +286,29 @@ fn post_execution(deps: DepsMut, _env: Env, msg: PostExecutionMsg) -> StdResult<
     // "hasher" is used to perform multiple Keccak256 hashes
     let mut hasher = Keccak256::new();
 
-    //create message hash of (result + payload + inputs)
-    let data = [
-         result.as_slice(),
-         task_info.payload.as_slice(),
-         &task_info.input_hash,
-    ]
-    .concat();
-    hasher.update(&data);
-    let result_hash = hasher.finalize_reset();
-
-    // load this gateway's signing key
-    let private_key = CONFIG.load(deps.storage)?.signing_keys.sk;
-    let mut signing_key_bytes = [0u8; 32];
-    signing_key_bytes.copy_from_slice(private_key.as_slice());
-
-    // used in production to create signatures
-    // NOTE: api.secp256k1_sign() will perform an additional sha_256 hash operation on the given data
-    #[cfg(target_arch = "wasm32")]
-    let result_signature = deps.api.secp256k1_sign(&result_hash, &signing_key_bytes)
-        .map_err(|err| StdError::generic_err(err.to_string()))?;
-
-    // used only in unit testing to create signatures
-    #[cfg(not(target_arch = "wasm32"))]
-    let result_signature = {
-        let secp = secp256k1::Secp256k1::signing_only();
-        let sk = secp256k1::SecretKey::from_slice(&signing_key_bytes).unwrap();
-
-        let result_message = secp256k1::Message::from_slice(&result_hash)
-            .map_err(|err| StdError::generic_err(err.to_string()))?;
-        let result_signature = secp
-            .sign_ecdsa_recoverable(&result_message, &sk)
-            .serialize_compact();
-
-        result_signature.1
-    };
-
-    
     let mut task_id_padded = [0u8; 32]; // Create a 32-byte array filled with zeros
     // Convert the task_id to an 8-byte big-endian array & Copy the 8-byte big-endian representation to the end of the result array
-    task_id_padded[32 - msg.task_id.to_be_bytes().len()..].copy_from_slice(msg.task_id.to_be_bytes().as_slice());
+    task_id_padded[32 - msg.task.task_id.to_be_bytes().len()..].copy_from_slice(msg.task.task_id.to_be_bytes().as_slice());
 
     // create hash of entire packet (used to verify the message wasn't modified in transit)
     let data = [
         CHAIN_ID.as_bytes(),               // source network
         routing_info.as_bytes(),           // task_destination_network
         task_id_padded.as_slice(), //msg.task_id.to_be_bytes().as_slice(),        // task ID
-        // task_info.payload.as_slice(),      // payload (original encrypted or unencrypted payload)
+        task_info.input_hash.as_slice(),
         task_info.payload_hash.as_slice(), // original payload message
         result.as_slice(),             // result
-        sha_256(&result_hash).as_slice(),      // result message
-        //result_signature.as_slice(),           // result signature
         task_info.callback_address.as_slice(), // callback address
         task_info.callback_selector.as_slice(), // callback selector
     ]
     .concat();
     hasher.update(&data);
     let packet_hash = hasher.finalize();
+
+    // load this gateway's signing key
+    let private_key = CONFIG.load(deps.storage)?.signing_keys.sk;
+    let mut signing_key_bytes = [0u8; 32];
+    signing_key_bytes.copy_from_slice(private_key.as_slice());
 
     // used in production to create signature
     // NOTE: api.secp256k1_sign() will perform an additional sha_256 hash operation on the given data
@@ -374,21 +347,6 @@ fn post_execution(deps: DepsMut, _env: Env, msg: PostExecutionMsg) -> StdResult<
     // Compress the public key
     let compressed_public_key = uncompressed_public_key.serialize_compressed();
 
-    // Recover and compare public keys for result, do v = 0 (= 27 in ethereum) and v = 1 (= 28 in ethereum)
-    let result_public_key_27 = {deps.api.secp256k1_recover_pubkey(&sha_256(&result_hash), &result_signature, 0)
-    .map_err(|err| StdError::generic_err(err.to_string()))?};
-    let result_public_key_28 = {deps.api.secp256k1_recover_pubkey(&sha_256(&result_hash), &result_signature, 1)
-    .map_err(|err| StdError::generic_err(err.to_string()))?};
-
-    let result_recovery_id = if result_public_key_27 == compressed_public_key {
-        27
-    } else if result_public_key_28 == compressed_public_key {
-        28
-    }
-    else {
-        return Err(StdError::generic_err("Generation of Recovery ID for Result Signature failed"));
-    };
-
     // Recover and compare public keys for packet, do v = 0 (= 27 in ethereum) and v = 1 (= 28 in ethereum)
     let packet_public_key_27 = {deps.api.secp256k1_recover_pubkey(&sha_256(&packet_hash), &packet_signature, 0)
     .map_err(|err| StdError::generic_err(err.to_string()))?};
@@ -404,13 +362,9 @@ fn post_execution(deps: DepsMut, _env: Env, msg: PostExecutionMsg) -> StdResult<
         return Err(StdError::generic_err("Generation of Recovery ID for Packet Signature failed"));
     };
 
-    let payload_hash = format!(
-        "0x{}",
-        task_info.payload_hash.as_slice().encode_hex::<String>()
-    );
+    let payload_hash = format!("0x{}",task_info.payload_hash.as_slice().encode_hex::<String>());
+    let input_hash = format!("0x{}", task_info.input_hash.as_slice().encode_hex::<String>());
     let result = format!("0x{}", result.as_slice().encode_hex::<String>());
-    let result_hash = format!("0x{}", sha_256(&result_hash).encode_hex::<String>());
-    let result_signature = format!("0x{}{:x}", &result_signature.encode_hex::<String>(),result_recovery_id);
     let packet_hash = format!("0x{}", sha_256(&packet_hash).encode_hex::<String>());
     let packet_signature = format!("0x{}{:x}", &packet_signature.encode_hex::<String>(),packet_recovery_id);
     let callback_address = format!("0x{}", task_info.callback_address.as_slice().encode_hex::<String>());
@@ -420,11 +374,10 @@ fn post_execution(deps: DepsMut, _env: Env, msg: PostExecutionMsg) -> StdResult<
     Ok(Response::new()
         .add_attribute_plaintext("source_network", CHAIN_ID)
         .add_attribute_plaintext("task_destination_network", routing_info)
-        .add_attribute_plaintext("task_id", msg.task_id.to_string())
+        .add_attribute_plaintext("task_id", msg.task.task_id.to_string())
         .add_attribute_plaintext("payload_hash", payload_hash)
+        .add_attribute_plaintext("input_hash", input_hash)
         .add_attribute_plaintext("result", result)
-        .add_attribute_plaintext("result_hash", result_hash)
-        .add_attribute_plaintext("result_signature", result_signature)
         .add_attribute_plaintext("packet_hash", packet_hash)
         .add_attribute_plaintext("packet_signature", packet_signature)
         .add_attribute_plaintext("callback_address", callback_address)
@@ -453,10 +406,7 @@ fn query_public_keys(deps: Deps) -> StdResult<Binary> {
     let state: State = CONFIG.load(deps.storage)?;
     to_binary(&PublicKeyResponse {
         encryption_key: state.encryption_keys.pk,
-        verification_key: format!(
-            "0x{}",
-            state.signing_keys.pk.as_slice().encode_hex::<String>()
-        ),
+        verification_key: format!("0x{}",state.signing_keys.pk.as_slice().encode_hex::<String>()),
     })
 }
 

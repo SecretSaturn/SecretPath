@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use chacha20poly1305::aead::{Aead, NewAead};
 use chacha20poly1305::{ChaCha20Poly1305, Nonce};
 use secp256k1::{ecdh::SharedSecret, PublicKey, SecretKey};
+use crate::state::Task;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
@@ -131,8 +132,8 @@ pub struct PrivContractHandleMsg {
     pub handle: String,
     /// Public network user address.
     pub user_address: Addr,
-    /// Task ID passed along for later verification.
-    pub task_id: u64,
+    /// Task passed along for later verification.
+    pub task: Task,
     /// SHA256 hash of `input_values`.
     pub input_hash: Binary,
     /// Signature of `input_hash`, signed by the private gateway.
@@ -144,8 +145,8 @@ pub struct PrivContractHandleMsg {
 pub struct PostExecutionMsg {
     /// JSON string of results from the private contract.
     pub result: String,
-    /// Task ID from private contract for verification.
-    pub task_id: u64,
+    /// Task from private contract for verification.
+    pub task: Task,
     /// SHA256 of decrypted (inputs + task ID) for verification.
     pub input_hash: Binary,
 }

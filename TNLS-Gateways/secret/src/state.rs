@@ -11,7 +11,7 @@ pub static MY_ADDRESS: Item<CanonicalAddr> = Item::new(b"myaddr");
 /// Storage key for the contract instantiator.
 pub static CREATOR: Item<CanonicalAddr> = Item::new(b"creator");
 /// Storage key for task IDs.
-pub static TASK_MAP: Keymap<u64, TaskInfo> = Keymap::new(b"tasks");
+pub static TASK_MAP: Keymap<Task, TaskInfo> = Keymap::new(b"tasks");
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct State {
@@ -28,11 +28,21 @@ pub struct State {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct Task {
+    /// The network of the Task
+    pub network: String,
+    /// The task id of the test
+    pub task_id: u64,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct TaskInfo {
     /// The original, encrypted payload.
     pub payload: Binary,
     /// The original payload_hash from the front-end.
     pub payload_hash: Binary,
+    /// The original payload_hash from the front-end.
+    pub unsafe_payload: bool,
     /// A unique hash for the task.
     pub input_hash: [u8; 32],
     /// The name of the network that message came from.
