@@ -22,6 +22,17 @@ interface IRandomness {
 
 contract Gateway is Initializable {
     /*//////////////////////////////////////////////////////////////
+                              Constants
+    //////////////////////////////////////////////////////////////*/
+
+    //Use hard coded constant values instead of storage variables for Secret VRF, saves around 8,500 in gas per TX. 
+    //Since contract is upgradeable, we can update these values as well with it.
+    bytes constant routing_info = "secret1l4hr7wt4mm2fnvv5493ljlcngnfv2ewndk7tpc";
+    bytes constant routing_code_hash = "2a8c936d011446c0ae1f2503b4fb86455b7dc2c6899a56bd74edf9636f9517db";
+    string constant task_destination_network = "pulsar-3";
+
+
+    /*//////////////////////////////////////////////////////////////
                               Structs
     //////////////////////////////////////////////////////////////*/
 
@@ -34,6 +45,7 @@ contract Gateway is Initializable {
         bytes user_key;
         bytes user_pubkey;
         string routing_code_hash;
+        string task_destination_network;
         string handle;
         bytes12 nonce;
         bytes payload;
@@ -52,7 +64,7 @@ contract Gateway is Initializable {
     }
 
     /*//////////////////////////////////////////////////////////////
-                              State Variables
+                            State Variables
     //////////////////////////////////////////////////////////////*/
     
     address public owner;
@@ -133,9 +145,18 @@ contract Gateway is Initializable {
         return keccak256(abi.encode(_routeInput, _verificationAddressInput));
     }
 
+    /// @notice Slices the last byte of an bytes32 to make it into a bytes31
+    /// @param data The bytes32 data
+    /// @return The sliced bytes31 data
+
     function sliceLastByte(bytes32 data) private pure returns (bytes31) {
         return bytes31(data & 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00);
     }
+
+
+    /// @notice Encodes a bytes memory array into a Base64 string
+    /// @param data The bytes memory data to encode
+    /// @return The Base64 encoded string
 
     function encodeBase64(bytes memory data) private pure returns (string memory) {
         if (data.length == 0) return "";
@@ -173,6 +194,10 @@ contract Gateway is Initializable {
         return result;
     }
 
+    /// @notice Converts a uint256 value into its string representation
+    /// @param value The uint256 value to convert
+    /// @return ptr The string representation of the uint256 value
+
     function uint256toString(uint256 value) private pure returns (string memory ptr) {
         assembly {
             ptr := add(mload(0x40), 128)
@@ -195,6 +220,10 @@ contract Gateway is Initializable {
         }
     }
     
+    /// @notice Converts a bytes memory array to an array of uint256
+    /// @param data The bytes memory data to convert
+    /// @return The array of uint256
+    
    function bytesToUint256Array(bytes memory data) private pure returns (uint256[] memory) {
         require(data.length % 32 == 0, "Data length must be a multiple of 32 bytes");
         uint256[] memory uintArray;
@@ -206,11 +235,11 @@ contract Gateway is Initializable {
         return uintArray;
     }
 
-
     /*//////////////////////////////////////////////////////////////
                               Events
     //////////////////////////////////////////////////////////////*/
 
+    /// @notice Emitted when a new request comes into the gateway; to be picked up by the relayer
     event logNewTask(
         uint256 indexed task_id,
         string source_network,
@@ -296,13 +325,11 @@ contract Gateway is Initializable {
         external payable {
 
         // Payload hash verification
-
         if (keccak256(bytes.concat("\x19Ethereum Signed Message:\n32", keccak256(_info.payload))) != _payloadHash) {
             revert InvalidPayloadHash();
         }
 
         // Payload signature verification
-
         if (recoverSigner(_payloadHash, _info.payload_signature) != _userAddress) {
             revert InvalidSignature();
         }
@@ -310,6 +337,7 @@ contract Gateway is Initializable {
         // persisting the task
         tasks[taskId] = ReducedTask(sliceLastByte(_payloadHash), false);
 
+        //emit the task to be picked up by the relayer
         emit logNewTask(
             taskId,
             uint256toString(block.chainid),
@@ -319,6 +347,7 @@ contract Gateway is Initializable {
             _info
         );
 
+        //Increase the taskId to be used in the next gateway call. 
 	    taskId++;
     }
 
@@ -332,52 +361,54 @@ contract Gateway is Initializable {
         uint32 _callbackGasLimit
     ) external payable returns (uint256 requestId) {
 
+        //Set limit on how many random words can be requested
         require(_numWords <= 2000, "Too many words requested");
 
+        //Encode the callback_address as Base64
         string memory callback_address = encodeBase64(bytes.concat(bytes20(msg.sender)));
 
-        //use hard coded contract values instead of storage variables, saves around 8,500 in gas per TX. 
-        //Since contract is upgradeable, we can update these values as well with it.
-        bytes memory _routing_info = "secret1jyu2qaentmvwvejm8wzghr8qms0yehukxmp75f";
-        bytes memory _routing_code_hash = "d94d2cd7d22f0509c7ca0b80d6576ecfebf2618c6026204c30a35f6624cb3230";
-
+        //construct the payload that is sent into the Secret Gateway by hand
         bytes memory payload = bytes.concat(
-            bytes23(0x7b2264617461223a227b5c226e756d576f7264735c223a), //bytes representation of '{"data":"{\"numWords\":' because solidity has problems with correct string escaping of numWords
+            '{"data":"{\\"numWords\\":',
             bytes(uint256toString(_numWords)),
-            '}","routing_info": "',_routing_info,
-            '","routing_code_hash": "',_routing_code_hash,
+            '}","routing_info": "',routing_info,
+            '","routing_code_hash": "',routing_code_hash,
             '","user_address": "0x0000000000000000000000000000000000000000","user_key": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",', //unused user_address here + + 33 bytes of zeros in base64 for user_key
             '"callback_address": "', bytes(callback_address),
             '","callback_selector": "OLpGFA==",', // 0x38ba4614 hex value already converted into base64, callback_selector of the fullfillRandomWords function
             '"callback_gas_limit": ', bytes(uint256toString(_callbackGasLimit)),'}' 
         );
 
+        //generate the payload hash using the ethereum hash format for messages
         bytes32 payloadHash = keccak256(bytes.concat("\x19Ethereum Signed Message:\n32", keccak256(payload)));
 
         // ExecutionInfo struct
         ExecutionInfo memory executionInfo = ExecutionInfo({
             user_key: new bytes(33), // equals AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA in base64
             user_pubkey: new bytes(64), // Fill with 0 bytes
-            routing_code_hash: string(_routing_code_hash),
+            routing_code_hash: string(routing_code_hash),
+            task_destination_network: task_destination_network,
             handle: "request_random",
             nonce: bytes12(0),
             payload: payload,
             payload_signature: new bytes(64) // empty signature, fill with 0 bytes
         });
 
-        uint256 oldTaskId = taskId;
         // persisting the task
-        tasks[oldTaskId] = ReducedTask(sliceLastByte(payloadHash), false);
+        tasks[taskId] = ReducedTask(sliceLastByte(payloadHash), false);
 
+        //emit the task to be picked up by the relayer
         emit logNewTask(
             taskId,
             uint256toString(block.chainid),
-            msg.sender,
-            string(_routing_info),
+            tx.origin,
+            string(routing_info),
             payloadHash,
             executionInfo
         );
 
+        //Output the current task_id / request_id to the user and increase the taskId to be used in the next gateway call. 
+        uint256 oldTaskId = taskId;
         taskId++;
         return oldTaskId;
     }
@@ -405,8 +436,6 @@ contract Gateway is Initializable {
             revert InvalidPayloadHash();
         }
 
-        address checkerAddress = route[_sourceNetwork];
-
         // Concatenate packet data elements
         bytes memory data =  bytes.concat(
         bytes(_sourceNetwork),
@@ -422,15 +451,17 @@ contract Gateway is Initializable {
         bytes32 packetHash = sha256(abi.encodePacked(keccak256(data)));
 
         // Packet signature verification
-        if ((_info.packet_hash != packetHash) || recoverSigner(_info.packet_hash, _info.packet_signature) != checkerAddress) {
+        if ((_info.packet_hash != packetHash) || 
+            recoverSigner(_info.packet_hash, _info.packet_signature) != route[_sourceNetwork]) {
             revert InvalidPacketSignature();
         }
         
+        //Mark the task as completed
         task.completed = true;
 
         // Continue with the function execution
-        // Additional conversion for Secret VRF into uint256[] if callback_selector matches the fullfillRandomWords selector.
 
+        // Additional conversion for Secret VRF into uint256[] if callback_selector matches the fullfillRandomWords selector.
         if (_info.callback_selector == bytes4(0x38ba4614)) {
             uint256[] memory randomWords = bytesToUint256Array(_info.result);
             IRandomness randomness = IRandomness(address(_info.callback_address));

@@ -163,7 +163,7 @@ const initializeContract = async (
         gateway_address: gatewayAddress,
         gateway_key: gatewayKey,
       },
-      code_hash: contractCodeHash,
+      code_hash: contractCodeHash.code_hash,
       label: "My contract" + Math.ceil(Math.random() * 10000), // The label should be unique for every contract, add random string in order to maintain uniqueness
     },
     {
@@ -321,12 +321,12 @@ async function gatewayTx(
   const tx = await client.tx.compute.executeContract(
     {
       sender: client.address,
-      contractAddress: gatewayAddress,
-      codeHash: gatewayHash,
+      contract_address: gatewayAddress,
+      code_hash: gatewayHash,
       msg: {
         input: { inputs: handle_msg }, // TODO eliminate nesting if possible
       },
-      sentFunds: [],
+      sent_funds: [],
     },
     {
       gasLimit: 500000,
@@ -390,8 +390,8 @@ async function queryPubKey(
 ): Promise<PublicKeyResponse> {
 
   const response = (await client.query.compute.queryContract({
-    contractAddress: gatewayAddress,
-    codeHash: gatewayHash,
+    contract_address: gatewayAddress,
+    code_hash: gatewayHash,
     query: { get_public_keys: {} },
   })) as PublicKeyResponse;
 

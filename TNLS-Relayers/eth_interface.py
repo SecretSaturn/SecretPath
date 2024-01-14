@@ -1,26 +1,20 @@
-import base64
 import json
 import os
 from logging import getLogger, basicConfig, INFO, StreamHandler
-from pprint import pprint
 from typing import List, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from web3 import Web3
 from web3.datastructures import AttributeDict
 from web3.middleware import geth_poa_middleware
-from eth_abi import abi
-import eth_abi
-
 
 from base_interface import BaseChainInterface, BaseContractInterface, Task
-
 
 class EthInterface(BaseChainInterface):
     """
     Implementaion of BaseChainInterface for eth.
     """
-    
+
     def __init__(self, private_key="", address="", provider=None, contract_address = "", **_kwargs):
         if provider is None:
             """
@@ -49,7 +43,6 @@ class EthInterface(BaseChainInterface):
         """
         print("create TX")
         print(*args)
-        print(**kwargs)
         # create task
         nonce = self.provider.eth.get_transaction_count(self.address)
         if kwargs is {}:
@@ -219,5 +212,5 @@ class EthContract(BaseContractInterface):
 
 
 if __name__ == "__main__":
-    interface = EthInterface(address='0xEB7D94Cefa561E83901aD87cB91eFcA73a1Fc812')
+    interface = EthInterface(address='')
 

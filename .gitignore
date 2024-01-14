@@ -28,4 +28,4 @@ __pycache__/
 TNLS-Gateways/public-gateway/broadcast/*
 TNLS-Gateways/public-gateway/lib/*
 *.gz
-TNLS-Gateways/secret/contract.wasm.gz
+TNLS-Samples/RNG/contract.wasm.gz

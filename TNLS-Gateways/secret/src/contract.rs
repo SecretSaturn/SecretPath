@@ -294,10 +294,10 @@ fn post_execution(deps: DepsMut, _env: Env, msg: PostExecutionMsg) -> StdResult<
     let data = [
         CHAIN_ID.as_bytes(),               // source network
         routing_info.as_bytes(),           // task_destination_network
-        task_id_padded.as_slice(), //msg.task_id.to_be_bytes().as_slice(),        // task ID
-        task_info.input_hash.as_slice(),
+        task_id_padded.as_slice(),         // task ID
+        task_info.input_hash.as_slice(),   // Input hash
         task_info.payload_hash.as_slice(), // original payload message
-        result.as_slice(),             // result
+        result.as_slice(),                 // result
         task_info.callback_address.as_slice(), // callback address
         task_info.callback_selector.as_slice(), // callback selector
     ]

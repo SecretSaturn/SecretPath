@@ -5,7 +5,7 @@ import secureRandom from "secure-random";
 
 export async function setupSubmit(element: HTMLButtonElement) {
 
-    const randomnessContract = '0x57182a1b08e34Fc7eCdF33B4775E8a560443a6bF'
+    const randomnessContract = '0x67AdB577bAAcce02D436CaaEE005630f57A3C4e5'
 
     // @ts-ignore
     const provider = new ethers.providers.Web3Provider(window.ethereum);
@@ -81,7 +81,7 @@ export async function setupSubmit(element: HTMLButtonElement) {
 
         <h2>Transaction Parameters</h2>
         <p><b>Tx Hash: </b><a href="https://sepolia.etherscan.io/tx/${txHash}" target="_blank">${txHash}</a></p>
-        <p><b>Gateway Address (to check the postExecution callback) </b><a href="https://sepolia.etherscan.io/address/${randomnessContract}" target="_blank">${randomnessContract}</a></p>
+        <p><b>Randomness Contract Address </b><a href="https://sepolia.etherscan.io/address/${randomnessContract}" target="_blank">${randomnessContract}</a></p>
         <p style="font-size: 0.8em;">${JSON.stringify(tx_params)}</p>
         `
 

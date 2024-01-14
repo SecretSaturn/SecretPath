@@ -22,17 +22,10 @@ from threading import Thread
 from time import sleep
 from typing import Dict, Tuple
 
-from base_interface import Task, BaseContractInterface, BaseChainInterface
-from eth_interface import EthInterface
-from eth_interface import EthContract
-from scrt_interface import SCRTInterface
-from scrt_interface import SCRTContract
-from dotenv import load_dotenv
-import os
+from base_interface import Task, BaseContractInterface, BaseChainInterface, eth_chains, scrt_chains
 import warnings
 warnings.filterwarnings("ignore")
 from concurrent.futures import ThreadPoolExecutor, as_completed
-
 
 class Relayer:
     def __init__(self,
@@ -89,28 +82,51 @@ class Relayer:
         return processed_tasks
 
     def poll_for_transactions(self):
+        tasks = []
+
+        # Prepare tasks for all chains
         for name, (chain_interface, contract_interface, evt_name, _) in self.dict_of_names_to_interfaces.items():
-            if name == 'secret-4' or name == 'pulsar-3' or name == 'secret':
+            if name in scrt_chains:
                 continue
             prev_height = self.dict_of_names_to_blocks[name]
             curr_height = chain_interface.get_last_block()
+
             if prev_height is None:
                 prev_height = curr_height - 1
 
             for block_num in range(prev_height + 1, curr_height + 1):
-                self.logger.info(f'Polling block {block_num} on {name}')
-                transactions = chain_interface.get_transactions(contract_interface.address, height=block_num)
+                # Add task for polling each block
+                tasks.append((name, block_num, chain_interface, contract_interface, evt_name))
 
-                with ThreadPoolExecutor(max_workers=20) as executor:
-                    future_to_transaction = {
-                        executor.submit(self.process_transaction, tx, name, contract_interface, evt_name): tx for tx in transactions
-                    }
+        # Execute tasks in parallel
+        with ThreadPoolExecutor(max_workers=20) as executor:
+            future_to_details = {
+                executor.submit(self.poll_and_process_block, name, block_num, chain_interface, contract_interface,
+                                evt_name): (name, block_num) for
+                name, block_num, chain_interface, contract_interface, evt_name in tasks}
 
-                    for future in as_completed(future_to_transaction):
-                        tasks = future.result()
-                        self.task_list.extend(tasks)
+            # Handle completed tasks
+            for future in as_completed(future_to_details):
+                name, block_num = future_to_details[future]
+                try:
+                    tasks = future.result()
+                    self.task_list.extend(tasks)
+                    # Update the block height for each chain
+                    self.dict_of_names_to_blocks[name] = block_num
+                except Exception as e:
+                    self.logger.error(f"Error polling block {block_num} on {name}: {e}")
 
-            self.dict_of_names_to_blocks[name] = curr_height
+    def poll_and_process_block(self, name, block_num, chain_interface, contract_interface, evt_name):
+        self.logger.info(f'Polling block {block_num} on {name}')
+        transactions = chain_interface.get_transactions(contract_interface.address, height=block_num)
+        tasks = []
+        for tx in transactions:
+            print(tx)
+            if tx['chainId'] not in eth_chains: 
+                continue
+            processed_task = self.process_transaction(tx, name, contract_interface, evt_name)
+            tasks.extend(processed_task)
+        return tasks
 
     def route_transaction(self, task: Task):
         """
@@ -129,7 +145,7 @@ class Relayer:
             return
         contract_for_txn = self.dict_of_names_to_interfaces[task.task_destination_network][1]
         function_name = self.dict_of_names_to_interfaces[task.task_destination_network][3]
-        if task.task_destination_network == 'secret-4':
+        if task.task_destination_network in scrt_chains:
             ntasks, _ = contract_for_txn.call_function(function_name, str(task))
             self.task_list.extend(ntasks)
         else:

@@ -8,7 +8,10 @@ use crate::{
     msg::{ExecuteMsg, GatewayMsg, InstantiateMsg, QueryMsg, QueryResponse},
     state::{State, Input, CONFIG},
 };
-use tnls::msg::{PostExecutionMsg, PrivContractHandleMsg};
+use tnls::{
+    msg::{PostExecutionMsg, PrivContractHandleMsg},
+    state::Task
+};
 
 use sha3::{Digest, Keccak256};
 
@@ -71,7 +74,7 @@ fn try_handle(
     let handle = msg.handle.as_str();
     match handle {
         "request_random" => {
-            try_random(deps, env, msg.input_values, msg.task_id, msg.input_hash)
+            try_random(deps, env, msg.input_values, msg.task, msg.input_hash)
         }
         _ => Err(StdError::generic_err("invalid handle".to_string())),
     }
@@ -81,7 +84,7 @@ fn try_random(
     deps: DepsMut,
     env: Env,
     input_values: String,
-    task_id: u64,
+    task: Task,
     input_hash: Binary,
 ) -> StdResult<Response> {
     let config = CONFIG.load(deps.storage)?;
@@ -112,7 +115,7 @@ fn try_random(
     let callback_msg = GatewayMsg::Output {
         outputs: PostExecutionMsg {
             result,
-            task_id,
+            task,
             input_hash,
         },
     }

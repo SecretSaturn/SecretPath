@@ -285,6 +285,7 @@ contract ContractTest is Test {
             user_key: userKey,
             user_pubkey:userPublicKey,
             routing_code_hash: "some RoutingCodeHash",
+            task_destination_network: "pulsar-3",
             handle: "some kinda handle",
             nonce: "ssssssssssss",
             payload: payload,
@@ -317,6 +318,7 @@ contract ContractTest is Test {
             user_key: userKey,
             user_pubkey:userPublicKey,
             routing_code_hash: "some RoutingCodeHash",
+            task_destination_network: "pulsar-3",
             handle: "some kinda handle",
             nonce: "ssssssssssss",
             payload: payload,
@@ -330,8 +332,7 @@ contract ContractTest is Test {
 
     function test_PostExecution() public {
         test_OwnerCanUpdateRouteWithValidSignature();
-        test_PreExecution();
-
+                vm.chainId(11155111); 
         string memory sourceNetwork = "secret";
     
         uint256 taskId = 1;
@@ -420,6 +421,7 @@ contract ContractTest is Test {
             user_key: userKey,
             user_pubkey:userPublicKey,
             routing_code_hash: "some RoutingCodeHash",
+            task_destination_network: "pulsar-3",
             handle: "some kinda handle",
             nonce: "ssssssssssss",
             payload: payload,

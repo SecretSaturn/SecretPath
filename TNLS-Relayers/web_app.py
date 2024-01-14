@@ -9,6 +9,7 @@ from yaml import safe_load
 from eth_interface import EthInterface, EthContract
 from relayer import Relayer
 from scrt_interface import SCRTInterface, SCRTContract
+from base_interface import eth_chains, scrt_chains
 from dotenv import load_dotenv
 
 base_map = {'Ethereum': (EthInterface, EthContract), 'Secret': (SCRTInterface, SCRTContract)}
@@ -87,10 +88,13 @@ def generate_full_config(config_file, provider_pair=None):
         provider_eth, provider_scrt = provider_pair
     eth_config = generate_eth_config(config_dict['ethereum'], provider=provider_eth)
     scrt_config = generate_scrt_config(config_dict['secret'], provider=provider_scrt)
-    keys_dict = {'secret': {'verification': config_dict['secret']['contract_eth_address'],
-                            'encryption': config_dict['secret']['contract_encryption_key']}}
-    return {'ethereum': eth_config, 'secret': scrt_config}, keys_dict
-
+    keys_dict = {}
+    chains_dict = {}
+    for chain in eth_chains:
+        chains_dict[chain] = eth_config
+    for chain in scrt_chains:
+        chains_dict[chain] = scrt_config
+    return chains_dict, keys_dict
 
 route_blueprint = Blueprint('route_blueprint', __name__)
 
@@ -175,8 +179,9 @@ def app_factory(config_filename=f'{Path(__file__).parent.absolute()}/../config.y
     app.config['RELAYER'] = relayer
     app.config['KEYS'] = keys_dict
     app.register_blueprint(route_blueprint)
-    thread = Thread(target=relayer.run)
-    thread.start()
+    relayer.run()
+  #  thread = Thread(target=relayer.run)
+   # thread.start()
 
     def _thread_restarter():
         thread_target = thread

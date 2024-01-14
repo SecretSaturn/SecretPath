@@ -12,7 +12,6 @@ from secret_sdk.protobuf.cosmos.tx.v1beta1 import BroadcastMode
 
 from base_interface import BaseChainInterface, BaseContractInterface, Task
 
-
 class SCRTInterface(BaseChainInterface):
     """
     Implementation of the BaseChainInterface standard for the Secret Network
@@ -169,9 +168,8 @@ class SCRTContract(BaseContractInterface):
         txn_msgs = self.interface.provider.wasm.contract_execute_msg(
             sender_address=self.interface.address,
             contract_address=self.address,
-            handle_msg=function_schema,
+            handle_msg=function_schema
         )
-        print(function_schema)
         tx_options = CreateTxOptions(
             msgs=[txn_msgs],
             gas=1000000,
