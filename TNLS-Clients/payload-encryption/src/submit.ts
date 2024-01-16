@@ -28,9 +28,14 @@ export function setupSubmit(element: HTMLButtonElement) {
     element.addEventListener("click", async function(event: Event){
         event.preventDefault()
         const [myAddress] = await provider.send("eth_requestAccounts", []);
+        await window.ethereum.request({
+            method: 'wallet_switchEthereumChain',
+            params: [{ chainId: '0xAA36A7' }], // chainId must be in hexadecimal numbers
+          });
         
         const numWords = document.querySelector<HTMLFormElement>('#input1')?.value;
         const callback_gas_limit = document.querySelector<HTMLFormElement>('#input2')?.value;
+        
         const data = JSON.stringify({
             numWords: Number(numWords)
         })

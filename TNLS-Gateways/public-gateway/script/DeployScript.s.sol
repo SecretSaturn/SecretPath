@@ -27,9 +27,6 @@ contract DeployScript is Script {
         deployer = vm.rememberKey(privKey);
         vm.startBroadcast();
 
-        // Deploy ProxyAdmin
-        proxyAdmin = new ProxyAdmin(msg.sender);
-
         // Deploy Gateway Logic Contract
         gatewayLogic = new Gateway();
 
@@ -41,14 +38,13 @@ contract DeployScript is Script {
         // Deploy TransparentUpgradeableProxy
         gatewayProxy = new TransparentUpgradeableProxy(
             address(gatewayLogic),
-            address(proxyAdmin),
+            address(msg.sender),
             initializerData
         );
 
         // Cast the proxy address to the Gateway interface
         Gateway gateway = Gateway(address(gatewayProxy));
-
-        // Continue with your existing setup, but replace `gatewayAddress` with `gateway`
+        
         randomnessAddress = new RandomnessReciever();
         console2.logAddress(address(gateway));
         console2.logAddress(deployer);

@@ -27,10 +27,10 @@ contract Gateway is Initializable {
 
     //Use hard coded constant values instead of storage variables for Secret VRF, saves around 10,000+ in gas per TX. 
     //Since contract is upgradeable, we can update these values as well with it.
-    bytes constant routing_info = "secret1n8jh8qvjhu5ktce7v7ntlqac7u7wle6lvqnw38";
-    bytes constant routing_code_hash = "2a8c936d011446c0ae1f2503b4fb86455b7dc2c6899a56bd74edf9636f9517db";
+    bytes constant routing_info = "secret1a9jvkwanwgs66222a74p607reh333nfsspgp93";
+    bytes constant routing_code_hash = "ba0006753cb18a8b12fe266707289098bfb8a3ae83de54ecece591231ada2abf";
     string constant task_destination_network = "secret-4";
-    address constant secret_gateway_signer_address = 0xeBbc93e856bA03e07f1D993B8D9b5fACc092eF3e;
+    address constant secret_gateway_signer_address = 0x9199301b86c1eC0C180B51B1CFb6B4966A0D6bFf;
 
 
     /*//////////////////////////////////////////////////////////////
@@ -451,7 +451,12 @@ contract Gateway is Initializable {
         emit ComputedResult(_taskId, _result);
     }
 
-     /*//////////////////////////////////////////////////////////////
+    /*//////////////////////////////////////////////////////////////
                      New Functions for Upgradeability
     //////////////////////////////////////////////////////////////*/
+    event contractUpgraded();
+
+    function upgradeHandler() public {
+        emit contractUpgraded();
+    }
 }

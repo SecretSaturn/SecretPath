@@ -2,8 +2,10 @@ use cosmwasm_std::{
     entry_point, to_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdError,
     StdResult,
 };
-use secret_toolkit::utils::{pad_handle_result, pad_query_result, HandleCallback};
-
+use secret_toolkit::{
+    crypto::{sha_256},
+    utils::{pad_handle_result, pad_query_result, HandleCallback},
+};
 use crate::{
     msg::{ExecuteMsg, GatewayMsg, InstantiateMsg, QueryMsg, QueryResponse},
     state::{State, Input, CONFIG},
@@ -12,8 +14,6 @@ use tnls::{
     msg::{PostExecutionMsg, PrivContractHandleMsg},
     state::Task
 };
-
-use sha3::{Digest, Keccak256};
 
 /// pad handle responses and log attributes to blocks of 256 bytes to prevent leaking info based on
 /// response size
@@ -92,7 +92,7 @@ fn try_random(
     let input: Input = serde_json_wasm::from_str(&input_values)
     .map_err(|err| StdError::generic_err(err.to_string()))?;
 
-    let numWords = input.numWords;
+    let num_words = input.numWords;
 
     let base_random = match env.block.random {
         Some(random_value) => random_value,
@@ -100,14 +100,12 @@ fn try_random(
     };
 
     let mut random_numbers = Vec::new();
-    let mut hasher = Keccak256::new();
 
-    for i in 0..numWords {
-        let mut data = base_random.0.clone(); 
-        data.extend_from_slice(&i.to_be_bytes()); 
-        hasher.update(&data); 
-        let result_hash = hasher.finalize_reset(); 
-        random_numbers.extend_from_slice(result_hash.as_slice()); 
+    for i in 0..num_words {
+        let mut data = base_random.0.clone();
+        data.extend_from_slice(&(i as u64).to_be_bytes());
+        let hashed_number = sha_256(&data); 
+        random_numbers.extend_from_slice(hashed_number.as_slice()); 
     }
     
     let result = base64::encode(random_numbers);
