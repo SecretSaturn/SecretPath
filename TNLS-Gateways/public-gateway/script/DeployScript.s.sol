@@ -20,30 +20,8 @@ contract DeployScript is Script {
     TransparentUpgradeableProxy gatewayProxy;
     RandomnessReciever randomnessAddress;
 
-    address verificationAddress = 0x8F2AE4b6aC67c8fFFac1Bf774956bC99F207B305;
-
-    string constant route = "pulsar-3";
-    //address verificationAddress = vm.envAddress("SECRET_GATEWAY_ETH_ADDRESS");
-
     uint256 privKey = vm.envUint("ETH_PRIVATE_KEY");
 
-
-    /// @notice Get the encoded hash of the inputs for signing
-    /// @param _routeInput Route name
-    /// @param _verificationAddressInput Address corresponding to the route
-    function getRouteHash(string memory _routeInput, address _verificationAddressInput) public pure returns (bytes32) {
-        return keccak256(abi.encode(_routeInput, _verificationAddressInput));
-    }
-
-        /// @notice Hashes the encoded message hash
-    /// @param _messageHash the message hash
-    function getEthSignedMessageHash(bytes32 _messageHash) public pure returns (bytes32) {
-        /*
-        Signature is produced by signing a keccak256 hash with the following format:
-        "\x19Ethereum Signed Message\n" + len(msg) + msg
-        */
-        return keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", _messageHash));
-    }
 
     function run() public {
         deployer = vm.rememberKey(privKey);
@@ -76,19 +54,6 @@ contract DeployScript is Script {
         console2.logAddress(deployer);
 
         randomnessAddress.setGatewayAddress(address(gateway));
-
-        // Initialize master verification Address
-        gateway.setMasterVerificationAddress(deployer); // Replace gatewayAddress with gateway
-        /// ------ Update Routes Param Setup ------- ///
-
-        // Update the route with with masterVerificationKey signature
-        bytes32 routeHash = getRouteHash(route, verificationAddress);
-        bytes32 ethSignedMessageHash = getEthSignedMessageHash(routeHash);
-
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(privKey, ethSignedMessageHash);
-        bytes memory sig = abi.encodePacked(r, s, v);
-
-        gateway.updateRoute(route, verificationAddress, sig);
 
         vm.stopBroadcast();
     }

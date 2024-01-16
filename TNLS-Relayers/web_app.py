@@ -12,7 +12,6 @@ from scrt_interface import SCRTInterface, SCRTContract
 from base_interface import eth_chains, scrt_chains
 from dotenv import load_dotenv
 
-base_map = {'Ethereum': (EthInterface, EthContract), 'Secret': (SCRTInterface, SCRTContract)}
 load_dotenv()
 
 def generate_eth_config(config_dict, provider=None):
@@ -30,9 +29,11 @@ def generate_eth_config(config_dict, provider=None):
     address = config_dict['wallet_address']
     contract_address = config_dict['contract_address']
     contract_schema = config_dict['contract_schema']
+    chain_id = config_dict['chain_id']
+    api_endpoint = config_dict['api_endpoint']
     event_name = 'logNewTask'
     function_name = 'postExecution'
-    initialized_chain = EthInterface(private_key=priv_key, address=address, provider=provider)
+    initialized_chain = EthInterface(private_key=priv_key, address=address, provider=provider, chain_id=chain_id, api_endpoint=api_endpoint)
     initialized_contract = EthContract(interface=initialized_chain, address=contract_address,
                                        abi=contract_schema)
     eth_tuple = (initialized_chain, initialized_contract, event_name, function_name)
@@ -53,16 +54,21 @@ def generate_scrt_config(config_dict, provider=None):
     priv_key = bytes.fromhex(os.environ['secret-private-key'])
     address = config_dict['wallet_address']
     contract_address = config_dict['contract_address']
+    api_endpoint = config_dict['api_endpoint']
+    chain_id = config_dict['chain_id']
     with open(f'{Path(__file__).parent.absolute()}/secret_abi.json') as f:
         contract_schema = f.read()
     event_name = 'wasm'
     function_name = list(json.loads(contract_schema).keys())[0]
-    initialized_chain = SCRTInterface(private_key=priv_key, address=address, provider=provider)
-    specialized_initialized_chain = SCRTInterface(private_key=priv_key, address=address, provider=provider)
+    initialized_chain = None;
+    initialized_contract = None;
     if provider is None:
-        initialized_contract = SCRTContract(interface=specialized_initialized_chain, address=contract_address,
+        initialized_chain = SCRTInterface(private_key=priv_key, address=address, provider = None,
+                                          api_url=api_endpoint, chain_id=chain_id)
+        initialized_contract = SCRTContract(interface=initialized_chain, address=contract_address,
                                             abi=contract_schema)
     else:
+        initialized_chain = SCRTInterface(private_key=priv_key, address=address, provider=provider,chain_id=chain_id)
         initialized_contract = SCRTContract(interface=initialized_chain, address=contract_address,
                                             abi=contract_schema)
     scrt_tuple = (initialized_chain, initialized_contract, event_name, function_name)
@@ -86,13 +92,13 @@ def generate_full_config(config_file, provider_pair=None):
         provider_eth, provider_scrt = None, None
     else:
         provider_eth, provider_scrt = provider_pair
-    eth_config = generate_eth_config(config_dict['ethereum'], provider=provider_eth)
-    scrt_config = generate_scrt_config(config_dict['secret'], provider=provider_scrt)
     keys_dict = {}
     chains_dict = {}
     for chain in eth_chains:
+        eth_config = generate_eth_config(config_dict[chain], provider=provider_eth)
         chains_dict[chain] = eth_config
     for chain in scrt_chains:
+        scrt_config = generate_scrt_config(config_dict[chain], provider=provider_scrt)
         chains_dict[chain] = scrt_config
     return chains_dict, keys_dict
 

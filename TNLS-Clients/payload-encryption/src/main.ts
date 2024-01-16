@@ -24,9 +24,18 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   </div>
 </header>
   <div>
-    <h2>Sample Application: Random Number Generation</h2>
+    <h2>Sample Application: Random Number Generation using Encrypted Payloads</h2>
     <div id="form">
       <button id="submit">Submit</button>
+      <form name="inputForm">
+      <br>
+      <label for="input1">Number of Random Words (up to 2000)</label>
+      <input type="number" placeholder="50" id="input1" name="input1" />
+      <br>
+      <br>
+      <label for="input2">Callback gas limit</label>
+      <input type="number" placeholder="300000" id="input2" name="input2" />
+      <br>
 
     </div>
     <div id="preview" style="word-wrap: break-word;">

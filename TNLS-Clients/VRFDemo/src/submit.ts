@@ -1,11 +1,8 @@
 import { ethers } from "ethers";
-import { arrayify, hexlify, SigningKey, keccak256, recoverPublicKey, computeAddress, sha256 } from "ethers/lib/utils";
-import { Buffer } from "buffer";
-import secureRandom from "secure-random";
 
 export async function setupSubmit(element: HTMLButtonElement) {
 
-    const randomnessContract = '0x67AdB577bAAcce02D436CaaEE005630f57A3C4e5'
+    const randomnessContract = '0xEAD4fC9fAEd0De8A68e82936238740E957Ccf865'
 
     // @ts-ignore
     const provider = new ethers.providers.Web3Provider(window.ethereum);
@@ -17,6 +14,10 @@ export async function setupSubmit(element: HTMLButtonElement) {
     element.addEventListener("click", async function(event: Event){
         event.preventDefault()
         const [myAddress] = await provider.send("eth_requestAccounts", []);
+        await window.ethereum.request({
+          method: 'wallet_switchEthereumChain',
+          params: [{ chainId: '0xAA36A7' }], // chainId must be in hexadecimal numbers
+        });
 
 
         // create the abi interface and encode the function data
@@ -55,11 +56,12 @@ export async function setupSubmit(element: HTMLButtonElement) {
             console.log(`Request ID: ${originalRequestId}`);
             // Additional data from the event can be accessed if needed
             // You can also access other properties of the event object, like event.blockNumber
+
         // Set up an event listener for the 'fulfilledRandomWords' event
         randomnessContractInterface.on('fulfilledRandomWords', (requestId, randomWords, event) => {
             // This code is executed when the event is emitted
-            if (originalRequestId == requestId) {
-                console.log(`Request ID: ${requestId}`);
+            console.log(`Callback with Request ID: ${requestId.toString()}`);
+            if (originalRequestId.toString() == requestId.toString()) {
                 console.log(`Random Words: ${randomWords}`);
                 // You can access other event properties like event.blockNumber if needed
                 document.querySelector<HTMLDivElement>('#preview')!.innerHTML = `
@@ -68,7 +70,7 @@ export async function setupSubmit(element: HTMLButtonElement) {
         
                 <h2>Transaction Parameters</h2>
                 <p><b>Request ID: ${requestId} </b></p>
-                <p><b>Random Words: ${randomWords} </b></p>
+                <p><b>Random Words: ${randomWords%6} </b></p>
                 <p style="font-size: 0.8em;">${JSON.stringify(tx_params)}</p>
                 `
             }

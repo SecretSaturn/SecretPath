@@ -2,12 +2,12 @@ import abc
 import base64
 import json
 from typing import List
-eth_chains = ['11155111', '1', '42161', '137']
+eth_chains = ['11155111', '137', '42161']
 scrt_chains = ['secret-4', 'pulsar-3']
+#scrt_chains = ['secret-4']
 
 eth_task_keys_to_msg = {
     '_taskId': 'task_id', '_sourceNetwork': 'source_network', '_info': ['payload_hash',
-                                                                        'input_hash',
                                                                         'packet_hash',
                                                                         'callback_address',
                                                                         'callback_selector',

@@ -25,18 +25,19 @@ contract Gateway is Initializable {
                               Constants
     //////////////////////////////////////////////////////////////*/
 
-    //Use hard coded constant values instead of storage variables for Secret VRF, saves around 8,500 in gas per TX. 
+    //Use hard coded constant values instead of storage variables for Secret VRF, saves around 10,000+ in gas per TX. 
     //Since contract is upgradeable, we can update these values as well with it.
-    bytes constant routing_info = "secret1l4hr7wt4mm2fnvv5493ljlcngnfv2ewndk7tpc";
+    bytes constant routing_info = "secret1n8jh8qvjhu5ktce7v7ntlqac7u7wle6lvqnw38";
     bytes constant routing_code_hash = "2a8c936d011446c0ae1f2503b4fb86455b7dc2c6899a56bd74edf9636f9517db";
-    string constant task_destination_network = "pulsar-3";
+    string constant task_destination_network = "secret-4";
+    address constant secret_gateway_signer_address = 0xeBbc93e856bA03e07f1D993B8D9b5fACc092eF3e;
 
 
     /*//////////////////////////////////////////////////////////////
                               Structs
     //////////////////////////////////////////////////////////////*/
 
-    struct ReducedTask {
+    struct Task {
         bytes31 payload_hash_reduced;
         bool completed;
     }
@@ -54,7 +55,6 @@ contract Gateway is Initializable {
 
     struct PostExecutionInfo {
         bytes32 payload_hash;
-        bytes32 input_hash;
         bytes32 packet_hash;
         bytes20 callback_address;
         bytes4 callback_selector;
@@ -68,14 +68,10 @@ contract Gateway is Initializable {
     //////////////////////////////////////////////////////////////*/
     
     address public owner;
-    address public masterVerificationAddress;
     uint256 public taskId;
 
-    /// @dev Task ID ====> ReducedTask
-    mapping(uint256 => ReducedTask) public tasks;
-
-    /// @dev mapping of chain name string to the verification address
-    mapping(string => address) public route;
+    /// @dev Task ID ====> Task
+    mapping(uint256 => Task) public tasks;
 
     /*//////////////////////////////////////////////////////////////
                               Errors
@@ -89,7 +85,6 @@ contract Gateway is Initializable {
 
     /// @notice thrown when the signature is invalid
     error InvalidSignature();
-
 
     /// @notice thrown when the PacketSignature is invalid
     error InvalidPacketSignature();
@@ -136,15 +131,6 @@ contract Gateway is Initializable {
         return ecrecover(_signedMessageHash, v, r, s);
     }
 
-    /// @notice Calculates the keccak256 hash of the route name and verification address
-    /// @param _routeInput The route name
-    /// @param _verificationAddressInput The verification address
-    /// @return The calculated hash
-
-    function getRouteHash(string calldata _routeInput, address _verificationAddressInput) private pure returns (bytes32) {
-        return keccak256(abi.encode(_routeInput, _verificationAddressInput));
-    }
-
     /// @notice Slices the last byte of an bytes32 to make it into a bytes31
     /// @param data The bytes32 data
     /// @return The sliced bytes31 data
@@ -152,7 +138,6 @@ contract Gateway is Initializable {
     function sliceLastByte(bytes32 data) private pure returns (bytes31) {
         return bytes31(data & 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00);
     }
-
 
     /// @notice Encodes a bytes memory array into a Base64 string
     /// @param data The bytes memory data to encode
@@ -276,31 +261,8 @@ contract Gateway is Initializable {
                         Maintainance Functions
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice Initialize the verification address
-    /// @param _masterVerificationAddress The input address
-
-    function setMasterVerificationAddress(address _masterVerificationAddress) external onlyOwner {
-        masterVerificationAddress = _masterVerificationAddress;
-    }
-
-    /// @notice Updating the route
-    /// @param _route Route name
-    /// @param _verificationAddress Address corresponding to the route
-    /// @param _signature Signed hashed inputs(_route + _verificationAddress)
-
-    function updateRoute(string calldata _route, address _verificationAddress, bytes calldata _signature) external onlyOwner {
-        bytes32 routeHash = getRouteHash(_route, _verificationAddress);
-        bytes32 ethSignedMessageHash = keccak256(bytes.concat("\x19Ethereum Signed Message:\n32", routeHash));
-
-        if (recoverSigner(ethSignedMessageHash, _signature) != masterVerificationAddress) {
-            revert InvalidSignature();
-        }
-
-        route[_route] = _verificationAddress;
-    }
-
     /// @notice Increase the task_id to check for problems 
-    /// @param _newTaskId Route name
+    /// @param _newTaskId the new task_id
 
     function increaseTaskId(uint256 _newTaskId) external onlyOwner {
         require (_newTaskId > taskId, "New task id must be higher than the old task_id");
@@ -335,7 +297,7 @@ contract Gateway is Initializable {
         }
 
         // persisting the task
-        tasks[taskId] = ReducedTask(sliceLastByte(_payloadHash), false);
+        tasks[taskId] = Task(sliceLastByte(_payloadHash), false);
 
         //emit the task to be picked up by the relayer
         emit logNewTask(
@@ -373,7 +335,7 @@ contract Gateway is Initializable {
             bytes(uint256toString(_numWords)),
             '}","routing_info": "',routing_info,
             '","routing_code_hash": "',routing_code_hash,
-            '","user_address": "0x0000000000000000000000000000000000000000","user_key": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",', //unused user_address here + + 33 bytes of zeros in base64 for user_key
+            '","user_address": "0x0000000000000000000000000000000000000000","user_key": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",', //unused user_address here + 33 bytes of zeros in base64 for user_key
             '"callback_address": "', bytes(callback_address),
             '","callback_selector": "OLpGFA==",', // 0x38ba4614 hex value already converted into base64, callback_selector of the fullfillRandomWords function
             '"callback_gas_limit": ', bytes(uint256toString(_callbackGasLimit)),'}' 
@@ -395,7 +357,7 @@ contract Gateway is Initializable {
         });
 
         // persisting the task
-        tasks[taskId] = ReducedTask(sliceLastByte(payloadHash), false);
+        tasks[taskId] = Task(sliceLastByte(payloadHash), false);
 
         //emit the task to be picked up by the relayer
         emit logNewTask(
@@ -424,7 +386,7 @@ contract Gateway is Initializable {
 
     function postExecution(uint256 _taskId, string calldata _sourceNetwork, PostExecutionInfo calldata _info) external {
         
-        ReducedTask storage task = tasks[_taskId];
+        Task storage task = tasks[_taskId];
 
         // Check if the task is already completed
         if (task.completed) {
@@ -441,18 +403,17 @@ contract Gateway is Initializable {
         bytes(_sourceNetwork),
         bytes(uint256toString(block.chainid)),
         bytes32(_taskId),
-        _info.input_hash,
         _info.payload_hash,
         _info.result,
         _info.callback_address,
         _info.callback_selector);
         
         // Perform Keccak256 + sha256 hash
-        bytes32 packetHash = sha256(abi.encodePacked(keccak256(data)));
+        bytes32 packetHash = sha256(bytes.concat(keccak256(data)));
 
         // Packet signature verification
         if ((_info.packet_hash != packetHash) || 
-            recoverSigner(_info.packet_hash, _info.packet_signature) != route[_sourceNetwork]) {
+            recoverSigner(_info.packet_hash, _info.packet_signature) != secret_gateway_signer_address) {
             revert InvalidPacketSignature();
         }
         

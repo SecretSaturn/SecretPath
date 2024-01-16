@@ -1,4 +1,4 @@
-//import { encrypt_payload } from "./wasm";
+import { encrypt_payload } from "./wasm";
 import { ethers } from "ethers";
 import { arrayify, hexlify, SigningKey, keccak256, recoverPublicKey, computeAddress, sha256 } from "ethers/lib/utils";
 import { Buffer } from "buffer/";
@@ -6,79 +6,75 @@ import secureRandom from "secure-random";
 
 export function setupSubmit(element: HTMLButtonElement) {
 
-    const publicClientAddress = '0x3348CB2EC81AA9152c11fdf903821683463d9587'
-    const routing_info = "secret10g645mm34sqs02eljgau9mfuen9kfdvmq2glfz"
-    const routing_code_hash = "288e2d7d77122540cefb1264002f101f0375e3dd77618668bee097ef0d2acf3f"
-
-     //0x3309086633802E71fa00388cc0b86F809C910515
-     const Resulthash = Buffer.from("923b23c023d0e5e66ac122d9804414f4f9cab06d7a6ce6c4b8c586a1fa57264c",'hex')
-     console.log(Resulthash)
-     const resultSignature = Buffer.from("2db95ebb82b81f8240d952e1c6edf021e098de63d32f1f0d3bbbb7daf0e9edbd3378fc42e31d1041467c76388a35078968f1f6f2eb781b5b83054a1d90ba41ff1c",'hex')
- 
-     const pubkey_result = recoverPublicKey(Resulthash, resultSignature)
-     console.log(`Verify this matches the pubkey_result address: ${computeAddress(pubkey_result)}`)
- 
+    const publicClientAddress = '0x874303B788c8A13a39EFA38ab6C3b77cd4578129'
+    const routing_contract = "secret1n8jh8qvjhu5ktce7v7ntlqac7u7wle6lvqnw38"
+    const routing_code_hash = "2a8c936d011446c0ae1f2503b4fb86455b7dc2c6899a56bd74edf9636f9517db"
 
     // @ts-ignore
     const provider = new ethers.providers.Web3Provider(window.ethereum);
 
     // generating ephemeral keys
     const wallet = ethers.Wallet.createRandom();
-   // const userPrivateKeyBytes = arrayify(wallet.privateKey);
+    const userPrivateKeyBytes = arrayify(wallet.privateKey);
     const userPublicKey: string = new SigningKey(wallet.privateKey).compressedPublicKey;
     const userPublicKeyBytes = arrayify(userPublicKey)
     //
 
     //unencrypted input 
-    //const gatewayPublicKey = "BMbTfKh++E0vBd+jXejZvMc8hZNGEzZ8JjMgr8Wbc76zEHqQbcgV1+6z1G8GsmwaF18L7CCGbx6phF9Sbni8WxQ="; // TODO get this key
-    //const gatewayPublicKeyBuffer = Buffer.from(gatewayPublicKey, "base64");
-    //const gatewayPublicKeyBytes = arrayify(gatewayPublicKeyBuffer);
+    const gatewayPublicKey = "Ahc6gpaf7Gs3UBNDimUDFsfA7Om9sGRgV8NMYeJddS5r"; 
+    const gatewayPublicKeyBuffer = Buffer.from(gatewayPublicKey, "base64");
+    const gatewayPublicKeyBytes = arrayify(gatewayPublicKeyBuffer);
 
     element.addEventListener("click", async function(event: Event){
         event.preventDefault()
         const [myAddress] = await provider.send("eth_requestAccounts", []);
-
+        
+        const numWords = document.querySelector<HTMLFormElement>('#input1')?.value;
+        const callback_gas_limit = document.querySelector<HTMLFormElement>('#input2')?.value;
         const data = JSON.stringify({
+            numWords: Number(numWords)
         })
 
         const user_address = myAddress
         const user_key = Buffer.from(userPublicKeyBytes)
 
-        
+        // create the abi interface and encode the function data
+        const abi = [{"type":"function","name":"callback","inputs":[{"name":"_taskId","type":"uint256","internalType":"uint256"},{"name":"_result","type":"bytes","internalType":"bytes"}],"outputs":[],"stateMutability":"nonpayable"},{"type":"function","name":"increaseTaskId","inputs":[{"name":"_newTaskId","type":"uint256","internalType":"uint256"}],"outputs":[],"stateMutability":"nonpayable"},{"type":"function","name":"initialize","inputs":[],"outputs":[],"stateMutability":"nonpayable"},{"type":"function","name":"owner","inputs":[],"outputs":[{"name":"","type":"address","internalType":"address"}],"stateMutability":"view"},{"type":"function","name":"postExecution","inputs":[{"name":"_taskId","type":"uint256","internalType":"uint256"},{"name":"_sourceNetwork","type":"string","internalType":"string"},{"name":"_info","type":"tuple","internalType":"struct Gateway.PostExecutionInfo","components":[{"name":"payload_hash","type":"bytes32","internalType":"bytes32"},{"name":"packet_hash","type":"bytes32","internalType":"bytes32"},{"name":"callback_address","type":"bytes20","internalType":"bytes20"},{"name":"callback_selector","type":"bytes4","internalType":"bytes4"},{"name":"callback_gas_limit","type":"bytes4","internalType":"bytes4"},{"name":"packet_signature","type":"bytes","internalType":"bytes"},{"name":"result","type":"bytes","internalType":"bytes"}]}],"outputs":[],"stateMutability":"nonpayable"},{"type":"function","name":"requestRandomness","inputs":[{"name":"_numWords","type":"uint32","internalType":"uint32"},{"name":"_callbackGasLimit","type":"uint32","internalType":"uint32"}],"outputs":[{"name":"requestId","type":"uint256","internalType":"uint256"}],"stateMutability":"payable"},{"type":"function","name":"send","inputs":[{"name":"_payloadHash","type":"bytes32","internalType":"bytes32"},{"name":"_userAddress","type":"address","internalType":"address"},{"name":"_routingInfo","type":"string","internalType":"string"},{"name":"_info","type":"tuple","internalType":"struct Gateway.ExecutionInfo","components":[{"name":"user_key","type":"bytes","internalType":"bytes"},{"name":"user_pubkey","type":"bytes","internalType":"bytes"},{"name":"routing_code_hash","type":"string","internalType":"string"},{"name":"task_destination_network","type":"string","internalType":"string"},{"name":"handle","type":"string","internalType":"string"},{"name":"nonce","type":"bytes12","internalType":"bytes12"},{"name":"payload","type":"bytes","internalType":"bytes"},{"name":"payload_signature","type":"bytes","internalType":"bytes"}]}],"outputs":[],"stateMutability":"payable"},{"type":"function","name":"taskId","inputs":[],"outputs":[{"name":"","type":"uint256","internalType":"uint256"}],"stateMutability":"view"},{"type":"function","name":"tasks","inputs":[{"name":"","type":"uint256","internalType":"uint256"}],"outputs":[{"name":"payload_hash_reduced","type":"bytes31","internalType":"bytes31"},{"name":"completed","type":"bool","internalType":"bool"}],"stateMutability":"view"},{"type":"event","name":"ComputedResult","inputs":[{"name":"taskId","type":"uint256","indexed":false,"internalType":"uint256"},{"name":"result","type":"bytes","indexed":false,"internalType":"bytes"}],"anonymous":false},{"type":"event","name":"Initialized","inputs":[{"name":"version","type":"uint64","indexed":false,"internalType":"uint64"}],"anonymous":false},{"type":"event","name":"logNewTask","inputs":[{"name":"task_id","type":"uint256","indexed":true,"internalType":"uint256"},{"name":"source_network","type":"string","indexed":false,"internalType":"string"},{"name":"user_address","type":"address","indexed":false,"internalType":"address"},{"name":"routing_info","type":"string","indexed":false,"internalType":"string"},{"name":"payload_hash","type":"bytes32","indexed":false,"internalType":"bytes32"},{"name":"info","type":"tuple","indexed":false,"internalType":"struct Gateway.ExecutionInfo","components":[{"name":"user_key","type":"bytes","internalType":"bytes"},{"name":"user_pubkey","type":"bytes","internalType":"bytes"},{"name":"routing_code_hash","type":"string","internalType":"string"},{"name":"task_destination_network","type":"string","internalType":"string"},{"name":"handle","type":"string","internalType":"string"},{"name":"nonce","type":"bytes12","internalType":"bytes12"},{"name":"payload","type":"bytes","internalType":"bytes"},{"name":"payload_signature","type":"bytes","internalType":"bytes"}]}],"anonymous":false},{"type":"error","name":"CallbackError","inputs":[]},{"type":"error","name":"InvalidInitialization","inputs":[]},{"type":"error","name":"InvalidPacketSignature","inputs":[]},{"type":"error","name":"InvalidPayloadHash","inputs":[]},{"type":"error","name":"InvalidSignature","inputs":[]},{"type":"error","name":"InvalidSignatureLength","inputs":[]},{"type":"error","name":"InvalidSignatureSValue","inputs":[]},{"type":"error","name":"NotInitializing","inputs":[]},{"type":"error","name":"TaskAlreadyCompleted","inputs":[]}]
+        const iface= new ethers.utils.Interface( abi )
+        const FormatTypes = ethers.utils.FormatTypes;
+        console.log(iface.format(FormatTypes.full))
+
+        const _callbackAddress = publicClientAddress.toLowerCase();
+        const _callbackSelector = iface.getSighash(iface.getFunction("callback"))
+        const _callbackGasLimit = Number(callback_gas_limit)
+
         const thePayload = JSON.stringify({
             data: data,
-            routing_info: routing_info,
+            routing_info: routing_contract,
             routing_code_hash: routing_code_hash,
             user_address: user_address,
             user_key: user_key.toString('base64'),
+            callback_address: Buffer.from(arrayify(_callbackAddress)).toString('base64'),
+            callback_selector: Buffer.from(arrayify(_callbackSelector)).toString('base64'),
+            callback_gas_limit: _callbackGasLimit,
         })
+        console.log(thePayload)
         
         const plaintext = Buffer.from(thePayload);
         const nonce = secureRandom(12, { type: "Uint8Array" });
         const handle = "request_random"
 
-        // const ciphertext = Buffer.from(
-        // encrypt_payload(
-        //     gatewayPublicKeyBytes,
-        //     userPrivateKeyBytes,
-        //     plaintext,
-        //     nonce
-        // ));
+        const ciphertext = Buffer.from(
+        encrypt_payload(
+             gatewayPublicKeyBytes,
+             userPrivateKeyBytes,
+             plaintext,
+             nonce
+         ));
 
-        const ciphertext = plaintext
+        //if not encrypted, just use the plaintext bytes
+        //const ciphertext = plaintext
     
-        // // get Metamask to sign the payloadHash with eth_sign
-        // const payloadHash = keccak256(ciphertext)
-        // const msgParams = payloadHash
-        // const from = myAddress;
-        // const params = [from, msgParams];
-        // const method = 'eth_sign';
-
-         //get Metamask to sign the payload with personal_sign
-         //const ciphertextHash = keccak256(Buffer.from(ciphertext))
-         //const payloadHash = keccak256(Buffer.concat([Buffer.from("\x19Ethereum Signed Message:\n"),Buffer.from(`${ciphertext.length}`),ciphertext]))
-         //const msgParams = ciphertextHash
-
         //get Metamask to sign the payloadhash with personal_sign
         const ciphertextHash = keccak256(Buffer.from(ciphertext))
         //this is what metamask really signs with personal_sign, it prepends the ethereum signed message here
@@ -124,32 +120,21 @@ export function setupSubmit(element: HTMLButtonElement) {
 
         // function data to be abi encoded
         const _userAddress = myAddress
-        //const _sourceNetwork = "ethereum"
-        const _sourceNetwork = "ethereum"
-        const _routingInfo = routing_info
+        const _routingInfo = routing_contract
         const _payloadHash = payloadHash
         const _info = {
             user_key: hexlify(user_key),
-            user_pubkey: user_pubkey,  // need the updated ABI before including this
+            user_pubkey: user_pubkey, 
             routing_code_hash: routing_code_hash,
+            task_destination_network: "secret-4",
             handle: handle,
             nonce: hexlify(nonce),
             payload: hexlify(ciphertext),
             payload_signature: payloadSignature
         }
-                
-        // create the abi interface and encode the function data
-        const abi = [{"inputs":[],"stateMutability":"nonpayable","type":"constructor"},{"inputs":[],"name":"CallbackError","type":"error"},{"inputs":[],"name":"InvalidPacketSignature","type":"error"},{"inputs":[],"name":"InvalidPayloadHash","type":"error"},{"inputs":[],"name":"InvalidResultSignature","type":"error"},{"inputs":[],"name":"InvalidSignature","type":"error"},{"inputs":[],"name":"InvalidSignatureLength","type":"error"},{"inputs":[],"name":"InvalidSignatureSValue","type":"error"},{"inputs":[],"name":"TaskAlreadyCompleted","type":"error"},{"anonymous":false,"inputs":[{"indexed":false,"internalType":"uint256","name":"taskId","type":"uint256"},{"indexed":false,"internalType":"bytes","name":"result","type":"bytes"}],"name":"ComputedResult","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"uint256","name":"task_id","type":"uint256"},{"indexed":false,"internalType":"bytes32","name":"payload_hash","type":"bytes32"},{"indexed":false,"internalType":"bytes32","name":"result_hash","type":"bytes32"}],"name":"logCompletedTask","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"uint256","name":"task_id","type":"uint256"},{"indexed":false,"internalType":"string","name":"source_network","type":"string"},{"indexed":false,"internalType":"address","name":"user_address","type":"address"},{"indexed":false,"internalType":"string","name":"routing_info","type":"string"},{"indexed":false,"internalType":"string","name":"routing_code_hash","type":"string"},{"indexed":false,"internalType":"bytes","name":"payload","type":"bytes"},{"indexed":false,"internalType":"bytes32","name":"payload_hash","type":"bytes32"},{"indexed":false,"internalType":"bytes","name":"payload_signature","type":"bytes"},{"indexed":false,"internalType":"bytes","name":"user_key","type":"bytes"},{"indexed":false,"internalType":"bytes","name":"user_pubkey","type":"bytes"},{"indexed":false,"internalType":"string","name":"handle","type":"string"},{"indexed":false,"internalType":"bytes12","name":"nonce","type":"bytes12"}],"name":"logNewTask","type":"event"},{"inputs":[{"internalType":"uint256","name":"_taskId","type":"uint256"},{"internalType":"bytes","name":"_result","type":"bytes"}],"name":"callback","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"_masterVerificationAddress","type":"address"}],"name":"initialize","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"masterVerificationAddress","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"owner","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"_taskId","type":"uint256"},{"internalType":"string","name":"_sourceNetwork","type":"string"},{"components":[{"internalType":"bytes32","name":"payload_hash","type":"bytes32"},{"internalType":"bytes","name":"result","type":"bytes"},{"internalType":"bytes32","name":"result_hash","type":"bytes32"},{"internalType":"bytes","name":"result_signature","type":"bytes"},{"internalType":"bytes32","name":"packet_hash","type":"bytes32"},{"internalType":"bytes","name":"packet_signature","type":"bytes"}],"internalType":"struct Gateway.PostExecutionInfo","name":"_info","type":"tuple"}],"name":"postExecution","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"string","name":"","type":"string"}],"name":"route","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"_userAddress","type":"address"},{"internalType":"string","name":"_sourceNetwork","type":"string"},{"internalType":"string","name":"_routingInfo","type":"string"},{"internalType":"bytes32","name":"_payloadHash","type":"bytes32"},{"components":[{"internalType":"bytes","name":"user_key","type":"bytes"},{"internalType":"bytes","name":"user_pubkey","type":"bytes"},{"internalType":"string","name":"routing_code_hash","type":"string"},{"internalType":"string","name":"handle","type":"string"},{"internalType":"bytes12","name":"nonce","type":"bytes12"},{"internalType":"bytes","name":"payload","type":"bytes"},{"internalType":"bytes","name":"payload_signature","type":"bytes"}],"internalType":"struct Gateway.ExecutionInfo","name":"_info","type":"tuple"},{"internalType":"address","name":"_callbackAddress","type":"address"},{"internalType":"bytes4","name":"_callbackSelector","type":"bytes4"},{"internalType":"uint32","name":"_callbackGasLimit","type":"uint32"}],"name":"send","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256","name":"","type":"uint256"}],"name":"tasks","outputs":[{"internalType":"bytes32","name":"payload_hash","type":"bytes32"},{"internalType":"address","name":"callback_address","type":"address"},{"internalType":"bytes4","name":"callback_selector","type":"bytes4"},{"internalType":"uint32","name":"callback_gas_limit","type":"uint32"},{"internalType":"bool","name":"completed","type":"bool"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"string","name":"_route","type":"string"},{"internalType":"address","name":"_verificationAddress","type":"address"},{"internalType":"bytes","name":"_signature","type":"bytes"}],"name":"updateRoute","outputs":[],"stateMutability":"nonpayable","type":"function"}]
-        const iface= new ethers.utils.Interface( abi )
-        const FormatTypes = ethers.utils.FormatTypes;
-        console.log(iface.format(FormatTypes.full))
-        
-        const _callbackAddress = publicClientAddress;
-        const _callbackSelector = iface.getSighash(iface.getFunction("callback"))
-        const _callbackGasLimit = 300000
-
+                        
+ 
         console.log(`_userAddress: ${_userAddress}
-        _sourceNetwork: ${_sourceNetwork} 
         _routingInfo: ${_routingInfo} 
         _payloadHash: ${_payloadHash} 
         _info: ${JSON.stringify(_info)}
@@ -159,14 +144,10 @@ export function setupSubmit(element: HTMLButtonElement) {
 
         const functionData = iface.encodeFunctionData("send",
             [
-                _userAddress,
-                _sourceNetwork,
-                _routingInfo,
                 _payloadHash,
+                _userAddress,
+                _routingInfo,
                 _info,
-                _callbackAddress,
-                _callbackSelector,
-                _callbackGasLimit
             ]
         )
         console.log(functionData)

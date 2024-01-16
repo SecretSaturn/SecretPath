@@ -165,107 +165,6 @@ contract ContractTest is Test {
     //////////////////////////////////////////////////////////////*/
 
 
-    function test_OwnerCanInitialize() public {
-        vm.prank(gatewayOwner);
-        address tempAddress = vm.addr(5);
-
-        gateway.setMasterVerificationAddress(tempAddress);
-
-        assertEq(tempAddress, gateway.masterVerificationAddress());
-    }
-
-    function testFail_NonOwnerCannotInitialize() public {
-        vm.startPrank(notOwner);
-        address tempAddress = vm.addr(5);
-        gateway.setMasterVerificationAddress(tempAddress);
-        vm.stopPrank();
-    }
-
-    function test_OwnerCanUpdateRouteWithValidSignature() public {
-        // Set the Master Verification Key below
-        vm.prank(gatewayOwner);
-        address masterVerificationKey = vm.addr(2);
-
-        gateway.setMasterVerificationAddress(masterVerificationKey);
-
-        address SampleVerificationAddress = vm.addr(6);
-        string memory sampleRoute = "secret-4";
-
-        // Update the route with with masterVerificationKey signature
-        bytes32 routeHash = getRouteHash(sampleRoute, SampleVerificationAddress);
-        bytes32 ethSignedMessageHash = getEthSignedMessageHash(routeHash);
-
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(2, ethSignedMessageHash);
-        bytes memory sig = abi.encodePacked(r, s, v);
-
-        vm.prank(gatewayOwner);
-        gateway.updateRoute(sampleRoute, SampleVerificationAddress, sig);
-
-        assertEq(gateway.route("secret-4"), SampleVerificationAddress);
-    }
-
-    function testFail_OwnerCannotUpdateRouteWithoutValidSignature() public {
-        // Set the Master Verrification Key below
-        vm.prank(gatewayOwner);
-        address masterVerificationKey = vm.addr(5);
-
-        gateway.setMasterVerificationAddress(masterVerificationKey);
-
-        address SampleVerificationAddress = vm.addr(6);
-        string memory sampleRoute = "secret";
-
-        // Update the route with wrong masterVerificationKey signature
-        bytes32 routeHash = getRouteHash(sampleRoute, SampleVerificationAddress);
-        bytes32 ethSignedMessageHash = getEthSignedMessageHash(routeHash);
-
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(7, ethSignedMessageHash);
-        bytes memory sig = abi.encodePacked(r, s, v);
-
-        gateway.updateRoute(sampleRoute, SampleVerificationAddress, sig);
-
-        vm.expectRevert(abi.encodeWithSignature("InvalidSignature()"));
-    }
-
-    function testFail_NonOwnerCannotUpdateRouteWithValidSignature() public {
-        // Set the Master Verrification Key below
-        vm.prank(gatewayOwner);
-        address masterVerificationKey = vm.addr(5);
-
-        gateway.setMasterVerificationAddress(masterVerificationKey);
-
-        address SampleVerificationAddress = vm.addr(6);
-        string memory sampleRoute = "secret";
-
-        // Update the route with  masterVerificationKey signature
-        bytes32 routeHash = getRouteHash(sampleRoute, SampleVerificationAddress);
-        bytes32 ethSignedMessageHash = getEthSignedMessageHash(routeHash);
-
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(5, ethSignedMessageHash);
-        bytes memory sig = abi.encodePacked(r, s, v);
-
-        gateway.updateRoute(sampleRoute, SampleVerificationAddress, sig);
-    }
-
-    function testFail_NonOwnerCannotUpdateRouteWithoutValidSignature() public {
-        // Set the Master Verrification Key below
-        vm.prank(gatewayOwner);
-        address masterVerificationKey = vm.addr(5);
-
-        gateway.setMasterVerificationAddress(masterVerificationKey);
-
-        address SampleVerificationAddress = vm.addr(6);
-        string memory sampleRoute = "secret";
-
-        // Update the route with  wrong masterVerificationKey signature
-        bytes32 routeHash = getRouteHash(sampleRoute, SampleVerificationAddress);
-        bytes32 ethSignedMessageHash = getEthSignedMessageHash(routeHash);
-
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(7, ethSignedMessageHash);
-        bytes memory sig = abi.encodePacked(r, s, v);
-
-        gateway.updateRoute(sampleRoute, SampleVerificationAddress, sig);
-    }
-
     function test_PreExecution() public {
         // USER ADDRESS       ----->   vm.addr(5);
         // CALLBACK ADDRESS   ----->   vm.addr(7);
@@ -331,7 +230,6 @@ contract ContractTest is Test {
     }
 
     function test_PostExecution() public {
-        test_OwnerCanUpdateRouteWithValidSignature();
                 vm.chainId(11155111); 
         string memory sourceNetwork = "secret";
     
@@ -350,7 +248,6 @@ contract ContractTest is Test {
         Gateway.PostExecutionInfo memory assembledInfo = Gateway.PostExecutionInfo({
             payload_hash: payloadHash,
             result: result,
-            input_hash: resultHash,
             packet_hash: resultHash,
             packet_signature: getResultSignature(result, 2),
             callback_address: bytes20(address(gateway)),
@@ -365,7 +262,6 @@ contract ContractTest is Test {
     }
 
     function testFail_PostExecutionWithoutMapStoredAddressSignatures() public {
-        test_OwnerCanUpdateRouteWithValidSignature();
         test_PreExecution();
 
         string memory sourceNetwork = "secret";
@@ -384,7 +280,6 @@ contract ContractTest is Test {
         Gateway.PostExecutionInfo memory assembledInfo = Gateway.PostExecutionInfo({
             payload_hash: payloadHash,
             result: result,
-            input_hash: resultHash,
             packet_hash: resultHash,
             packet_signature: getResultSignature(result, 6),
             callback_address: bytes20(address(gateway)),
@@ -437,31 +332,7 @@ contract ContractTest is Test {
         assertEq(tempCompleted, false);
     }
 
-    function test_addressKeySetupForPostExecutionExplicitValues() public {
-        // Set the Master Verrification Key below
-        vm.prank(gatewayOwner);
-        address masterVerificationKey = vm.addr(2);
-
-        gateway.setMasterVerificationAddress(masterVerificationKey);
-
-        address SampleVerificationAddress = 0x49F7552065228e5abF44e144cc750aEA4F711Dc3;
-        string memory sampleRoute = "secret";
-
-        // Update the route with with masterVerificationKey signature
-        bytes32 routeHash = getRouteHash(sampleRoute, SampleVerificationAddress);
-        bytes32 ethSignedMessageHash = getEthSignedMessageHash(routeHash);
-
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(2, ethSignedMessageHash);
-        bytes memory sig = abi.encodePacked(r, s, v);
-
-        vm.prank(gatewayOwner);
-        gateway.updateRoute(sampleRoute, SampleVerificationAddress, sig);
-
-        assertEq(gateway.route("secret"), SampleVerificationAddress);
-    }
-
     function test_PostExecutionExplicitValues() public {
-        test_addressKeySetupForPostExecutionExplicitValues();
         test_PreExecutionSetupForExplicitCase();
 
         string memory sourceNetwork = "secret";
@@ -477,7 +348,6 @@ contract ContractTest is Test {
 
         // result
         bytes memory result = hex"7b226d795f76616c7565223a327d";
-        bytes32 inputHash = hex"faef40ffa988468a70a21929200a40f1c8ea9f56fcf79a206ef9713032c4e28b";
 
         // packet
         bytes32 packetHash = hex"923b23c023d0e5e66ac122d9804414f4f9cab06d7a6ce6c4b8c586a1fa57264c";
@@ -487,7 +357,6 @@ contract ContractTest is Test {
         Gateway.PostExecutionInfo memory assembledInfo = Gateway.PostExecutionInfo({
             payload_hash: payloadHash,
             result: result,
-            input_hash: inputHash,
             packet_hash: packetHash,
             packet_signature: packetSignature,
             callback_address: callback_address,

@@ -23,7 +23,6 @@ use sha3::{Digest, Keccak256};
 /// pad handle responses and log attributes to blocks of 256 bytes to prevent leaking info based on
 /// response size
 pub const BLOCK_SIZE: usize = 256;
-pub const CHAIN_ID: &str = "pulsar-3";
 
 #[cfg(feature = "contract")]
 ////////////////////////////////////// Init ///////////////////////////////////////
@@ -264,7 +263,7 @@ fn pre_execution(deps: DepsMut, _env: Env, msg: PreExecutionMsg) -> StdResult<Re
         .set_data(to_binary(&InputResponse { status: Success })?))
 }
 
-fn post_execution(deps: DepsMut, _env: Env, msg: PostExecutionMsg) -> StdResult<Response> {
+fn post_execution(deps: DepsMut, env: Env, msg: PostExecutionMsg) -> StdResult<Response> {
     // load task info and remove task ID from map
     let task_info = TASK_MAP
         .get(deps.storage, &msg.task)
@@ -292,10 +291,9 @@ fn post_execution(deps: DepsMut, _env: Env, msg: PostExecutionMsg) -> StdResult<
 
     // create hash of entire packet (used to verify the message wasn't modified in transit)
     let data = [
-        CHAIN_ID.as_bytes(),               // source network
+        env.block.chain_id.as_bytes(),               // source network
         routing_info.as_bytes(),           // task_destination_network
         task_id_padded.as_slice(),         // task ID
-        task_info.input_hash.as_slice(),   // Input hash
         task_info.payload_hash.as_slice(), // original payload message
         result.as_slice(),                 // result
         task_info.callback_address.as_slice(), // callback address
@@ -363,7 +361,6 @@ fn post_execution(deps: DepsMut, _env: Env, msg: PostExecutionMsg) -> StdResult<
     };
 
     let payload_hash = format!("0x{}",task_info.payload_hash.as_slice().encode_hex::<String>());
-    let input_hash = format!("0x{}", task_info.input_hash.as_slice().encode_hex::<String>());
     let result = format!("0x{}", result.as_slice().encode_hex::<String>());
     let packet_hash = format!("0x{}", sha_256(&packet_hash).encode_hex::<String>());
     let packet_signature = format!("0x{}{:x}", &packet_signature.encode_hex::<String>(),packet_recovery_id);
@@ -372,11 +369,10 @@ fn post_execution(deps: DepsMut, _env: Env, msg: PostExecutionMsg) -> StdResult<
     let callback_gas_limit = format!("0x{}", task_info.callback_gas_limit.to_be_bytes().encode_hex::<String>());
 
     Ok(Response::new()
-        .add_attribute_plaintext("source_network", CHAIN_ID)
+        .add_attribute_plaintext("source_network", env.block.chain_id)
         .add_attribute_plaintext("task_destination_network", routing_info)
         .add_attribute_plaintext("task_id", msg.task.task_id.to_string())
         .add_attribute_plaintext("payload_hash", payload_hash)
-        .add_attribute_plaintext("input_hash", input_hash)
         .add_attribute_plaintext("result", result)
         .add_attribute_plaintext("packet_hash", packet_hash)
         .add_attribute_plaintext("packet_signature", packet_signature)

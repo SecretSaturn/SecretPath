@@ -15,12 +15,11 @@ class EthInterface(BaseChainInterface):
     Implementaion of BaseChainInterface for eth.
     """
 
-    def __init__(self, private_key="", address="", provider=None, contract_address = "", **_kwargs):
+    def __init__(self, private_key="", address="", provider=None, contract_address = "", chain_id="", api_endpoint="", **_kwargs):
         if provider is None:
             """
             If we don't have a set provider, read it from config.
             """
-            api_endpoint = os.environ.get('API_ENDPOINT')
 
             provider = Web3(Web3.HTTPProvider(api_endpoint))
             provider.middleware_onion.inject(geth_poa_middleware, layer=0)
@@ -29,6 +28,8 @@ class EthInterface(BaseChainInterface):
         self.provider = provider
         self.address = address
         self.contract_address = contract_address
+        self.chain_id = chain_id
+
         basicConfig(
             level=INFO,
             format="%(asctime)s [Eth Interface: %(levelname)8.8s] %(message)s",
@@ -50,7 +51,7 @@ class EthInterface(BaseChainInterface):
                 'from': self.address,
                 'gas': 3000000,
                 'nonce': nonce,
-                #'maxFeePerGas': self.provider.eth.max_priority_fee
+                'maxFeePerGas': self.provider.eth.max_priority_fee
                 #'maxPriorityFeePerGas': self.provider.eth.max_priority_fee,
             })
         elif len(args) == 0:
@@ -58,6 +59,7 @@ class EthInterface(BaseChainInterface):
                 'from': self.address,
                 'gas': 3000000,
                 'nonce': nonce,
+                #'maxFeePerGas': self.provider.eth.max_priority_fee
                 #'maxPriorityFeePerGas': self.provider.eth.max_priority_fee,
             })
         else:
@@ -65,6 +67,7 @@ class EthInterface(BaseChainInterface):
                 'from': self.address,
                 'gas': 3000000,
                 'nonce': nonce,
+                #'maxFeePerGas': self.provider.eth.max_priority_fee
                 #'maxPriorityFeePerGas': self.provider.eth.max_priority_fee,
             })
 
@@ -81,11 +84,11 @@ class EthInterface(BaseChainInterface):
         print('Tx Hash:', tx_hash.hex())
         return tx_hash
 
-    def get_transactions(self, address, height=None):
+    def get_transactions(self, contract_interface, height=None):
         """
         See base_interface.py for documentation
         """
-        return self.get_last_txs(address=address, block_number=height)
+        return self.get_last_txs(contract_interface=contract_interface, block_number=height)
 
     def get_last_block(self):
         """
@@ -93,7 +96,7 @@ class EthInterface(BaseChainInterface):
         """
         return self.provider.eth.get_block('latest').number
 
-    def get_last_txs(self, block_number=None, address=None):
+    def get_last_txs(self, block_number=None, contract_interface=None):
         """
         Gets the transactions from a particular block for a particular address.
         Args:
@@ -105,22 +108,23 @@ class EthInterface(BaseChainInterface):
         """
         if block_number is None:
             block_number = self.get_last_block()
-        if address is None:
-            address = self.address
-        # get last txs for address
+        validTransactions = contract_interface.contract.events.logNewTask().get_logs(
+            fromBlock=block_number,
+        )
+        transaction_hashes = [event['transactionHash'].hex() for event in validTransactions]
         try:
-            transactions: Sequence[Mapping] = self.provider.eth.get_block(block_number, full_transactions=True)[
-                'transactions']
+            block_transactions = self.provider.eth.get_block(block_number, full_transactions=True)['transactions']
+            filtered_transactions = [tx for tx in block_transactions if tx['hash'].hex() in transaction_hashes]
         except Exception as e:
             self.logger.warning(e)
             return []
+
         correct_transactions = []
         try:
-            correct_transactions = []
             max_workers = 50
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 # Create a future for each transaction
-                future_to_transaction = {executor.submit(self.process_transaction, tx): tx for tx in transactions}
+                future_to_transaction = {executor.submit(self.process_transaction, tx): tx for tx in filtered_transactions}
                 for future in as_completed(future_to_transaction):
                     result = future.result()
                     if result is not None:
@@ -132,9 +136,11 @@ class EthInterface(BaseChainInterface):
 
     def process_transaction(self, transaction):
         try:
-            # Replace this line with your actual logic, for example:
-            tx_receipt = self.provider.eth.get_transaction_receipt(transaction['hash'])
-            return tx_receipt
+            if str(transaction['chainId']) == str(self.chain_id):
+                tx_receipt = self.provider.eth.get_transaction_receipt(transaction['hash'])
+                return tx_receipt
+            else:
+                raise Exception("Chain_id of TX and API don't match. Api chain_id: "+str(self.chain_id) + " TX chain_id: "+ str(transaction['chainId']))
         except Exception as e:
             self.logger.warning(e)
             return None
@@ -193,22 +199,22 @@ class EthContract(BaseContractInterface):
         return self.interface.sign_and_send_transaction(txn)
 
     def parse_event_from_txn(self, event_name, txn) -> List[Task]:
-            event = self.contract.events[event_name]()
-            try:
-                tasks = event.process_receipt(txn)
-            except Exception as e:
-                self.logger.warning(e)
-                return []
-            task_list = []
-            for task in tasks:
-                args = task['args']
-                # Convert to a regular dictionary
-                args_dict = dict(args)
-                info_part = args_dict.pop('info')
-                args_dict.update(info_part)
-                args = AttributeDict(args_dict)
-                task_list.append(Task(args))
-            return task_list
+        event = self.contract.events[event_name]()
+        try:
+            tasks = event.process_receipt(txn)
+        except Exception as e:
+            self.logger.warning(e)
+            return []
+        task_list = []
+        for task in tasks:
+            args = task['args']
+            # Convert to a regular dictionary
+            args_dict = dict(args)
+            info_part = args_dict.pop('info')
+            args_dict.update(info_part)
+            args = AttributeDict(args_dict)
+            task_list.append(Task(args))
+        return task_list
 
 
 if __name__ == "__main__":

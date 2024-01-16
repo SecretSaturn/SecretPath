@@ -19,8 +19,8 @@ class SCRTInterface(BaseChainInterface):
     NOTE: the below default private key is for testing only, and does not correspond to any real account/wallet
     """
 
-    def __init__(self, private_key="c2cdf0a8b0a83b35ace53f097b5e6e6a0a1f2d40535eff1cf434f52a43d59d8f",
-                 address=None, api_url="https://api.pulsar.scrttestnet.com", chain_id="pulsar-3", provider=None,
+    def __init__(self, private_key="",
+                 address=None, api_url="", chain_id="", provider=None,
                  **kwargs):
         if isinstance(private_key, str):
             self.private_key = RawKey.from_hex(private_key)
@@ -168,7 +168,7 @@ class SCRTContract(BaseContractInterface):
         txn_msgs = self.interface.provider.wasm.contract_execute_msg(
             sender_address=self.interface.address,
             contract_address=self.address,
-            handle_msg=function_schema
+            handle_msg=function_schema,
         )
         tx_options = CreateTxOptions(
             msgs=[txn_msgs],
