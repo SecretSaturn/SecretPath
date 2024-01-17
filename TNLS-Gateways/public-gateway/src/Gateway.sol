@@ -7,14 +7,14 @@ import "@openzeppelin/contracts/proxy/transparent/ProxyAdmin.sol";
 
 
     /*//////////////////////////////////////////////////////////////
-                        Gateway Proxy
+                            Gateway Proxy
     //////////////////////////////////////////////////////////////*/
 contract GatewayProxy is TransparentUpgradeableProxy {
     constructor(address _logic, address admin_, bytes memory _data) TransparentUpgradeableProxy(_logic, admin_, _data) {}
 }
 
     /*//////////////////////////////////////////////////////////////
-                    Secret VRF Interface
+                        Secret VRF Interface
     //////////////////////////////////////////////////////////////*/
 interface IRandomness {
     function fulfillRandomWords(uint256 requestId, uint256[] calldata randomWords) external;
@@ -77,9 +77,6 @@ contract Gateway is Initializable {
                               Errors
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice thrown when the signature s is invalid
-    error InvalidSignatureSValue();
-
     /// @notice thrown when the signature length is invalid
     error InvalidSignatureLength();
 
@@ -98,6 +95,12 @@ contract Gateway is Initializable {
     /// @notice thrown when the Callback failed
     error CallbackError();
 
+    /// @notice thrown when the Bytes Length is not a multiple of 32 bytes
+    error InvalidBytesLength();
+
+    /// @notice thrown when the user requests more Random Words than allowed
+    error TooManyVRFRandomWordsRequested();
+
     /*//////////////////////////////////////////////////////////////
                               Helpers
     //////////////////////////////////////////////////////////////*/
@@ -109,7 +112,9 @@ contract Gateway is Initializable {
     /// @return v The recovery byte of the signature
 
     function splitSignature(bytes memory _sig) private pure returns (bytes32 r, bytes32 s, uint8 v) {
-        require(_sig.length == 65, "invalid signature length");
+        if (_sig.length != 65) {
+            revert InvalidSignatureLength();
+        }
 
         assembly {
             // first 32 bytes, after the length prefix
@@ -210,7 +215,9 @@ contract Gateway is Initializable {
     /// @return The array of uint256
     
    function bytesToUint256Array(bytes memory data) private pure returns (uint256[] memory) {
-        require(data.length % 32 == 0, "Data length must be a multiple of 32 bytes");
+        if (data.length % 32 != 0) {
+            revert InvalidBytesLength();
+        }
         uint256[] memory uintArray;
         assembly {
             // Cast the bytes array to a uint256[] array by setting the appropriate length
@@ -324,12 +331,14 @@ contract Gateway is Initializable {
     ) external payable returns (uint256 requestId) {
 
         //Set limit on how many random words can be requested
-        require(_numWords <= 2000, "Too many words requested");
+        if (_numWords > 2000) {
+           revert TooManyVRFRandomWordsRequested();
+        }
 
         //Encode the callback_address as Base64
         string memory callback_address = encodeBase64(bytes.concat(bytes20(msg.sender)));
 
-        //construct the payload that is sent into the Secret Gateway by hand
+        //construct the payload that is sent into the Secret Gateway
         bytes memory payload = bytes.concat(
             '{"data":"{\\"numWords\\":',
             bytes(uint256toString(_numWords)),

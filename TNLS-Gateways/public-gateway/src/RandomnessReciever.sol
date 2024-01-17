@@ -35,17 +35,17 @@ contract RandomnessReciever {
 
     /// @notice Demo function on how to implement a VRF call using Secret VRF
     function requestRandomnessTest() external {
-        // can be up to 2000 words, change this according to your needs
+        // Can be up to 2000 random numbers, change this according to your needs
         uint32 numWords = 10; 
 
-        //change callbackGasLimit according to your needs for post processing in your callback
+        // Change callbackGasLimit according to your needs for post processing in your callback
         uint32 callbackGasLimit = 2000000; 
 
-        //change callbackGasLimit according to your needs for post processing in your callback
+        // Get the VRFGateway contrac interface 
         ISecretVRF vrfContract = ISecretVRF(VRFGateway);
 
         // Call the VRF contract to request random numbers. 
-        //Returns requestId of the VRF request. A  contract can track a VRF call that way.
+        // Returns requestId of the VRF request. A  contract can track a VRF call that way.
         uint256 requestId = vrfContract.requestRandomness(numWords, callbackGasLimit);
 
         // Emit the event
@@ -62,10 +62,10 @@ contract RandomnessReciever {
     /// @param requestId requestId of the VRF request that was initally called
     /// @param randomWords Generated Random Numbers in uint256 array
     function fulfillRandomWords(uint256 requestId, uint256[] calldata randomWords) external {
-        // Checks if the callback was called by the VRFGateway and by any other address
+        // Checks if the callback was called by the VRFGateway and not by any other address
         require(msg.sender == address(VRFGateway), "only Secret Gateway can fulfill");
 
-        //do your custom stuff here, for example:
+        // Do your custom stuff here, for example:
         emit fulfilledRandomWords(requestId, randomWords);
     }
 }

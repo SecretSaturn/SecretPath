@@ -45,7 +45,7 @@ class EthInterface(BaseChainInterface):
         print("create TX")
         print(*args)
         # create task
-        nonce = self.provider.eth.get_transaction_count(self.address)
+        nonce = self.provider.eth.get_transaction_count(self.address, 'pending')
         if kwargs is {}:
             tx = contract_function(*args).build_transaction({
                 'from': self.address,
