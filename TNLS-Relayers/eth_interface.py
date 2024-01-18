@@ -1,8 +1,10 @@
 import json
 import os
+from copy import deepcopy
 from logging import getLogger, basicConfig, INFO, StreamHandler
 from typing import List, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from threading import Lock
 
 from web3 import Web3
 from web3.datastructures import AttributeDict
@@ -29,6 +31,7 @@ class EthInterface(BaseChainInterface):
         self.address = address
         self.contract_address = contract_address
         self.chain_id = chain_id
+        self.nonce = self.provider.eth.get_transaction_count(self.address, 'pending');
 
         basicConfig(
             level=INFO,
@@ -42,23 +45,20 @@ class EthInterface(BaseChainInterface):
         """
         See base_interface.py for documentation
         """
-        print("create TX")
-        print(*args)
         # create task
-        nonce = self.provider.eth.get_transaction_count(self.address, 'pending')
         if kwargs is {}:
             tx = contract_function(*args).build_transaction({
                 'from': self.address,
                 'gas': 2000000,
-                'nonce': nonce,
-                'maxFeePerGas': self.provider.eth.max_priority_fee
+                'nonce': deepcopy(self.nonce)
+                #'maxFeePerGas': self.provider.eth.max_base
                 #'maxPriorityFeePerGas': self.provider.eth.max_priority_fee,
             })
         elif len(args) == 0:
             tx = contract_function(**kwargs).build_transaction({
                 'from': self.address,
                 'gas': 2000000,
-                'nonce': nonce,
+                'nonce': deepcopy(self.nonce)
                 #'maxFeePerGas': self.provider.eth.max_priority_fee
                 #'maxPriorityFeePerGas': self.provider.eth.max_priority_fee,
             })
@@ -66,11 +66,12 @@ class EthInterface(BaseChainInterface):
             tx = contract_function(*args, **kwargs).build_transaction({
                 'from': self.address,
                 'gas': 2000000,
-                'nonce': nonce,
+                'nonce': deepcopy(self.nonce)
                 #'maxFeePerGas': self.provider.eth.max_priority_fee
                 #'maxPriorityFeePerGas': self.provider.eth.max_priority_fee,
             })
 
+        self.nonce = self.nonce + 1
         return tx
 
     def sign_and_send_transaction(self, tx):
@@ -81,7 +82,7 @@ class EthInterface(BaseChainInterface):
         signed_tx = self.provider.eth.account.sign_transaction(tx, self.private_key)
         # send task
         tx_hash = self.provider.eth.send_raw_transaction(signed_tx.rawTransaction)
-        print('Tx Hash:', tx_hash.hex())
+        self.logger.info('Tx Hash: %s', tx_hash.hex())
         return tx_hash
 
     def get_transactions(self, contract_interface, height=None):
@@ -146,7 +147,6 @@ class EthInterface(BaseChainInterface):
             return None
 
 
-
 class EthContract(BaseContractInterface):
     """
     Implementation of BaseContractInterface for eth.
@@ -162,6 +162,7 @@ class EthContract(BaseContractInterface):
             format="%(asctime)s [Eth Contract: %(levelname)8.8s] %(message)s",
             handlers=[StreamHandler()],
         )
+        self.lock = Lock()
         self.logger = getLogger()
         self.logger.info("Initialized Eth contract with address: %s", self.address)
         pass
@@ -190,13 +191,15 @@ class EthContract(BaseContractInterface):
                     if isinstance(value, list):
                         args[i] = tuple(value)
                 kwargs = None
-        if kwargs is None:
-            txn = self.interface.create_transaction(function, *args)
-        elif args is None:
-            txn = self.interface.create_transaction(function, **kwargs)
-        else:
-            txn = self.interface.create_transaction(function, *args, **kwargs)
-        return self.interface.sign_and_send_transaction(txn)
+        with self.lock:
+            if kwargs is None:
+                txn = self.interface.create_transaction(function, *args)
+            elif args is None:
+                txn = self.interface.create_transaction(function, **kwargs)
+            else:
+                txn = self.interface.create_transaction(function, *args, **kwargs)
+            submitted_txn = self.interface.sign_and_send_transaction(txn)
+        return submitted_txn
 
     def parse_event_from_txn(self, event_name, txn) -> List[Task]:
         event = self.contract.events[event_name]()

@@ -70,9 +70,9 @@ const initializeGateway = async (
     {
       sender: client.address,
       code_id: codeId,
-      init_msg: { 
-      },
+      init_msg: { },
       code_hash: contractCodeHash,
+      admin: client.address,
       label: "test_secret_gateway" + Math.ceil(Math.random() * 10000), // The label should be unique for every contract, add random string in order to maintain uniqueness
     },
     {
@@ -155,6 +155,7 @@ const initializeContract = async (
         gateway_key: gatewayKey,
       },
       code_hash: contractCodeHash,
+      admin: client.address,
       label: "test_sample_contract" + Math.ceil(Math.random() * 10000),
     },
     {

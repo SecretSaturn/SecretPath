@@ -3,10 +3,12 @@ from copy import deepcopy
 from logging import getLogger, basicConfig, DEBUG, StreamHandler
 from threading import Lock
 from typing import List
+import asyncio
 
 from secret_sdk.client.lcd import LCDClient
 from secret_sdk.client.lcd.api.tx import CreateTxOptions
 from secret_sdk.core import TxLog
+from secret_sdk.exceptions import LCDResponseError
 from secret_sdk.key.raw import RawKey
 from secret_sdk.protobuf.cosmos.tx.v1beta1 import BroadcastMode
 
@@ -34,6 +36,10 @@ class SCRTInterface(BaseChainInterface):
         assert self.address == str(self.private_key.acc_address), f"Address {self.address} and private key " \
                                                                   f"{self.private_key.acc_address} mismatch"
         self.wallet = self.provider.wallet(self.private_key)
+        account_number_and_sequence = self.wallet.account_number_and_sequence()
+        self.account_number = account_number_and_sequence['account_number']
+        self.sequence = int(account_number_and_sequence['sequence'])
+        self.logger = getLogger()
 
     def sign_and_send_transaction(self, tx):
         """
@@ -45,7 +51,21 @@ class SCRTInterface(BaseChainInterface):
                 the receipt of the broadcast transaction
 
         """
-        return self.provider.tx.broadcast_adapter(tx, mode=BroadcastMode.BROADCAST_MODE_BLOCK)
+        max_retries = 10
+        for attempt in range(max_retries):
+            try:
+                # Assuming broadcast_adapter is an async function
+                final_tx = self.provider.tx.broadcast_adapter(tx, mode=BroadcastMode.BROADCAST_MODE_BLOCK)
+                return final_tx
+            except LCDResponseError as e:
+                print(e)
+                if attempt < max_retries - 1:
+                    continue
+                else:
+                    raise e
+            except Exception as e:
+                self.logger.error(f"An unexpected error occurred: {e}")
+                raise e
 
     def get_last_block(self):
         """
@@ -84,8 +104,9 @@ class SCRTContract(BaseContractInterface):
     Implements the BaseContractInterface standard for the Secret Network
     """
 
-    def __init__(self, interface, address, abi):
+    def __init__(self, interface, address, abi, code_hash):
         self.address = address
+        self.code_hash = code_hash
         self.abi = json.loads(abi)
         self.interface = interface
         basicConfig(
@@ -169,16 +190,17 @@ class SCRTContract(BaseContractInterface):
             sender_address=self.interface.address,
             contract_address=self.address,
             handle_msg=function_schema,
+            contract_code_hash = self.code_hash
         )
         tx_options = CreateTxOptions(
             msgs=[txn_msgs],
-            gas=1000000,
+            gas="1000000",
             gas_prices='0.05uscrt',
-            gas_adjustment=1,
-            sequence=None,
-            account_number=None
+            sequence=deepcopy(self.interface.sequence),
+            account_number=self.interface.account_number
         )
         txn = self.interface.wallet.create_and_sign_tx(options=tx_options)
+        self.interface.sequence = self.interface.sequence + 1
         return txn
 
     def call_function(self, function_name, *args):
@@ -198,7 +220,7 @@ class SCRTContract(BaseContractInterface):
             args = json.loads(args)
         with self.lock:
             txn = self.construct_txn(function_schema, function_name, args)
-            transaction_result = self.interface.sign_and_send_transaction(txn)
+        transaction_result = self.interface.sign_and_send_transaction(txn)
         try:
             self.logger.info(f"Transaction result: {transaction_result}")
             logs = transaction_result.logs

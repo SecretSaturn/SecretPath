@@ -77,6 +77,7 @@ const initializeContract = async (
         gateway_key: gatewayKey,
       },
       code_hash: contractCodeHash,
+      admin: client.address,
       label: "test_sample_contract" + Math.ceil(Math.random() * 10000),
     },
     {
