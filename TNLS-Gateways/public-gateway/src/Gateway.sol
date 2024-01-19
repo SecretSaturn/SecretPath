@@ -13,13 +13,6 @@ contract GatewayProxy is TransparentUpgradeableProxy {
     constructor(address _logic, address admin_, bytes memory _data) TransparentUpgradeableProxy(_logic, admin_, _data) {}
 }
 
-    /*//////////////////////////////////////////////////////////////
-                        Secret VRF Interface
-    //////////////////////////////////////////////////////////////*/
-interface IRandomness {
-    function fulfillRandomWords(uint256 requestId, uint256[] calldata randomWords) external;
-}
-
 contract Gateway is Initializable {
     /*//////////////////////////////////////////////////////////////
                               Constants
@@ -27,10 +20,10 @@ contract Gateway is Initializable {
 
     //Use hard coded constant values instead of storage variables for Secret VRF, saves around 10,000+ in gas per TX. 
     //Since contract is upgradeable, we can update these values as well with it.
-    bytes constant routing_info = "secret1a9jvkwanwgs66222a74p607reh333nfsspgp93";
+    bytes constant routing_info = "secret14hlku6qen0tkhfq0cklx02hcdu9jph8un4lsga";
     bytes constant routing_code_hash = "ba0006753cb18a8b12fe266707289098bfb8a3ae83de54ecece591231ada2abf";
     string constant task_destination_network = "secret-4";
-    address constant secret_gateway_signer_address = 0x9199301b86c1eC0C180B51B1CFb6B4966A0D6bFf;
+    address constant secret_gateway_signer_address = 0x1b153e8fc101c2c6C9e0a9250aca99e957354a8E;
 
 
     /*//////////////////////////////////////////////////////////////
@@ -49,6 +42,7 @@ contract Gateway is Initializable {
         string task_destination_network;
         string handle;
         bytes12 nonce;
+        uint32 callback_gas_limit;
         bytes payload;
         bytes payload_signature;
     }
@@ -100,6 +94,9 @@ contract Gateway is Initializable {
 
     /// @notice thrown when the user requests more Random Words than allowed
     error TooManyVRFRandomWordsRequested();
+
+    /// @notice thrown when the paid fee was lower than expected: 
+    error PaidRequestFeeTooLow();
 
     /*//////////////////////////////////////////////////////////////
                               Helpers
@@ -268,12 +265,30 @@ contract Gateway is Initializable {
                         Maintainance Functions
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice Increase the task_id to check for problems 
+    /// @notice Increase the task_id if needed
     /// @param _newTaskId the new task_id
 
     function increaseTaskId(uint256 _newTaskId) external onlyOwner {
         require (_newTaskId > taskId, "New task id must be higher than the old task_id");
         taskId = _newTaskId;
+    }
+
+    /// @notice Payout the paid balance to the owner
+
+    function payoutBalance() external onlyOwner {
+        payable(owner).transfer(address(this).balance);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                    Gas Price Payment Functions
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Increase the task_id to check for problems 
+    /// @param _callbackGasLimit the Callback Gas Limit
+
+    function estimateRequestPrice(uint32 _callbackGasLimit) private view returns (uint256) {
+        uint256 baseFee = _callbackGasLimit*tx.gasprice;
+        return baseFee;
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -292,6 +307,10 @@ contract Gateway is Initializable {
         string calldata _routingInfo,
         ExecutionInfo calldata _info) 
         external payable {
+
+        if (estimateRequestPrice(_info.callback_gas_limit) > msg.value) {
+            revert PaidRequestFeeTooLow();
+        }
 
         // Payload hash verification
         if (keccak256(bytes.concat("\x19Ethereum Signed Message:\n32", keccak256(_info.payload))) != _payloadHash) {
@@ -335,6 +354,10 @@ contract Gateway is Initializable {
            revert TooManyVRFRandomWordsRequested();
         }
 
+        if (estimateRequestPrice(_callbackGasLimit) > msg.value) {
+            revert PaidRequestFeeTooLow();
+        }
+
         //Encode the callback_address as Base64
         string memory callback_address = encodeBase64(bytes.concat(bytes20(msg.sender)));
 
@@ -361,6 +384,7 @@ contract Gateway is Initializable {
             task_destination_network: task_destination_network,
             handle: "request_random",
             nonce: bytes12(0),
+            callback_gas_limit:_callbackGasLimit,
             payload: payload,
             payload_signature: new bytes(64) // empty signature, fill with 0 bytes
         });
@@ -432,19 +456,20 @@ contract Gateway is Initializable {
         // Continue with the function execution
 
         // Additional conversion for Secret VRF into uint256[] if callback_selector matches the fullfillRandomWords selector.
-        if (_info.callback_selector == bytes4(0x38ba4614)) {
+        bool callbackSuccessful; 
+        if (_info.callback_selector == 0x38ba4614) {
             uint256[] memory randomWords = bytesToUint256Array(_info.result);
-            IRandomness randomness = IRandomness(address(_info.callback_address));
-            randomness.fulfillRandomWords(_taskId, randomWords);
+            (callbackSuccessful, ) = address(_info.callback_address).call(
+                abi.encodeWithSelector(0x38ba4614, _taskId, randomWords)
+            );
         }
         else {
-            bool val; 
-            (val, ) = address(_info.callback_address).call{gas: uint32(_info.callback_gas_limit)}(
+            (callbackSuccessful, ) = address(_info.callback_address).call(
                 abi.encodeWithSelector(_info.callback_selector, _taskId, _info.result)
             );
-            if (!val) { 
-                revert CallbackError();
-            }
+        }
+        if (!callbackSuccessful) { 
+            revert CallbackError();
         }
     }
 

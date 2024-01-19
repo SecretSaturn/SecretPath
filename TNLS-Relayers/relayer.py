@@ -138,7 +138,7 @@ class Relayer:
                 task = self.task_list.pop()
                 self.route_transaction(task)
 
-        if len(self.task_threads) < 5 and len(self.task_list) > 0:
+        if len(self.task_threads) < 10 and len(self.task_list) > 0:
             thread = Thread(target=_thread_func)
             thread.start()
             self.task_threads.append(thread)
@@ -160,7 +160,7 @@ class Relayer:
             self.logger.info('Polled for transactions, now have {} remaining'.format(len(self.task_list)))
             self.task_list_handle()
             self.loops_run += 1
-            sleep(0.1)
+            sleep(0.5)
         pass
 
     def __str__(self):

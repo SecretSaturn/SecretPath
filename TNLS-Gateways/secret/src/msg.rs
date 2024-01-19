@@ -13,7 +13,7 @@ use crate::state::Task;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
-    /// Optional admin address, env.message.sender if missing.
+    /// Optional admin address, info.sender if missing.
     pub admin: Option<Addr>
 }
 
@@ -24,6 +24,8 @@ pub enum ExecuteMsg {
     Input { inputs: PreExecutionMsg },
     /// Receive results from private contract and broadcast logs for Relayer.
     Output { outputs: PostExecutionMsg },
+    /// Rotates the gateway keys, only callable by admin.
+    RotateGatewayKeys {},
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, JsonSchema, Debug)]
@@ -44,6 +46,7 @@ pub struct InputResponse {
 pub enum QueryMsg {
     /// Query the gateway's public keys.
     GetPublicKeys {},
+    GetExecutionResult {task: Task}
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -81,6 +84,8 @@ pub struct PreExecutionMsg {
     pub handle: String,
     /// Unique random bytes used to encrypt payload.
     pub nonce: Binary,
+    /// Callback gas limit for the post execution message.
+    pub callback_gas_limit: u32,
 }
 
 impl PreExecutionMsg {

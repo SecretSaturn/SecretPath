@@ -46,10 +46,14 @@ class EthInterface(BaseChainInterface):
         See base_interface.py for documentation
         """
         # create task
+        #structure is from eth_task_keys_to_msg
+        #callback_gas_limit is on the 5th position on eth_task_keys_to_msgs
+        print(args[2][4])
         if kwargs is {}:
+            callback_gas_limit = int(args[2][4], 16)
             tx = contract_function(*args).build_transaction({
                 'from': self.address,
-                'gas': 2000000,
+                'gas': callback_gas_limit,
                 'nonce': deepcopy(self.nonce)
                 #'maxFeePerGas': self.provider.eth.max_base
                 #'maxPriorityFeePerGas': self.provider.eth.max_priority_fee,
@@ -63,9 +67,10 @@ class EthInterface(BaseChainInterface):
                 #'maxPriorityFeePerGas': self.provider.eth.max_priority_fee,
             })
         else:
+            callback_gas_limit = int(args[2][4], 16)
             tx = contract_function(*args, **kwargs).build_transaction({
                 'from': self.address,
-                'gas': 2000000,
+                'gas': callback_gas_limit,
                 'nonce': deepcopy(self.nonce)
                 #'maxFeePerGas': self.provider.eth.max_priority_fee
                 #'maxPriorityFeePerGas': self.provider.eth.max_priority_fee,

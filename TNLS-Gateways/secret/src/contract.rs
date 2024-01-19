@@ -13,7 +13,7 @@ use crate::{
         ExecuteMsg, InputResponse, InstantiateMsg, PostExecutionMsg, PreExecutionMsg,
         PublicKeyResponse, QueryMsg, ResponseStatus::Success, SecretMsg,
     },
-    state::{KeyPair, State, Task, TaskInfo, CONFIG, CREATOR, MY_ADDRESS, TASK_MAP},
+    state::{KeyPair, State, Task, TaskInfo, ResultInfo, CONFIG, CREATOR, MY_ADDRESS, TASK_MAP, RESULT_MAP},
     PrivContractHandleMsg,
 };
 
@@ -86,7 +86,7 @@ pub fn instantiate(
 pub fn execute(
     deps: DepsMut,
     env: Env,
-    _info: MessageInfo,
+    info: MessageInfo,
     msg: ExecuteMsg,
 ) -> StdResult<Response> {
     match msg {
@@ -94,7 +94,53 @@ pub fn execute(
             pad_handle_result(pre_execution(deps, env, inputs), BLOCK_SIZE)
         },
         ExecuteMsg::Output { outputs } => post_execution(deps, env, outputs),
+        ExecuteMsg::RotateGatewayKeys {} => rotate_gateway_keys(deps, env, info),
     }
+}
+
+fn rotate_gateway_keys(deps: DepsMut, env: Env, info: MessageInfo) -> StdResult<Response> {
+    // load config
+    let state = CONFIG.load(deps.storage)?;
+
+    let caller_raw = deps.api.addr_canonicalize(info.sender.as_str())?;
+
+    // check if the keys have already been created
+    if state.keyed {
+        //if keys were have already been created, check if admin is calling this 
+        if state.admin != caller_raw {
+            return Err(StdError::generic_err(
+                "keys have already been created and only admin is allowed to rotate gateway keys".to_string(),
+            ));
+        }
+    }
+
+    // Generate secp256k1 key pair for encryption
+    let (secret, public) = generate_keypair(&env)?;
+    let encryption_keys = KeyPair {
+        sk: Binary(secret.serialize().to_vec()), // private key is 32 bytes,
+        pk: Binary(public.serialize_compressed().to_vec()), // public key is 33 bytes
+    };
+
+    // Generate secp256k1 key pair for signing messages
+    let (secret, public) = generate_keypair(&env)?;
+    let signing_keys = KeyPair {
+        sk: Binary(secret.serialize().to_vec()), // private key is 32 bytes,
+        pk: Binary(public.serialize().to_vec()), // public key is 65 bytes
+    };
+
+    CONFIG.update(deps.storage, |mut state| {
+        state.keyed = true;
+        state.encryption_keys = encryption_keys.clone();
+        state.signing_keys = signing_keys.clone();
+        Ok(state)
+    })?;
+
+    let encryption_pubkey = encryption_keys.pk.to_base64();
+    let signing_pubkey = signing_keys.pk.to_base64();
+
+    Ok(Response::new()
+        .add_attribute_plaintext("encryption_pubkey", encryption_pubkey)
+        .add_attribute_plaintext("signing_pubkey", signing_pubkey))
 }
 
 fn create_gateway_keys(deps: DepsMut, env: Env) -> StdResult<Response> {
@@ -172,6 +218,10 @@ fn pre_execution(deps: DepsMut, _env: Env, msg: PreExecutionMsg) -> StdResult<Re
     if msg.routing_info != payload.routing_info {
         return Err(StdError::generic_err("routing info mismatch"));
     }
+    // verify the callback_gas_limit defined in the payload matches the msg callback_gas_limit
+    if msg.callback_gas_limit != payload.callback_gas_limit {
+        return Err(StdError::generic_err("callback gas limit mismatch"));
+    }
 
     // check if the payload matches the payload hash
     let mut hasher = Keccak256::new();
@@ -195,12 +245,12 @@ fn pre_execution(deps: DepsMut, _env: Env, msg: PreExecutionMsg) -> StdResult<Re
     let map_contains_task = TASK_MAP.contains(deps.storage, &new_task);
 
     if map_contains_task {
-        return Err(StdError::generic_err("Task ID already exists, not executing again"));
+        return Err(StdError::generic_err("Task already exists, not executing again"));
     }
 
     let input_values = payload.data;
 
-    // combine input values and task ID to create verification hash
+    // combine input values and task to create verification hash
     let unsafe_payload_bytes = if unsafe_payload { [1u8] } else { [0u8] };
     let input_hash = sha_256(&[input_values.as_bytes(), &new_task.task_id.to_be_bytes(),&unsafe_payload_bytes].concat());
 
@@ -208,8 +258,8 @@ fn pre_execution(deps: DepsMut, _env: Env, msg: PreExecutionMsg) -> StdResult<Re
     let task_info = TaskInfo { 
         payload: msg.payload, // storing the payload
         payload_hash: msg.payload_hash,
-        unsafe_payload: unsafe_payload,
-        input_hash, // storing the input_values hashed together with task ID
+        unsafe_payload: unsafe_payload, //store the unsafe_payload flag for later checks
+        input_hash, // storing the input_values hashed together with task
         source_network: msg.source_network,
         user_address: payload.user_address.clone(),
         callback_address: payload.callback_address.clone(),
@@ -217,7 +267,7 @@ fn pre_execution(deps: DepsMut, _env: Env, msg: PreExecutionMsg) -> StdResult<Re
         callback_gas_limit: payload.callback_gas_limit
     };
 
-    // map task ID to task info
+    // map task to task info
     TASK_MAP.insert(deps.storage, &new_task, &task_info)?;
 
     // load this gateway's signing key
@@ -264,14 +314,14 @@ fn pre_execution(deps: DepsMut, _env: Env, msg: PreExecutionMsg) -> StdResult<Re
 }
 
 fn post_execution(deps: DepsMut, env: Env, msg: PostExecutionMsg) -> StdResult<Response> {
-    // load task info and remove task ID from map
+    // load task info and remove task from map
     let task_info = TASK_MAP
         .get(deps.storage, &msg.task)
-        .ok_or_else(|| StdError::generic_err("task id not found"))?;
+        .ok_or_else(|| StdError::generic_err("task not found"))?;
 
-    // verify that input hash is correct one for Task ID
+    // verify that input hash is correct one for Task
     if msg.input_hash.as_slice() != task_info.input_hash.to_vec() {
-        return Err(StdError::generic_err("input hash does not match task id"));
+        return Err(StdError::generic_err("input hash does not match task"));
     }
 
     let result = match base64::decode(msg.result) {
@@ -346,10 +396,10 @@ fn post_execution(deps: DepsMut, env: Env, msg: PostExecutionMsg) -> StdResult<R
     let compressed_public_key = uncompressed_public_key.serialize_compressed();
 
     // Recover and compare public keys for packet, do v = 0 (= 27 in ethereum) and v = 1 (= 28 in ethereum)
-    let packet_public_key_27 = {deps.api.secp256k1_recover_pubkey(&sha_256(&packet_hash), &packet_signature, 0)
-    .map_err(|err| StdError::generic_err(err.to_string()))?};
-    let packet_public_key_28 = {deps.api.secp256k1_recover_pubkey(&sha_256(&packet_hash), &packet_signature, 1)
-    .map_err(|err| StdError::generic_err(err.to_string()))?};
+    let packet_public_key_27 = deps.api.secp256k1_recover_pubkey(&sha_256(&packet_hash), &packet_signature, 0)
+    .map_err(|err| StdError::generic_err(err.to_string()))?;
+    let packet_public_key_28 = deps.api.secp256k1_recover_pubkey(&sha_256(&packet_hash), &packet_signature, 1)
+    .map_err(|err| StdError::generic_err(err.to_string()))?;
 
     let packet_recovery_id = if packet_public_key_27 == compressed_public_key {
         27
@@ -368,17 +418,33 @@ fn post_execution(deps: DepsMut, env: Env, msg: PostExecutionMsg) -> StdResult<R
     let callback_selector = format!("0x{}", task_info.callback_selector.as_slice().encode_hex::<String>());
     let callback_gas_limit = format!("0x{}", task_info.callback_gas_limit.to_be_bytes().encode_hex::<String>());
 
+    // task info
+    let result_info = ResultInfo {
+        source_network: env.block.chain_id,
+        task_destination_network: routing_info,
+        task_id: msg.task.task_id.to_string(),
+        payload_hash: payload_hash,
+        result: result,
+        packet_hash: packet_hash,
+        packet_signature: packet_signature,
+        callback_address: callback_address,
+        callback_selector: callback_selector,
+        callback_gas_limit: callback_gas_limit
+    };
+
+    RESULT_MAP.insert(deps.storage, &msg.task, &result_info)?;
+
     Ok(Response::new()
-        .add_attribute_plaintext("source_network", env.block.chain_id)
-        .add_attribute_plaintext("task_destination_network", routing_info)
-        .add_attribute_plaintext("task_id", msg.task.task_id.to_string())
-        .add_attribute_plaintext("payload_hash", payload_hash)
-        .add_attribute_plaintext("result", result)
-        .add_attribute_plaintext("packet_hash", packet_hash)
-        .add_attribute_plaintext("packet_signature", packet_signature)
-        .add_attribute_plaintext("callback_address", callback_address)
-        .add_attribute_plaintext("callback_selector", callback_selector)
-        .add_attribute_plaintext("callback_gas_limit", callback_gas_limit))
+        .add_attribute_plaintext("source_network", result_info.source_network)
+        .add_attribute_plaintext("task_destination_network", result_info.task_destination_network)
+        .add_attribute_plaintext("task_id", result_info.task_id)
+        .add_attribute_plaintext("payload_hash", result_info.payload_hash)
+        .add_attribute_plaintext("result", result_info.result)
+        .add_attribute_plaintext("packet_hash", result_info.packet_hash)
+        .add_attribute_plaintext("packet_signature", result_info.packet_signature)
+        .add_attribute_plaintext("callback_address", result_info.callback_address)
+        .add_attribute_plaintext("callback_selector", result_info.callback_selector)
+        .add_attribute_plaintext("callback_gas_limit", result_info.callback_gas_limit))
 }
 
 #[cfg(feature = "contract")]
@@ -393,8 +459,29 @@ fn post_execution(deps: DepsMut, env: Env, msg: PostExecutionMsg) -> StdResult<R
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     let response = match msg {
         QueryMsg::GetPublicKeys {} => query_public_keys(deps),
+        QueryMsg::GetExecutionResult {task} => query_execution_result(deps, task),
     };
     pad_query_result(response, BLOCK_SIZE)
+}
+
+fn query_execution_result(deps: Deps, task: Task) -> StdResult<Binary> {
+
+    let task_info = RESULT_MAP
+    .get(deps.storage, &task)
+    .ok_or_else(|| StdError::generic_err("task not found"))?;
+
+    to_binary(&ResultInfo {
+        source_network: task_info.source_network,
+        task_destination_network: task_info.task_destination_network,
+        task_id: task_info.task_id,
+        payload_hash: task_info.payload_hash,
+        result: task_info.result,
+        packet_hash: task_info.packet_hash,
+        packet_signature: task_info.packet_signature,
+        callback_address: task_info.callback_address,
+        callback_selector: task_info.callback_selector,
+        callback_gas_limit: task_info.callback_gas_limit
+    })
 }
 
 // the encryption key will be a base64 string, the verifying key will be a '0x' prefixed hex string

@@ -187,6 +187,7 @@ contract ContractTest is Test {
             task_destination_network: "pulsar-3",
             handle: "some kinda handle",
             nonce: "ssssssssssss",
+            callback_gas_limit: 300000,
             payload: payload,
             payload_signature: getPayloadSignature(payload, 5)
         });
@@ -220,6 +221,7 @@ contract ContractTest is Test {
             task_destination_network: "pulsar-3",
             handle: "some kinda handle",
             nonce: "ssssssssssss",
+            callback_gas_limit: 300000,
             payload: payload,
             payload_signature: getPayloadSignature(payload, 7)
         });
@@ -319,11 +321,12 @@ contract ContractTest is Test {
             task_destination_network: "pulsar-3",
             handle: "some kinda handle",
             nonce: "ssssssssssss",
+            callback_gas_limit: 300000,
             payload: payload,
             payload_signature: payloadSignature
         });
 
-        gateway.send(payloadHash, userAddress,routingInfo, assembledInfo );
+        gateway.send(payloadHash, userAddress, routingInfo, assembledInfo );
 
         (bytes31 tempPayloadHash,) = gateway.tasks(1);
         assertEq(tempPayloadHash, sliceLastByte(payloadHash));

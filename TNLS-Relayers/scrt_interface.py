@@ -54,7 +54,6 @@ class SCRTInterface(BaseChainInterface):
         max_retries = 10
         for attempt in range(max_retries):
             try:
-                # Assuming broadcast_adapter is an async function
                 final_tx = self.provider.tx.broadcast_adapter(tx, mode=BroadcastMode.BROADCAST_MODE_BLOCK)
                 return final_tx
             except LCDResponseError as e:

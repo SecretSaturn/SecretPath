@@ -2,7 +2,7 @@ import abc
 import base64
 import json
 from typing import List
-eth_chains = ['11155111', '137','42161']
+eth_chains = ['11155111']
 scrt_chains = ['secret-4', 'pulsar-3']
 #scrt_chains = ['secret-4']
 

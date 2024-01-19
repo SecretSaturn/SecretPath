@@ -12,6 +12,8 @@ pub static MY_ADDRESS: Item<CanonicalAddr> = Item::new(b"myaddr");
 pub static CREATOR: Item<CanonicalAddr> = Item::new(b"creator");
 /// Storage key for task IDs.
 pub static TASK_MAP: Keymap<Task, TaskInfo> = Keymap::new(b"tasks");
+/// Storage key for task IDs.
+pub static RESULT_MAP: Keymap<Task, ResultInfo> = Keymap::new(b"results");
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct State {
@@ -55,6 +57,30 @@ pub struct TaskInfo {
     pub callback_selector: Binary,
     /// Callback gas limit for the post execution message.
     pub callback_gas_limit: u32,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct ResultInfo {
+    /// The source network
+    pub source_network: String,
+    /// The task destination network
+    pub task_destination_network: String,
+    /// The task_id of the Result
+    pub task_id: String,
+    /// A unique hash for the task.
+    pub payload_hash: String,
+    /// The computation result
+    pub result: String,
+    /// The packet hash of the computed task
+    pub packet_hash: String,
+    /// Packet signature for the computed task
+    pub packet_signature: String,
+    /// Callback address for the post execution message.
+    pub callback_address: String,
+    /// Callback selector for the post execution message.
+    pub callback_selector: String,
+    /// Callback gas limit for the post execution message.
+    pub callback_gas_limit: String,
 }
 /// A key pair using the [Binary] type
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, Default)]
