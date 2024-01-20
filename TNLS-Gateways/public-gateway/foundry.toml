@@ -5,7 +5,6 @@ libs = ['lib']
 auto_detect_solc = true
 fs_permissions = [{ access = "read", path = "./"}]
 build_info = true
-extra_output = ["storageLayout"]
 
 [fmt]
 line_length = 150

@@ -1,30 +1,23 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.23;
 
-import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 import "@openzeppelin/contracts/proxy/transparent/ProxyAdmin.sol";
 
 
-    /*//////////////////////////////////////////////////////////////
-                            Gateway Proxy
-    //////////////////////////////////////////////////////////////*/
-contract GatewayProxy is TransparentUpgradeableProxy {
-    constructor(address _logic, address admin_, bytes memory _data) TransparentUpgradeableProxy(_logic, admin_, _data) {}
-}
-
-contract Gateway is Initializable {
+contract Gateway is Initializable, OwnableUpgradeable {
     /*//////////////////////////////////////////////////////////////
                               Constants
     //////////////////////////////////////////////////////////////*/
 
     //Use hard coded constant values instead of storage variables for Secret VRF, saves around 10,000+ in gas per TX. 
     //Since contract is upgradeable, we can update these values as well with it.
+
     bytes constant routing_info = "secret14hlku6qen0tkhfq0cklx02hcdu9jph8un4lsga";
     bytes constant routing_code_hash = "ba0006753cb18a8b12fe266707289098bfb8a3ae83de54ecece591231ada2abf";
     string constant task_destination_network = "secret-4";
     address constant secret_gateway_signer_address = 0x1b153e8fc101c2c6C9e0a9250aca99e957354a8E;
-
 
     /*//////////////////////////////////////////////////////////////
                               Structs
@@ -61,7 +54,6 @@ contract Gateway is Initializable {
                             State Variables
     //////////////////////////////////////////////////////////////*/
     
-    address public owner;
     uint256 public taskId;
 
     /// @dev Task ID ====> Task
@@ -85,9 +77,6 @@ contract Gateway is Initializable {
 
     /// @notice thrown when the Task was already completed
     error TaskAlreadyCompleted();
-
-    /// @notice thrown when the Callback failed
-    error CallbackError();
 
     /// @notice thrown when the Bytes Length is not a multiple of 32 bytes
     error InvalidBytesLength();
@@ -128,7 +117,7 @@ contract Gateway is Initializable {
     /// @param _signature The signature
     /// @return The address of the signer
 
-    function recoverSigner(bytes32 _signedMessageHash, bytes memory _signature) private pure returns (address) {
+    function recoverSigner(bytes32 _signedMessageHash, bytes calldata _signature) private pure returns (address) {
         (bytes32 r, bytes32 s, uint8 v) = splitSignature(_signature);
         return ecrecover(_signedMessageHash, v, r, s);
     }
@@ -238,27 +227,22 @@ contract Gateway is Initializable {
         ExecutionInfo info
     );
 
-    /// @notice Emitted when we recieve callback for our result of the computation
-    event ComputedResult(uint256 taskId, bytes result);
+    /// @notice Emitted when the callback was completed
+    event TaskCompleted(uint256 taskId, bool callbackSuccessful);
 
     /*//////////////////////////////////////////////////////////////
-                              Modifiers
-    //////////////////////////////////////////////////////////////*/
-
-    modifier onlyOwner() {
-        require(msg.sender == owner, "UNAUTHORIZED");
-        _;
-    }
-
-     /*//////////////////////////////////////////////////////////////
                              Initializer
     //////////////////////////////////////////////////////////////*/
 
     /// @notice Replaces the constructor for upgradeable contracts
 
     function initialize() public initializer {
-        owner = msg.sender;
+        __Ownable_init(msg.sender);
         taskId = 1;
+    }
+
+    constructor() {
+        _disableInitializers();
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -276,7 +260,7 @@ contract Gateway is Initializable {
     /// @notice Payout the paid balance to the owner
 
     function payoutBalance() external onlyOwner {
-        payable(owner).transfer(address(this).balance);
+        payable(owner()).transfer(address(this).balance);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -287,7 +271,7 @@ contract Gateway is Initializable {
     /// @param _callbackGasLimit the Callback Gas Limit
 
     function estimateRequestPrice(uint32 _callbackGasLimit) private view returns (uint256) {
-        uint256 baseFee = _callbackGasLimit*tx.gasprice;
+        uint256 baseFee = _callbackGasLimit*block.basefee;
         return baseFee;
     }
 
@@ -307,7 +291,8 @@ contract Gateway is Initializable {
         string calldata _routingInfo,
         ExecutionInfo calldata _info) 
         external payable {
-
+        
+        //checks if enough gas was paid
         if (estimateRequestPrice(_info.callback_gas_limit) > msg.value) {
             revert PaidRequestFeeTooLow();
         }
@@ -354,6 +339,7 @@ contract Gateway is Initializable {
            revert TooManyVRFRandomWordsRequested();
         }
 
+        //checks if enough gas was paid for callback
         if (estimateRequestPrice(_callbackGasLimit) > msg.value) {
             revert PaidRequestFeeTooLow();
         }
@@ -363,8 +349,7 @@ contract Gateway is Initializable {
 
         //construct the payload that is sent into the Secret Gateway
         bytes memory payload = bytes.concat(
-            '{"data":"{\\"numWords\\":',
-            bytes(uint256toString(_numWords)),
+            '{"data":"{\\"numWords\\":',bytes(uint256toString(_numWords)),
             '}","routing_info": "',routing_info,
             '","routing_code_hash": "',routing_code_hash,
             '","user_address": "0x0000000000000000000000000000000000000000","user_key": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",', //unused user_address here + 33 bytes of zeros in base64 for user_key
@@ -468,29 +453,13 @@ contract Gateway is Initializable {
                 abi.encodeWithSelector(_info.callback_selector, _taskId, _info.result)
             );
         }
-        if (!callbackSuccessful) { 
-            revert CallbackError();
-        }
-    }
-
-    /*//////////////////////////////////////////////////////////////
-                               Callback
-    //////////////////////////////////////////////////////////////*/
-
-    /// @notice Emits an event with the result of a computation
-    /// @param _taskId The ID of the task
-    /// @param _result The result of the computation
-
-    function callback(uint256 _taskId, bytes calldata _result) external {
-        emit ComputedResult(_taskId, _result);
+        emit TaskCompleted(_taskId, callbackSuccessful);
     }
 
     /*//////////////////////////////////////////////////////////////
                      New Functions for Upgradeability
     //////////////////////////////////////////////////////////////*/
-    event contractUpgraded();
 
     function upgradeHandler() public {
-        emit contractUpgraded();
     }
 }

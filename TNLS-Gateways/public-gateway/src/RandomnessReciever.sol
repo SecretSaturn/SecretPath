@@ -31,25 +31,38 @@ contract RandomnessReciever {
 
     /// @notice Event that is emitted when a VRF call was made (optional)
     /// @param requestId requestId of the VRF request. Contract can track a VRF call that way
-    event requestRandomness(uint256 requestId);
+    event requestedRandomness(uint256 requestId);
 
     /// @notice Demo function on how to implement a VRF call using Secret VRF
-    function requestRandomnessTest() external {
-        // Can be up to 2000 random numbers, change this according to your needs
-        uint32 numWords = 10; 
-
-        // Change callbackGasLimit according to your needs for post processing in your callback
-        uint32 callbackGasLimit = 2000000; 
-
-        // Get the VRFGateway contrac interface 
+    function requestRandomnessTest(uint32 _numWords, uint32 _callbackGasLimit) external payable {
+        // Get the VRFGateway contract interface 
         ISecretVRF vrfContract = ISecretVRF(VRFGateway);
 
         // Call the VRF contract to request random numbers. 
         // Returns requestId of the VRF request. A  contract can track a VRF call that way.
-        uint256 requestId = vrfContract.requestRandomness(numWords, callbackGasLimit);
+        uint256 requestId = vrfContract.requestRandomness{value: msg.value}(_numWords, _callbackGasLimit);
 
         // Emit the event
-        emit requestRandomness(requestId);
+        emit requestedRandomness(requestId);
+    }
+
+    /// @notice Demo function on how to implement a VRF call using Secret VRF, here the values for numWords and callbackGasLimit are preset
+    function requestRandomnessTestPreset() external payable {
+        // Can be up to 2000 random numbers, change this according to your needs
+        uint32 numWords = 20; 
+
+        // Change callbackGasLimit according to your needs for post processing in your callback
+        uint32 callbackGasLimit = 300000; 
+
+        // Get the VRFGateway contract interface 
+        ISecretVRF vrfContract = ISecretVRF(VRFGateway);
+
+        // Call the VRF contract to request random numbers. 
+        // Returns requestId of the VRF request. A  contract can track a VRF call that way.
+        uint256 requestId = vrfContract.requestRandomness{value: msg.value}(numWords, callbackGasLimit);
+
+        // Emit the event
+        emit requestedRandomness(requestId);
     }
 
     /*//////////////////////////////////////////////////////////////
