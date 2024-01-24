@@ -11,20 +11,15 @@ import "@openzeppelin/contracts/proxy/transparent/ProxyAdmin.sol";
 import "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 
 
-contract DeployScript is Script {
+contract DeployGatewayScript is Script {
     function setUp() public {}
 
-    address deployer;
     ProxyAdmin proxyAdmin;
     Gateway gatewayLogic;
     TransparentUpgradeableProxy gatewayProxy;
     RandomnessReciever randomnessAddress;
 
-    uint256 privKey = vm.envUint("ETH_PRIVATE_KEY");
-
-
     function run() public {
-        deployer = vm.rememberKey(privKey);
         vm.startBroadcast();
 
         // Deploy Gateway Logic Contract
@@ -41,15 +36,6 @@ contract DeployScript is Script {
             address(msg.sender),
             initializerData
         );
-
-        // Cast the proxy address to the Gateway interface
-        Gateway gateway = Gateway(address(gatewayProxy));
-        
-        randomnessAddress = new RandomnessReciever();
-        console2.logAddress(address(gateway));
-        console2.logAddress(deployer);
-
-        randomnessAddress.setGatewayAddress(address(gateway));
 
         vm.stopBroadcast();
     }

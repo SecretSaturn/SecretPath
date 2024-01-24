@@ -2,9 +2,13 @@ import abc
 import base64
 import json
 from typing import List
-eth_chains = ['11155111']
-scrt_chains = ['secret-4', 'pulsar-3']
-#scrt_chains = ['secret-4']
+from yaml import safe_load
+from pathlib import Path
+
+with open(f'{Path(__file__).parent.absolute()}/../config.yml') as f:
+    data = safe_load(f)
+eth_chains = [info['chain_id'] for key, info in data.items() if info['type'] == 'evm']
+scrt_chains = [info['chain_id'] for key, info in data.items() if info['type'] == 'secret']
 
 eth_task_keys_to_msg = {
     '_taskId': 'task_id', '_sourceNetwork': 'source_network', '_info': ['payload_hash',

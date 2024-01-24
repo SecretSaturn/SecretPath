@@ -14,10 +14,10 @@ contract Gateway is Initializable, OwnableUpgradeable {
     //Use hard coded constant values instead of storage variables for Secret VRF, saves around 10,000+ in gas per TX. 
     //Since contract is upgradeable, we can update these values as well with it.
 
-    bytes constant routing_info = "secret14hlku6qen0tkhfq0cklx02hcdu9jph8un4lsga";
+    bytes constant routing_info = "secret1udj6x7393y73xr5pevu4u30tuy9j650ljfm25d";
     bytes constant routing_code_hash = "ba0006753cb18a8b12fe266707289098bfb8a3ae83de54ecece591231ada2abf";
-    string constant task_destination_network = "secret-4";
-    address constant secret_gateway_signer_address = 0x1b153e8fc101c2c6C9e0a9250aca99e957354a8E;
+    string constant task_destination_network = "pulsar-3";
+    address constant secret_gateway_signer_address = 0x9BEb147dADd9c246B5443Ca89fB56a612236aeEb;
 
     /*//////////////////////////////////////////////////////////////
                               Structs
@@ -404,7 +404,7 @@ contract Gateway is Initializable, OwnableUpgradeable {
 
     function postExecution(uint256 _taskId, string calldata _sourceNetwork, PostExecutionInfo calldata _info) external {
         
-        Task storage task = tasks[_taskId];
+        Task memory task = tasks[_taskId];
 
         // Check if the task is already completed
         if (task.completed) {
@@ -436,7 +436,7 @@ contract Gateway is Initializable, OwnableUpgradeable {
         }
         
         //Mark the task as completed
-        task.completed = true;
+        tasks[_taskId].completed = true;
 
         // Continue with the function execution
 
