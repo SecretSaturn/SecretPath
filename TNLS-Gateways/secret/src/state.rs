@@ -10,9 +10,9 @@ pub static CONFIG: Item<State> = Item::new(b"config");
 pub static MY_ADDRESS: Item<CanonicalAddr> = Item::new(b"myaddr");
 /// Storage key for the contract instantiator.
 pub static CREATOR: Item<CanonicalAddr> = Item::new(b"creator");
-/// Storage key for task IDs.
+/// Storage key for tasks.
 pub static TASK_MAP: Keymap<Task, TaskInfo> = Keymap::new(b"tasks");
-/// Storage key for task IDs.
+/// Storage key for results.
 pub static RESULT_MAP: Keymap<Task, ResultInfo> = Keymap::new(b"results");
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -21,8 +21,6 @@ pub struct State {
     pub admin: CanonicalAddr,
     /// Status of gateway key generation.
     pub keyed: bool,
-    /// Count of tx.
-    pub tx_cnt: u64,
     /// Private gateway encryption key pair.
     pub encryption_keys: KeyPair,
     /// Private gateway signing key pair.
@@ -33,8 +31,8 @@ pub struct State {
 pub struct Task {
     /// The network of the Task
     pub network: String,
-    /// The task id of the test
-    pub task_id: u64,
+    /// The task id of the Task
+    pub task_id: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -43,7 +41,23 @@ pub struct TaskInfo {
     pub payload: Binary,
     /// The original payload_hash from the front-end.
     pub payload_hash: Binary,
-    /// The original payload_hash from the front-end.
+    /// Signature of hash of encrypted input values.
+    pub payload_signature: Binary,
+    /// The decrypted payload.
+    pub decrypted_payload_data: String,
+    /// User public chain address.
+    pub routing_info: Addr,
+    /// Destination contract code hash.
+    pub routing_code_hash: String,
+    /// Encryption of (data, routing info, and user info).
+    pub user_key: Binary,
+    /// User's wallet public key.
+    pub user_pubkey: Binary,
+    /// Handle to be called at destination contract.
+    pub handle: String,
+    /// Unique random bytes used to encrypt payload.
+    pub nonce: Binary,
+    //Flag if payload is deemed unsafe.
     pub unsafe_payload: bool,
     /// A unique hash for the task.
     pub input_hash: [u8; 32],

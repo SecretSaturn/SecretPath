@@ -14,10 +14,10 @@ contract Gateway is Initializable, OwnableUpgradeable {
     //Use hard coded constant values instead of storage variables for Secret VRF, saves around 10,000+ in gas per TX. 
     //Since contract is upgradeable, we can update these values as well with it.
 
-    bytes constant routing_info = "secret1udj6x7393y73xr5pevu4u30tuy9j650ljfm25d";
+    bytes constant routing_info = "secret1sajypa5fkkh2yzjuadv4fp97dl5w7pzd0wtrhx";
     bytes constant routing_code_hash = "ba0006753cb18a8b12fe266707289098bfb8a3ae83de54ecece591231ada2abf";
     string constant task_destination_network = "pulsar-3";
-    address constant secret_gateway_signer_address = 0x9BEb147dADd9c246B5443Ca89fB56a612236aeEb;
+    address constant secret_gateway_signer_address = 0x8CEEC0f0960571A6ad8B23970EEE30246aABCA8F;
 
     /*//////////////////////////////////////////////////////////////
                               Structs
@@ -418,20 +418,20 @@ contract Gateway is Initializable, OwnableUpgradeable {
 
         // Concatenate packet data elements
         bytes memory data =  bytes.concat(
-        bytes(_sourceNetwork),
-        bytes(uint256toString(block.chainid)),
-        bytes32(_taskId),
-        _info.payload_hash,
-        _info.result,
-        _info.callback_address,
-        _info.callback_selector);
+            bytes(_sourceNetwork),
+            bytes(uint256toString(block.chainid)),
+            bytes32(_taskId),
+            _info.payload_hash,
+            _info.result,
+            _info.callback_address,
+            _info.callback_selector
+        );
         
         // Perform Keccak256 + sha256 hash
         bytes32 packetHash = sha256(bytes.concat(keccak256(data)));
 
         // Packet signature verification
-        if ((_info.packet_hash != packetHash) || 
-            recoverSigner(_info.packet_hash, _info.packet_signature) != secret_gateway_signer_address) {
+        if (recoverSigner(packetHash, _info.packet_signature) != secret_gateway_signer_address) {
             revert InvalidPacketSignature();
         }
         

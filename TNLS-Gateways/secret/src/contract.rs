@@ -61,7 +61,6 @@ pub fn instantiate(
     let state = State {
         admin: admin_raw,
         keyed: false,
-        tx_cnt: 0,
         encryption_keys: KeyPair::default(),
         signing_keys: KeyPair::default(),
     };
@@ -205,7 +204,7 @@ fn pre_execution(deps: DepsMut, _env: Env, msg: PreExecutionMsg) -> StdResult<Re
         Err(_) => {
             unsafe_payload = true;
             // If decryption fails, continue with the original, encrypted payload
-            // Note: We are not verifying the payload in this case as it's already deemed unsafe
+            // We are not verifying the payload in this case as it's already deemed unsafe
             from_binary(&Binary::from(msg.payload.as_slice()))?
         },
     };
@@ -252,16 +251,24 @@ fn pre_execution(deps: DepsMut, _env: Env, msg: PreExecutionMsg) -> StdResult<Re
 
     // combine input values and task to create verification hash
     let unsafe_payload_bytes = if unsafe_payload { [1u8] } else { [0u8] };
-    let input_hash = sha_256(&[input_values.as_bytes(), &new_task.task_id.to_be_bytes(),&unsafe_payload_bytes].concat());
+    let input_hash = sha_256(&[input_values.as_bytes(), new_task.task_id.as_bytes(),&unsafe_payload_bytes].concat());
 
     // create a task information store
     let task_info = TaskInfo { 
         payload: msg.payload, // storing the payload
         payload_hash: msg.payload_hash,
+        payload_signature: msg.payload_signature,
+        decrypted_payload_data: input_values.clone(),
+        routing_info: msg.routing_info.clone(),
+        routing_code_hash: msg.routing_code_hash.clone(),
+        user_pubkey: msg.user_pubkey,
+        handle: msg.handle.clone(),
+        nonce: msg.nonce,
         unsafe_payload: unsafe_payload, //store the unsafe_payload flag for later checks
         input_hash, // storing the input_values hashed together with task
         source_network: msg.source_network,
         user_address: payload.user_address.clone(),
+        user_key: payload.user_key.clone(),
         callback_address: payload.callback_address.clone(),
         callback_selector: payload.callback_selector,
         callback_gas_limit: payload.callback_gas_limit
@@ -335,15 +342,11 @@ fn post_execution(deps: DepsMut, env: Env, msg: PostExecutionMsg) -> StdResult<R
     // "hasher" is used to perform multiple Keccak256 hashes
     let mut hasher = Keccak256::new();
 
-    let mut task_id_padded = [0u8; 32]; // Create a 32-byte array filled with zeros
-    // Convert the task_id to an 8-byte big-endian array & Copy the 8-byte big-endian representation to the end of the result array
-    task_id_padded[32 - msg.task.task_id.to_be_bytes().len()..].copy_from_slice(msg.task.task_id.to_be_bytes().as_slice());
-
     // create hash of entire packet (used to verify the message wasn't modified in transit)
     let data = [
         env.block.chain_id.as_bytes(),               // source network
         routing_info.as_bytes(),           // task_destination_network
-        task_id_padded.as_slice(),         // task ID
+        msg.task.task_id.as_bytes(),         // task ID
         task_info.payload_hash.as_slice(), // original payload message
         result.as_slice(),                 // result
         task_info.callback_address.as_slice(), // callback address
@@ -422,7 +425,7 @@ fn post_execution(deps: DepsMut, env: Env, msg: PostExecutionMsg) -> StdResult<R
     let result_info = ResultInfo {
         source_network: env.block.chain_id,
         task_destination_network: routing_info,
-        task_id: msg.task.task_id.to_string(),
+        task_id: msg.task.task_id.clone(),
         payload_hash: payload_hash,
         result: result,
         packet_hash: packet_hash,

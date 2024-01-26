@@ -81,7 +81,7 @@ fn try_add_one<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     _env: Env,
     input_values: String,
-    task_id: u64,
+    task_id: String,
     input_hash: Binary,
 ) -> HandleResult {
     // increment count each time this handle is called
