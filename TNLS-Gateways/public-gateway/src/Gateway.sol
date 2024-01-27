@@ -14,10 +14,10 @@ contract Gateway is Initializable, OwnableUpgradeable {
     //Use hard coded constant values instead of storage variables for Secret VRF, saves around 10,000+ in gas per TX. 
     //Since contract is upgradeable, we can update these values as well with it.
 
-    bytes constant routing_info = "secret1sajypa5fkkh2yzjuadv4fp97dl5w7pzd0wtrhx";
-    bytes constant routing_code_hash = "ba0006753cb18a8b12fe266707289098bfb8a3ae83de54ecece591231ada2abf";
+    bytes constant routing_info = "secret1fxs74g8tltrngq3utldtxu9yys5tje8dzdvghr";
+    bytes constant routing_code_hash = "49ffed0df451622ac1865710380c14d4af98dca2d32342bb20f2b22faca3d00d";
     string constant task_destination_network = "pulsar-3";
-    address constant secret_gateway_signer_address = 0x8CEEC0f0960571A6ad8B23970EEE30246aABCA8F;
+    address constant secret_gateway_signer_address = 0x2821E794B01ABF0cE2DA0ca171A1fAc68FaDCa06;
 
     /*//////////////////////////////////////////////////////////////
                               Structs
@@ -124,10 +124,13 @@ contract Gateway is Initializable, OwnableUpgradeable {
 
     /// @notice Slices the last byte of an bytes32 to make it into a bytes31
     /// @param data The bytes32 data
-    /// @return The sliced bytes31 data
+    /// @return slicedData The sliced bytes31 data
 
-    function sliceLastByte(bytes32 data) private pure returns (bytes31) {
-        return bytes31(data & 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00);
+   function sliceLastByte(bytes32 data) private pure returns (bytes31 slicedData) {
+        assembly {
+            // Shift the data right by 8 bits, effectively slicing off the last byte
+            slicedData := shr(8, data)
+        }
     }
 
     /// @notice Encodes a bytes memory array into a Base64 string
@@ -200,7 +203,7 @@ contract Gateway is Initializable, OwnableUpgradeable {
     /// @param data The bytes memory data to convert
     /// @return The array of uint256
     
-   function bytesToUint256Array(bytes memory data) private pure returns (uint256[] memory) {
+   function bytesToUInt256Array(bytes memory data) private pure returns (uint256[] memory) {
         if (data.length % 32 != 0) {
             revert InvalidBytesLength();
         }
@@ -420,7 +423,7 @@ contract Gateway is Initializable, OwnableUpgradeable {
         bytes memory data =  bytes.concat(
             bytes(_sourceNetwork),
             bytes(uint256toString(block.chainid)),
-            bytes32(_taskId),
+            bytes(uint256toString(_taskId)),
             _info.payload_hash,
             _info.result,
             _info.callback_address,
@@ -431,7 +434,7 @@ contract Gateway is Initializable, OwnableUpgradeable {
         bytes32 packetHash = sha256(bytes.concat(keccak256(data)));
 
         // Packet signature verification
-        if (recoverSigner(packetHash, _info.packet_signature) != secret_gateway_signer_address) {
+        if (packetHash != _info.packet_hash || recoverSigner(packetHash, _info.packet_signature) != secret_gateway_signer_address) {
             revert InvalidPacketSignature();
         }
         
@@ -443,7 +446,7 @@ contract Gateway is Initializable, OwnableUpgradeable {
         // Additional conversion for Secret VRF into uint256[] if callback_selector matches the fullfillRandomWords selector.
         bool callbackSuccessful; 
         if (_info.callback_selector == 0x38ba4614) {
-            uint256[] memory randomWords = bytesToUint256Array(_info.result);
+            uint256[] memory randomWords = bytesToUInt256Array(_info.result);
             (callbackSuccessful, ) = address(_info.callback_address).call(
                 abi.encodeWithSelector(0x38ba4614, _taskId, randomWords)
             );

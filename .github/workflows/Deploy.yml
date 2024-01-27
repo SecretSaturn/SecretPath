@@ -56,14 +56,12 @@ jobs:
         run: |
           echo "SECRET_GATEWAY_CODE_HASH=$(sed -n '2{p;q}' secret-deploy/secret_gateway.log)" >> $GITHUB_ENV
           echo "SECRET_GATEWAY_ADDRESS=$(sed -n '3{p;q}' secret-deploy/secret_gateway.log)" >> $GITHUB_ENV
-          echo "SECRET_GATEWAY_ENCRYPTION_KEY=$(sed -n '4{p;q}' secret-deploy/secret_gateway.log)" >> $GITHUB_ENV
           echo "SECRET_GATEWAY_ETH_ADDRESS=$(sed -n '5{p;q}' secret-deploy/secret_gateway.log)" >> $GITHUB_ENV
           echo "SECRET_SAMPLE_CODE_HASH=$(sed -n '2{p;q}' secret-deploy/secret_sample.log)" >> $GITHUB_ENV
           echo "SECRET_SAMPLE_ADDRESS=$(sed -n '3{p;q}' secret-deploy/secret_sample.log)" >> $GITHUB_ENV
       - name: Update config.yml with Secret info
         run: |
           sed -i 's;INSERT_SECRET_CONTRACT_ADDRESS_HERE;${{ env.SECRET_GATEWAY_ADDRESS }};g' config.yml
-          sed -i 's;INSERT_SECRET_CONTRACT_ENCRYPTION_KEY_HERE;${{ env.SECRET_GATEWAY_ENCRYPTION_KEY }};g' config.yml
           sed -i 's;INSERT_SECRET_CONTRACT_ETH_ADDRESS_HERE;${{ env.SECRET_GATEWAY_ETH_ADDRESS }};g' config.yml
           cat config.yml
           git config --global user.email "leor@atbash.co"

@@ -193,7 +193,7 @@ class SCRTContract(BaseContractInterface):
         )
         tx_options = CreateTxOptions(
             msgs=[txn_msgs],
-            gas="1000000",
+            gas="3000000",
             gas_prices='0.05uscrt',
             sequence=deepcopy(self.interface.sequence),
             account_number=self.interface.account_number
