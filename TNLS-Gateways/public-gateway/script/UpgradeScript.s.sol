@@ -14,24 +14,19 @@ import "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.so
 contract UpgradeScript is Script {
     function setUp() public {}
 
-    address deployer;
     Gateway newGatewayLogic;
     ProxyAdmin gatewayProxyAdmin;
 
-    uint256 privKey = vm.envUint("ETH_PRIVATE_KEY");
-
-
     function run() public {
-        deployer = vm.rememberKey(privKey);
         vm.startBroadcast();
 
         // Deploy New Gateway Logic Contract
         newGatewayLogic = new Gateway();
         
-        gatewayProxyAdmin = ProxyAdmin(0xF41cb99f48F82D7cef1Dd77A50D77fa12D1BA83d);
+        gatewayProxyAdmin = ProxyAdmin(0xdDC6d94d9f9FBb0524f069882d7C98241040472E);
 
         bytes memory selector = abi.encodeWithSelector(Gateway.upgradeHandler.selector);
-        gatewayProxyAdmin.upgradeAndCall(ITransparentUpgradeableProxy(0x4227409e1a0255d59125Cc4DAf180Dbf277F94f7), address(newGatewayLogic),selector);
+        gatewayProxyAdmin.upgradeAndCall(ITransparentUpgradeableProxy(0xfaFCfceC4e29e9b4ECc8C0a3f7df1011580EEEf2), address(newGatewayLogic),selector);
 
         vm.stopBroadcast();
     }

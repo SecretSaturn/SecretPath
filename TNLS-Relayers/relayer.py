@@ -83,7 +83,7 @@ class Relayer:
                     tasks.extend(contract_interface.parse_event_from_txn(evt_name, transaction))
                 return block_num, tasks
 
-            with ThreadPoolExecutor() as executor:
+            with ThreadPoolExecutor(max_workers = 20) as executor:
                 futures = [executor.submit(fetch_transactions, block_num) for block_num in range(prev_height + 1, curr_height + 1)]
                 for future in futures:
                     block_num, tasks = future.result()
