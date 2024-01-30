@@ -39,7 +39,7 @@ contract RandomnessReciever {
         ISecretVRF vrfContract = ISecretVRF(VRFGateway);
 
         // Call the VRF contract to request random numbers. 
-        // Returns requestId of the VRF request. A  contract can track a VRF call that way.
+        // Returns requestId of the VRF request. A contract can track a VRF call that way.
         uint256 requestId = vrfContract.requestRandomness{value: msg.value}(_numWords, _callbackGasLimit);
 
         // Emit the event

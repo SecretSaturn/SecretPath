@@ -68,7 +68,6 @@ class Relayer:
         Updates task list with found events
         """
         chains_to_poll = [name for name in self.dict_of_names_to_interfaces if name not in scrt_chains]
-        print(chains_to_poll)
 
         def process_chain(name):
             chain_interface, contract_interface, evt_name, _ = self.dict_of_names_to_interfaces[name]
@@ -85,7 +84,7 @@ class Relayer:
                 for transaction in transactions:
                     tasks_tmp.extend(contract_interface.parse_event_from_txn(evt_name, transaction))
                 return block_num, tasks_tmp
-            
+
 
             with ThreadPoolExecutor(max_workers = 30) as executor2:
                 futures = [executor2.submit(fetch_transactions, block_num) for block_num in range(prev_height + 1, curr_height + 1)]
