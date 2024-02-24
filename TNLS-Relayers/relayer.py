@@ -67,24 +67,27 @@ class Relayer:
         Polls for transactions on all interfaces
         Updates task list with found events
         """
+        chains_to_poll = [name for name in self.dict_of_names_to_interfaces if name not in scrt_chains]
 
         def process_chain(name):
             chain_interface, contract_interface, evt_name, _ = self.dict_of_names_to_interfaces[name]
             prev_height = self.dict_of_names_to_blocks[name]
             curr_height = chain_interface.get_last_block()
+            self.dict_of_names_to_blocks[name] = curr_height
 
             if prev_height is None:
                 prev_height = curr_height - 1
 
             def fetch_transactions(block_num):
                 transactions = chain_interface.get_transactions(contract_interface, height=block_num)
-                tasks = []
+                tasks_tmp = []
                 for transaction in transactions:
-                    tasks.extend(contract_interface.parse_event_from_txn(evt_name, transaction))
-                return block_num, tasks
+                    tasks_tmp.extend(contract_interface.parse_event_from_txn(evt_name, transaction))
+                return block_num, tasks_tmp
 
-            with ThreadPoolExecutor() as executor:
-                futures = [executor.submit(fetch_transactions, block_num) for block_num in range(prev_height + 1, curr_height + 1)]
+
+            with ThreadPoolExecutor(max_workers = 30) as executor2:
+                futures = [executor2.submit(fetch_transactions, block_num) for block_num in range(prev_height + 1, curr_height + 1)]
                 for future in futures:
                     block_num, tasks = future.result()
                     self.logger.info(f'Processed block {block_num} on {name}')
@@ -93,12 +96,10 @@ class Relayer:
                         self.task_ids_to_statuses[task_id] = 'Received from {}'.format(name)
                     self.task_list.extend(tasks)
 
-            self.dict_of_names_to_blocks[name] = curr_height
 
-        with ThreadPoolExecutor(max_workers = 20) as executor:
+        with ThreadPoolExecutor(max_workers = 200) as executor:
             # Filter out secret chains if needed
-            chains_to_poll = [name for name in self.dict_of_names_to_interfaces if name not in scrt_chains]
-            executor.map(process_chain, chains_to_poll)
+            futures = [executor.submit(process_chain, chain) for chain in chains_to_poll]
 
 
     def route_transaction(self, task: Task):
@@ -160,7 +161,7 @@ class Relayer:
             self.logger.info('Polled for transactions, now have {} remaining'.format(len(self.task_list)))
             self.task_list_handle()
             self.loops_run += 1
-            sleep(0.5)
+            sleep(1)
         pass
 
     def __str__(self):

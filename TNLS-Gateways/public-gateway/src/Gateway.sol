@@ -14,10 +14,10 @@ contract Gateway is Initializable, OwnableUpgradeable {
     //Use hard coded constant values instead of storage variables for Secret VRF, saves around 10,000+ in gas per TX. 
     //Since contract is upgradeable, we can update these values as well with it.
 
-    bytes constant routing_info = "secret1fxs74g8tltrngq3utldtxu9yys5tje8dzdvghr";
+    bytes constant routing_info = "secret16pcjalfuy72r4k26r4kn5f5x64ruzv30knflwx";
     bytes constant routing_code_hash = "49ffed0df451622ac1865710380c14d4af98dca2d32342bb20f2b22faca3d00d";
-    string constant task_destination_network = "pulsar-3";
-    address constant secret_gateway_signer_address = 0x2821E794B01ABF0cE2DA0ca171A1fAc68FaDCa06;
+    string constant task_destination_network = "secret-4";
+    address constant secret_gateway_signer_address = 0x88e43F4016f8282Ea6235aC069D02BA1cE5417aB;
 
     /*//////////////////////////////////////////////////////////////
                               Structs

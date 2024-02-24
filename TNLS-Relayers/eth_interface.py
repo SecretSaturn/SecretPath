@@ -2,7 +2,7 @@ import json
 import os
 from copy import deepcopy
 from logging import getLogger, basicConfig, INFO, StreamHandler
-from typing import List, Mapping, Sequence
+from typing import List
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Lock
 
@@ -11,6 +11,7 @@ from web3.datastructures import AttributeDict
 from web3.middleware import geth_poa_middleware
 
 from base_interface import BaseChainInterface, BaseContractInterface, Task
+
 
 class EthInterface(BaseChainInterface):
     """
@@ -23,7 +24,7 @@ class EthInterface(BaseChainInterface):
             If we don't have a set provider, read it from config.
             """
 
-            provider = Web3(Web3.HTTPProvider(api_endpoint))
+            provider = Web3(Web3.HTTPProvider(api_endpoint, request_kwargs={'timeout': 5}))
             provider.middleware_onion.inject(geth_poa_middleware, layer=0)
 
         self.private_key = private_key
@@ -114,10 +115,11 @@ class EthInterface(BaseChainInterface):
         """
         if block_number is None:
             block_number = self.get_last_block()
-        validTransactions = contract_interface.contract.events.logNewTask().get_logs(
+
+        valid_transactions = contract_interface.contract.events.logNewTask().get_logs(
             fromBlock=block_number,
         )
-        transaction_hashes = [event['transactionHash'].hex() for event in validTransactions]
+        transaction_hashes = [event['transactionHash'].hex() for event in valid_transactions]
         try:
             block_transactions = self.provider.eth.get_block(block_number, full_transactions=True)['transactions']
             filtered_transactions = [tx for tx in block_transactions if tx['hash'].hex() in transaction_hashes]
@@ -127,8 +129,7 @@ class EthInterface(BaseChainInterface):
 
         correct_transactions = []
         try:
-            max_workers = 50
-            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            with ThreadPoolExecutor(max_workers=50) as executor:
                 # Create a future for each transaction
                 future_to_transaction = {executor.submit(self.process_transaction, tx): tx for tx in filtered_transactions}
                 for future in as_completed(future_to_transaction):
@@ -146,7 +147,7 @@ class EthInterface(BaseChainInterface):
                 tx_receipt = self.provider.eth.get_transaction_receipt(transaction['hash'])
                 return tx_receipt
             else:
-                raise Exception("Chain_id of TX and API don't match. Api chain_id: "+str(self.chain_id) + " TX chain_id: "+ str(transaction['chainId']))
+                raise Exception("Chain_ID of TX and API don't match. Api chain_id: "+str(self.chain_id) + " TX chain_id: "+ str(transaction['chainId']))
         except Exception as e:
             self.logger.warning(e)
             return None
@@ -218,10 +219,13 @@ class EthContract(BaseContractInterface):
             args = task['args']
             # Convert to a regular dictionary
             args_dict = dict(args)
+
+            # Convert ExecutionInfo into single arguments
             info_part = args_dict.pop('info')
             args_dict.update(info_part)
             args = AttributeDict(args_dict)
             task_list.append(Task(args))
+
         return task_list
 
 
