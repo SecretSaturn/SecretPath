@@ -6,7 +6,7 @@ use secret_toolkit::{
     utils::{pad_handle_result, pad_query_result, HandleCallback},
 };
 use crate::{
-    msg::{ExecuteMsg, GatewayMsg, InstantiateMsg, QueryMsg, QueryResponse, InputStoreMsg, ResponseStoreMsg, InputRetrieveMsg, RetrieveStoreMsg},
+    msg::{ExecuteMsg, GatewayMsg, InstantiateMsg, QueryMsg, QueryResponse, InputStoreMsg, ResponseStoreMsg, InputRetrieveMsg, ResponseRetrieveMsg},
     state::{State, StorageItem, CONFIG, KV_MAP},
 };
 use tnls::{
@@ -44,14 +44,6 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
     pad_handle_result(response, BLOCK_SIZE)
 }
 
-#[entry_point]
-pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
-    let response = match msg {
-        QueryMsg::Query {} => try_query(deps)
-    };
-    pad_query_result(response, BLOCK_SIZE)
-}
-
 // acts like a gateway message handle filter
 fn try_handle(
     deps: DepsMut,
@@ -84,7 +76,7 @@ fn try_handle(
 
 fn store_value(
     deps: DepsMut,
-    env: Env,
+    _env: Env,
     input_values: String,
     task: Task,
     input_hash: Binary,
@@ -106,10 +98,10 @@ fn store_value(
 
     let data = ResponseStoreMsg {
         key: input.key.to_string(),
-        message: "Operation completed successfully".to_string(),
+        message: "Value store completed successfully".to_string(),
     };
 
-    // Serialize the struct to a JSON string
+    // Serialize the struct to a JSON string1
     let json_string = serde_json_wasm::to_string(&data)
         .map_err(|err| StdError::generic_err(err.to_string()))?;
 
@@ -136,7 +128,7 @@ fn store_value(
 
 fn retrieve_value(
     deps: DepsMut,
-    env: Env,
+    _env: Env,
     input_values: String,
     task: Task,
     input_hash: Binary,
@@ -146,10 +138,25 @@ fn retrieve_value(
     let input: InputRetrieveMsg = serde_json_wasm::from_str(&input_values)
     .map_err(|err| StdError::generic_err(err.to_string()))?;
 
-    let key = input.key;
-    let viewing_key = input.viewing_key;
+    let value = KV_MAP.get(deps.storage, &input.key)
+        .ok_or_else(|| StdError::generic_err("Value for this key not found"))?;
 
-    let result = base64::encode("".to_string());
+    if value.viewing_key != input.viewing_key {
+        return Err(StdError::generic_err("Viewing Key incorrect or not found"));
+    }
+
+    let data = ResponseRetrieveMsg {
+        key: input.key.to_string(),
+        message: "Retrieved value successfully".to_string(),
+        value: value.value
+    };
+
+    // Serialize the struct to a JSON string1
+    let json_string = serde_json_wasm::to_string(&data)
+        .map_err(|err| StdError::generic_err(err.to_string()))?;
+
+    // Encode the JSON string to base64
+    let result = base64::encode(json_string);
 
     let callback_msg = GatewayMsg::Output {
         outputs: PostExecutionMsg {
@@ -168,10 +175,27 @@ fn retrieve_value(
         .add_message(callback_msg)
         .add_attribute("status", "stored value with key"))
 }
+#[entry_point]
+pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
+    let response = match msg {
+        QueryMsg::RetrieveValue {key, viewing_key} => retrieve_value_query(deps, key, viewing_key),
+    };
+    pad_query_result(response, BLOCK_SIZE)
+}
 
-fn try_query(_deps: Deps) -> StdResult<Binary> {
-    let message = "placeholder".to_string();
-    to_binary(&QueryResponse { message })
+fn retrieve_value_query(deps: Deps, key: String, viewing_key: String) -> StdResult<Binary> {
+    let value = KV_MAP.get(deps.storage, &key)
+        .ok_or_else(|| StdError::generic_err("Value for this key not found"))?;
+
+    if value.viewing_key != viewing_key {
+        return Err(StdError::generic_err("Viewing Key incorrect or not found"));
+    }
+
+    to_binary(&ResponseRetrieveMsg {
+        key: key.to_string(),
+        message: "Retrieved value successfully".to_string(),
+        value: value.value
+    })
 }
 
 #[cfg(test)]

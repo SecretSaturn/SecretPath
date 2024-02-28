@@ -344,13 +344,13 @@ fn post_execution(deps: DepsMut, env: Env, msg: PostExecutionMsg) -> StdResult<R
 
     // create hash of entire packet (used to verify the message wasn't modified in transit)
     let data = [
-        env.block.chain_id.as_bytes(),               // source network
-        routing_info.as_bytes(),           // task_destination_network
-        msg.task.task_id.as_bytes(),         // task ID
-        task_info.payload_hash.as_slice(), // original payload message
-        result.as_slice(),                 // result
-        task_info.callback_address.as_slice(), // callback address
-        task_info.callback_selector.as_slice(), // callback selector
+        env.block.chain_id.as_bytes(),           // source network
+        routing_info.as_bytes(),                 // task_destination_network
+        msg.task.task_id.as_bytes(),             // task ID
+        task_info.payload_hash.as_slice(),       // original payload message
+        result.as_slice(),                       // result
+        task_info.callback_address.as_slice(),   // callback address
+        task_info.callback_selector.as_slice(),  // callback selector
     ]
     .concat();
     hasher.update(&data);
@@ -385,7 +385,7 @@ fn post_execution(deps: DepsMut, env: Env, msg: PostExecutionMsg) -> StdResult<R
     // convert the hashes and signatures into hex byte strings
     // NOTE: we need to perform the additional sha_256 because that is what the secret network API method does
     // NOTE: The result_signature and packet_signature are both missing the recovery ID (v = 0 or 1), due to a Ethereum bug (v = 27 or 28).
-    // we need to either manually check both recovery IDs (v = 27 && v = 28) in the solidity contract. (i've leaved this the hard way.)
+    // we need to either manually check both recovery IDs (v = 27 && v = 28) in the solidity contract (I've leaved this the hard way.)
 
     // or we can find out the two recovery IDs inside of this contract here and keep the solidity contract slim (which is probably the better way when it comes to gas costs):
 

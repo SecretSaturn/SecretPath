@@ -47,7 +47,7 @@ pub struct InputRetrieveMsg {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct RetrieveStoreMsg {
+pub struct ResponseRetrieveMsg {
     // Key of the StorageItem  
     pub key: String,
     // value of the StorageItem  
@@ -59,7 +59,7 @@ pub struct RetrieveStoreMsg {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum QueryMsg {
-    Query {}
+    RetrieveValue {key: String, viewing_key: String}
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
