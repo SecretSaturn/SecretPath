@@ -3,12 +3,11 @@ use cosmwasm_std::{
     StdResult,
 };
 use secret_toolkit::{
-    crypto::{sha_256},
     utils::{pad_handle_result, pad_query_result, HandleCallback},
 };
 use crate::{
-    msg::{ExecuteMsg, GatewayMsg, InstantiateMsg, QueryMsg, QueryResponse},
-    state::{State, InputStore, InputRetrieve, CONFIG},
+    msg::{ExecuteMsg, GatewayMsg, InstantiateMsg, QueryMsg, QueryResponse, InputStoreMsg, ResponseStoreMsg, InputRetrieveMsg, RetrieveStoreMsg},
+    state::{State, StorageItem, CONFIG, KV_MAP},
 };
 use tnls::{
     msg::{PostExecutionMsg, PrivContractHandleMsg},
@@ -92,12 +91,30 @@ fn store_value(
 ) -> StdResult<Response> {
     let config = CONFIG.load(deps.storage)?;
 
-    let input: InputStore = serde_json_wasm::from_str(&input_values)
+    let input: InputStoreMsg = serde_json_wasm::from_str(&input_values)
     .map_err(|err| StdError::generic_err(err.to_string()))?;
 
-    let num_words = input.numWords;
+    // create a task information store
+    let storage_item = StorageItem { 
+        value: input.value,
+        viewing_key: input.viewing_key,
+        addresses: input.addresses
+    };
 
-    let result = base64::encode(random_numbers);
+    // map task to task info
+    KV_MAP.insert(deps.storage, &input.key, &storage_item)?;
+
+    let data = ResponseStoreMsg {
+        key: input.key.to_string(),
+        message: "Operation completed successfully".to_string(),
+    };
+
+    // Serialize the struct to a JSON string
+    let json_string = serde_json_wasm::to_string(&data)
+        .map_err(|err| StdError::generic_err(err.to_string()))?;
+
+    // Encode the JSON string to base64
+    let result = base64::encode(json_string);
 
     let callback_msg = GatewayMsg::Output {
         outputs: PostExecutionMsg {
@@ -126,12 +143,13 @@ fn retrieve_value(
 ) -> StdResult<Response> {
     let config = CONFIG.load(deps.storage)?;
 
-    let input: InputRetrieve = serde_json_wasm::from_str(&input_values)
+    let input: InputRetrieveMsg = serde_json_wasm::from_str(&input_values)
     .map_err(|err| StdError::generic_err(err.to_string()))?;
 
-    let num_words = input.numWords;
+    let key = input.key;
+    let viewing_key = input.viewing_key;
 
-    let result = base64::encode(random_numbers);
+    let result = base64::encode("".to_string());
 
     let callback_msg = GatewayMsg::Output {
         outputs: PostExecutionMsg {
