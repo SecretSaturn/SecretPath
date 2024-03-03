@@ -141,5 +141,5 @@ async function initializeAndUploadContract(gatewayHash: string,
 
 (async () => {
   const [client, gatewayHash, gatewayAddress, contractHash, contractAddress] =
-    await initializeAndUploadContract("bd6253cde923dc577e7c421d26fc74bd78aad4212bc6bdab4751e2764d678627","secret1mj9ana8lwh2chlalfjw6mjalgynkau2z893akk","0x04173a82969fec6b375013438a650316c7c0ece9bdb0646057c34c61e25d752e6b851d56200ea3dd521f305d7dddff23ee2d40bf1d1f4bc8c592852eac9e7c8a74");
+    await initializeAndUploadContract("012dd8efab9526dec294b6898c812ef6f6ad853e32172788f54ef3c305c1ecc5","secret10ex7r7c4y704xyu086lf74ymhrqhypayfk7fkj","0x046d0aac3ef10e69055e934ca899f508ba516832dc74aa4ed4d741052ed5a568774d99d3bfed641a7935ae73aac8e34938db747c2f0e8b2aa95c25d069a575cc8b");
 })();

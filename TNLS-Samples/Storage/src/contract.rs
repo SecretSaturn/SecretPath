@@ -6,7 +6,7 @@ use secret_toolkit::{
     utils::{pad_handle_result, pad_query_result, HandleCallback},
 };
 use crate::{
-    msg::{ExecuteMsg, GatewayMsg, InstantiateMsg, QueryMsg, QueryResponse, InputStoreMsg, ResponseStoreMsg, InputRetrieveMsg, ResponseRetrieveMsg},
+    msg::{ExecuteMsg, GatewayMsg, InstantiateMsg, QueryMsg, InputStoreMsg, ResponseStoreMsg, InputRetrieveMsg, ResponseRetrieveMsg},
     state::{State, StorageItem, CONFIG, KV_MAP},
 };
 use tnls::{
