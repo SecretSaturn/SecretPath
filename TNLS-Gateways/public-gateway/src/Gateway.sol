@@ -14,10 +14,10 @@ contract Gateway is Initializable, OwnableUpgradeable {
     //Use hard coded constant values instead of storage variables for Secret VRF, saves around 10,000+ in gas per TX. 
     //Since contract is upgradeable, we can update these values as well with it.
 
-    bytes constant routing_info = "secret16pcjalfuy72r4k26r4kn5f5x64ruzv30knflwx";
+    bytes constant routing_info = "secret1fxs74g8tltrngq3utldtxu9yys5tje8dzdvghr";
     bytes constant routing_code_hash = "49ffed0df451622ac1865710380c14d4af98dca2d32342bb20f2b22faca3d00d";
-    string constant task_destination_network = "secret-4";
-    address constant secret_gateway_signer_address = 0x88e43F4016f8282Ea6235aC069D02BA1cE5417aB;
+    string constant task_destination_network = "pulsar-3";
+    address constant secret_gateway_signer_address = 0x2821E794B01ABF0cE2DA0ca171A1fAc68FaDCa06;
 
     /*//////////////////////////////////////////////////////////////
                               Structs
@@ -233,6 +233,9 @@ contract Gateway is Initializable, OwnableUpgradeable {
     /// @notice Emitted when the callback was completed
     event TaskCompleted(uint256 taskId, bool callbackSuccessful);
 
+    /// @notice Emitted when the VRF callback was fulfilled
+    event fulfilledRandomWords(uint256 requestId, uint256[] randomWords);
+
     /*//////////////////////////////////////////////////////////////
                              Initializer
     //////////////////////////////////////////////////////////////*/
@@ -342,9 +345,15 @@ contract Gateway is Initializable, OwnableUpgradeable {
            revert TooManyVRFRandomWordsRequested();
         }
 
+        uint256 estimatedPrice = estimateRequestPrice(_callbackGasLimit);
+
         //checks if enough gas was paid for callback
-        if (estimateRequestPrice(_callbackGasLimit) > msg.value) {
+        if (estimatedPrice > msg.value) {
             revert PaidRequestFeeTooLow();
+        }
+        
+        if (estimatedPrice < msg.value) {
+            payable(tx.origin).transfer(msg.value - estimatedPrice);
         }
 
         //Encode the callback_address as Base64
@@ -355,10 +364,10 @@ contract Gateway is Initializable, OwnableUpgradeable {
             '{"data":"{\\"numWords\\":',bytes(uint256toString(_numWords)),
             '}","routing_info": "',routing_info,
             '","routing_code_hash": "',routing_code_hash,
-            '","user_address": "0x0000000000000000000000000000000000000000","user_key": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",', //unused user_address here + 33 bytes of zeros in base64 for user_key
-            '"callback_address": "', bytes(callback_address),
-            '","callback_selector": "OLpGFA==",', // 0x38ba4614 hex value already converted into base64, callback_selector of the fullfillRandomWords function
-            '"callback_gas_limit": ', bytes(uint256toString(_callbackGasLimit)),'}' 
+            '","user_address": "0x0000","user_key": "AAA=", "callback_address": "', //unused user_address here + 33 bytes of zeros in base64 for user_key
+            bytes(callback_address),
+            '","callback_selector": "OLpGFA==", "callback_gas_limit": ', // 0x38ba4614 hex value already converted into base64, callback_selector of the fullfillRandomWords function
+            bytes(uint256toString(_callbackGasLimit)),'}' 
         );
 
         //generate the payload hash using the ethereum hash format for messages
@@ -366,15 +375,15 @@ contract Gateway is Initializable, OwnableUpgradeable {
 
         // ExecutionInfo struct
         ExecutionInfo memory executionInfo = ExecutionInfo({
-            user_key: new bytes(33), // equals AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA in base64
-            user_pubkey: new bytes(64), // Fill with 0 bytes
+            user_key: new bytes(2), // equals AAA= in base64
+            user_pubkey: new bytes(2), // Fill with 0 bytes
             routing_code_hash: string(routing_code_hash),
             task_destination_network: task_destination_network,
             handle: "request_random",
             nonce: bytes12(0),
             callback_gas_limit:_callbackGasLimit,
             payload: payload,
-            payload_signature: new bytes(64) // empty signature, fill with 0 bytes
+            payload_signature: new bytes(2) // empty signature, fill with 0 bytes
         });
 
         // persisting the task
@@ -391,9 +400,7 @@ contract Gateway is Initializable, OwnableUpgradeable {
         );
 
         //Output the current task_id / request_id to the user and increase the taskId to be used in the next gateway call. 
-        uint256 oldTaskId = taskId;
-        taskId++;
-        return oldTaskId;
+        return taskId++;
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -450,6 +457,7 @@ contract Gateway is Initializable, OwnableUpgradeable {
             (callbackSuccessful, ) = address(_info.callback_address).call(
                 abi.encodeWithSelector(0x38ba4614, _taskId, randomWords)
             );
+            emit fulfilledRandomWords(_taskId, randomWords);
         }
         else {
             (callbackSuccessful, ) = address(_info.callback_address).call(

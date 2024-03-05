@@ -7,7 +7,7 @@ interface ISecretVRF {
     function requestRandomness(uint32 _numWords, uint32 _callbackGasLimit) external payable returns (uint256 requestId);
 }
 
-contract RandomnessReciever {
+contract RandomnessReceiver {
 
     /// @notice VRFGateway stores address to the Gateway contract to call for VRF
     address public VRFGateway;
