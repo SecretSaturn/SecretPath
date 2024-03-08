@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.23;
+pragma solidity ^0.8.24;
 
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
@@ -14,10 +14,8 @@ contract Gateway is Initializable, OwnableUpgradeable {
     //Use hard coded constant values instead of storage variables for Secret VRF, saves around 10,000+ in gas per TX. 
     //Since contract is upgradeable, we can update these values as well with it.
 
-    bytes constant routing_info = "secret1fxs74g8tltrngq3utldtxu9yys5tje8dzdvghr";
-    bytes constant routing_code_hash = "49ffed0df451622ac1865710380c14d4af98dca2d32342bb20f2b22faca3d00d";
-    string constant task_destination_network = "pulsar-3";
     address constant secret_gateway_signer_address = 0x2821E794B01ABF0cE2DA0ca171A1fAc68FaDCa06;
+    string constant chainId = "11155111";
 
     /*//////////////////////////////////////////////////////////////
                               Structs
@@ -101,7 +99,6 @@ contract Gateway is Initializable, OwnableUpgradeable {
         if (_sig.length != 65) {
             revert InvalidSignatureLength();
         }
-
         assembly {
             // first 32 bytes, after the length prefix
             r := mload(add(_sig, 32))
@@ -115,11 +112,11 @@ contract Gateway is Initializable, OwnableUpgradeable {
     /// @notice Recovers the signer address from a message hash and a signature
     /// @param _signedMessageHash The hash of the signed message
     /// @param _signature The signature
-    /// @return The address of the signer
+    /// @return signerAddress The address of the signer
 
-    function recoverSigner(bytes32 _signedMessageHash, bytes calldata _signature) private pure returns (address) {
+    function recoverSigner(bytes32 _signedMessageHash, bytes calldata _signature) private pure returns (address signerAddress) {
         (bytes32 r, bytes32 s, uint8 v) = splitSignature(_signature);
-        return ecrecover(_signedMessageHash, v, r, s);
+        signerAddress = ecrecover(_signedMessageHash, v, r, s);
     }
 
     /// @notice Slices the last byte of an bytes32 to make it into a bytes31
@@ -134,14 +131,13 @@ contract Gateway is Initializable, OwnableUpgradeable {
     }
 
     /// @notice Encodes a bytes memory array into a Base64 string
-    /// @param data The bytes memory data to encode
-    /// @return The Base64 encoded string
+    /// @param addressData The bytes memory data to encode
+    /// @return result The Base64 encoded string
 
-    function encodeBase64(bytes memory data) private pure returns (string memory) {
-        if (data.length == 0) return "";
+    function encodeAddressToBase64(address addressData) private pure returns (bytes memory result) {
         string memory table = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-        string memory result = new string(4 * ((data.length + 2) / 3));
-        /// @solidity memory-safe-assembly
+        bytes memory data = bytes.concat(bytes20(addressData));
+        result = new bytes(29);
         assembly {
             let tablePtr := add(table, 1)
             let resultPtr := add(result, 32)
@@ -161,16 +157,8 @@ contract Gateway is Initializable, OwnableUpgradeable {
                 mstore8(resultPtr, mload(add(tablePtr, and(input, 0x3F))))
                 resultPtr := add(resultPtr, 1)
             }
-            switch mod(mload(data), 3)
-            case 1 {
-                mstore8(sub(resultPtr, 1), 0x3d)
-                mstore8(sub(resultPtr, 2), 0x3d)
-            }
-            case 2 {
-                mstore8(sub(resultPtr, 1), 0x3d)
-            }
+            mstore8(sub(resultPtr, 1), 0x3d)
         }
-        return result;
     }
 
     /// @notice Converts a uint256 value into its string representation
@@ -201,19 +189,17 @@ contract Gateway is Initializable, OwnableUpgradeable {
     
     /// @notice Converts a bytes memory array to an array of uint256
     /// @param data The bytes memory data to convert
-    /// @return The array of uint256
+    /// @return uintArray The array of uint256
     
-   function bytesToUInt256Array(bytes memory data) private pure returns (uint256[] memory) {
+   function bytesToUInt256Array(bytes memory data) private pure returns (uint256[] memory uintArray) {
         if (data.length % 32 != 0) {
             revert InvalidBytesLength();
         }
-        uint256[] memory uintArray;
         assembly {
             // Cast the bytes array to a uint256[] array by setting the appropriate length
             uintArray := data
             mstore(uintArray, div(mload(data), 32))
         }
-        return uintArray;
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -231,10 +217,10 @@ contract Gateway is Initializable, OwnableUpgradeable {
     );
 
     /// @notice Emitted when the callback was completed
-    event TaskCompleted(uint256 taskId, bool callbackSuccessful);
+    event TaskCompleted(uint256 indexed taskId, bool callbackSuccessful);
 
     /// @notice Emitted when the VRF callback was fulfilled
-    event fulfilledRandomWords(uint256 requestId, uint256[] randomWords);
+    event fulfilledRandomWords(uint256 indexed requestId, uint256[] randomWords);
 
     /*//////////////////////////////////////////////////////////////
                              Initializer
@@ -319,7 +305,7 @@ contract Gateway is Initializable, OwnableUpgradeable {
         //emit the task to be picked up by the relayer
         emit logNewTask(
             taskId,
-            uint256toString(block.chainid),
+            chainId,
             _userAddress,
             _routingInfo,
             _payloadHash,
@@ -340,6 +326,8 @@ contract Gateway is Initializable, OwnableUpgradeable {
         uint32 _callbackGasLimit
     ) external payable returns (uint256 requestId) {
 
+        uint256 _taskId = taskId;
+
         //Set limit on how many random words can be requested
         if (_numWords > 2000) {
            revert TooManyVRFRandomWordsRequested();
@@ -351,56 +339,58 @@ contract Gateway is Initializable, OwnableUpgradeable {
         if (estimatedPrice > msg.value) {
             revert PaidRequestFeeTooLow();
         }
-        
-        if (estimatedPrice < msg.value) {
+        else if (estimatedPrice < msg.value) {
             payable(tx.origin).transfer(msg.value - estimatedPrice);
         }
 
         //Encode the callback_address as Base64
-        string memory callback_address = encodeBase64(bytes.concat(bytes20(msg.sender)));
+        bytes memory callback_address = encodeAddressToBase64(msg.sender);
 
         //construct the payload that is sent into the Secret Gateway
         bytes memory payload = bytes.concat(
-            '{"data":"{\\"numWords\\":',bytes(uint256toString(_numWords)),
-            '}","routing_info": "',routing_info,
-            '","routing_code_hash": "',routing_code_hash,
-            '","user_address": "0x0000","user_key": "AAA=", "callback_address": "', //unused user_address here + 33 bytes of zeros in base64 for user_key
-            bytes(callback_address),
+            '{"data":"{\\"numWords\\":',
+            bytes(uint256toString(_numWords)),
+            '}","routing_info": "secret1fxs74g8tltrngq3utldtxu9yys5tje8dzdvghr","routing_code_hash": "49ffed0df451622ac1865710380c14d4af98dca2d32342bb20f2b22faca3d00d" ,"user_address": "0x0000","user_key": "AAA=", "callback_address": "', //unused user_address here + 2 bytes of zeros in base64 for user_key, add RNG Contract address & code hash on Secret 
+            callback_address,
             '","callback_selector": "OLpGFA==", "callback_gas_limit": ', // 0x38ba4614 hex value already converted into base64, callback_selector of the fullfillRandomWords function
-            bytes(uint256toString(_callbackGasLimit)),'}' 
+            bytes(uint256toString(_callbackGasLimit)),
+            '}' 
         );
 
         //generate the payload hash using the ethereum hash format for messages
         bytes32 payloadHash = keccak256(bytes.concat("\x19Ethereum Signed Message:\n32", keccak256(payload)));
 
+        bytes memory emptyBytes = hex"0000";
+
         // ExecutionInfo struct
         ExecutionInfo memory executionInfo = ExecutionInfo({
-            user_key: new bytes(2), // equals AAA= in base64
-            user_pubkey: new bytes(2), // Fill with 0 bytes
-            routing_code_hash: string(routing_code_hash),
-            task_destination_network: task_destination_network,
+            user_key: emptyBytes, // equals AAA= in base64
+            user_pubkey: emptyBytes, // Fill with 0 bytes
+            routing_code_hash: "49ffed0df451622ac1865710380c14d4af98dca2d32342bb20f2b22faca3d00d", //RNG Contract codehash on Secret 
+            task_destination_network: "pulsar-3",
             handle: "request_random",
             nonce: bytes12(0),
-            callback_gas_limit:_callbackGasLimit,
+            callback_gas_limit: _callbackGasLimit,
             payload: payload,
-            payload_signature: new bytes(2) // empty signature, fill with 0 bytes
+            payload_signature: emptyBytes // empty signature, fill with 0 bytes
         });
 
         // persisting the task
-        tasks[taskId] = Task(sliceLastByte(payloadHash), false);
+        tasks[_taskId] = Task(sliceLastByte(payloadHash), false);
 
         //emit the task to be picked up by the relayer
         emit logNewTask(
-            taskId,
-            uint256toString(block.chainid),
+            _taskId,
+            chainId,
             tx.origin,
-            string(routing_info),
+            "secret1fxs74g8tltrngq3utldtxu9yys5tje8dzdvghr", //RNG Contract address on Secret 
             payloadHash,
             executionInfo
         );
 
         //Output the current task_id / request_id to the user and increase the taskId to be used in the next gateway call. 
-        return taskId++;
+        taskId = ++_taskId;
+        return _taskId;
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -429,7 +419,7 @@ contract Gateway is Initializable, OwnableUpgradeable {
         // Concatenate packet data elements
         bytes memory data =  bytes.concat(
             bytes(_sourceNetwork),
-            bytes(uint256toString(block.chainid)),
+            bytes(chainId),
             bytes(uint256toString(_taskId)),
             _info.payload_hash,
             _info.result,
