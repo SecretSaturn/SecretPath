@@ -23,10 +23,10 @@ contract UpgradeScript is Script {
         // Deploy New Gateway Logic Contract
         newGatewayLogic = new Gateway();
         
-        gatewayProxyAdmin = ProxyAdmin(0x952350102fd243B353fd734B5Cc4e3b4088a4aE7);
+        gatewayProxyAdmin = ProxyAdmin(0xCbA9277ccf3Ce4e217D983FB141dcDAa0b66bF8f);
 
         bytes memory selector = abi.encodeWithSelector(Gateway.upgradeHandler.selector);
-        gatewayProxyAdmin.upgradeAndCall(ITransparentUpgradeableProxy(0x5e16dbD2728d66B4189b2e3AAB71837683Dfd2d7), address(newGatewayLogic),selector);
+        gatewayProxyAdmin.upgradeAndCall(ITransparentUpgradeableProxy(0x4c14a6A0CD2DA2848D3C31285B828F6364087735), address(newGatewayLogic),selector);
 
         vm.stopBroadcast();
     }

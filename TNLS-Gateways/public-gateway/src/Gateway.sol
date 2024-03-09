@@ -15,7 +15,7 @@ contract Gateway is Initializable, OwnableUpgradeable {
     //Since contract is upgradeable, we can update these values as well with it.
 
     address constant secret_gateway_signer_address = 0x2821E794B01ABF0cE2DA0ca171A1fAc68FaDCa06;
-    string constant chainId = "11155111";
+    string constant chainId = "534351";
 
     /*//////////////////////////////////////////////////////////////
                               Structs
