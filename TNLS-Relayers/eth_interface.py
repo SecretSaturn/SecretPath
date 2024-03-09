@@ -24,7 +24,7 @@ class EthInterface(BaseChainInterface):
             If we don't have a set provider, read it from config.
             """
 
-            provider = Web3(Web3.HTTPProvider(api_endpoint, request_kwargs={'timeout': 5}))
+            provider = Web3(Web3.HTTPProvider(api_endpoint, request_kwargs={'timeout': 2}))
             provider.middleware_onion.inject(geth_poa_middleware, layer=0)
 
         self.private_key = private_key
@@ -32,7 +32,7 @@ class EthInterface(BaseChainInterface):
         self.address = address
         self.contract_address = contract_address
         self.chain_id = chain_id
-        self.nonce = self.provider.eth.get_transaction_count(self.address, 'pending');
+        self.nonce = self.provider.eth.get_transaction_count(self.address, 'pending')
 
         basicConfig(
             level=INFO,

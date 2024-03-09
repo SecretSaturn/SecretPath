@@ -57,6 +57,7 @@ def generate_scrt_config(config_dict, provider=None):
     api_endpoint = config_dict['api_endpoint']
     chain_id = config_dict['chain_id']
     code_hash = config_dict['code_hash']
+    feegrant_address = config_dict['feegrant_address']
     with open(f'{Path(__file__).parent.absolute()}/secret_abi.json') as f:
         contract_schema = f.read()
     event_name = 'wasm'
@@ -64,10 +65,10 @@ def generate_scrt_config(config_dict, provider=None):
     initialized_chain = None
 
     if provider is None:
-        initialized_chain = SCRTInterface(private_key=priv_key, address=address, provider = None,
-                                          api_url=api_endpoint, chain_id=chain_id)
+        initialized_chain = SCRTInterface(private_key = priv_key, address = address, provider = None,
+                                          api_url = api_endpoint, chain_id = chain_id, feegrant_address = feegrant_address)
     else:
-        initialized_chain = SCRTInterface(private_key=priv_key, address=address, provider=provider,chain_id=chain_id)
+        initialized_chain = SCRTInterface(private_key=priv_key, address = address, provider = provider, chain_id = chain_id,  feegrant_address = feegrant_address)
    
     initialized_contract = SCRTContract(interface=initialized_chain, address=contract_address,
                                         abi=contract_schema, code_hash = code_hash)
@@ -95,11 +96,13 @@ def generate_full_config(config_file, provider_pair=None):
     keys_dict = {}
     chains_dict = {}
     for chain in eth_chains:
-        eth_config = generate_eth_config(config_dict[chain], provider=provider_eth)
-        chains_dict[chain] = eth_config
+        if config_dict[chain]['active'] == True:
+            eth_config = generate_eth_config(config_dict[chain], provider=provider_eth)
+            chains_dict[chain] = eth_config
     for chain in scrt_chains:
-        scrt_config = generate_scrt_config(config_dict[chain], provider=provider_scrt)
-        chains_dict[chain] = scrt_config
+        if config_dict[chain]['active'] == True:
+            scrt_config = generate_scrt_config(config_dict[chain], provider=provider_scrt)
+            chains_dict[chain] = scrt_config
     return chains_dict, keys_dict
 
 route_blueprint = Blueprint('route_blueprint', __name__)
