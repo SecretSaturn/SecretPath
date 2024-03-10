@@ -137,7 +137,7 @@ contract Gateway is Initializable, OwnableUpgradeable {
     function encodeAddressToBase64(address addressData) private pure returns (bytes memory result) {
         string memory table = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
         bytes memory data = bytes.concat(bytes20(addressData));
-        result = new bytes(29);
+        result = new bytes(28);
         assembly {
             let tablePtr := add(table, 1)
             let resultPtr := add(result, 32)
@@ -262,9 +262,8 @@ contract Gateway is Initializable, OwnableUpgradeable {
     /// @notice Increase the task_id to check for problems 
     /// @param _callbackGasLimit the Callback Gas Limit
 
-    function estimateRequestPrice(uint32 _callbackGasLimit) private view returns (uint256) {
-        uint256 baseFee = _callbackGasLimit*block.basefee;
-        return baseFee;
+    function estimateRequestPrice(uint32 _callbackGasLimit) private view returns (uint256 baseFee) {
+        baseFee = _callbackGasLimit*tx.gasprice;
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -284,9 +283,14 @@ contract Gateway is Initializable, OwnableUpgradeable {
         ExecutionInfo calldata _info) 
         external payable {
         
-        //checks if enough gas was paid
-        if (estimateRequestPrice(_info.callback_gas_limit) > msg.value) {
+        uint256 estimatedPrice = estimateRequestPrice(_info.callback_gas_limit);
+
+        //checks if enough gas was paid for callback
+        if (estimatedPrice > msg.value) {
             revert PaidRequestFeeTooLow();
+        }
+        else if (estimatedPrice < msg.value) {
+            payable(tx.origin).transfer(msg.value - estimatedPrice);
         }
 
         // Payload hash verification
@@ -389,8 +393,8 @@ contract Gateway is Initializable, OwnableUpgradeable {
         );
 
         //Output the current task_id / request_id to the user and increase the taskId to be used in the next gateway call. 
-        taskId = ++_taskId;
-        return _taskId;
+        taskId = _taskId + 1;
+        requestId = _taskId;
     }
 
     /*//////////////////////////////////////////////////////////////
