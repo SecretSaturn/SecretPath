@@ -14,8 +14,8 @@ contract Gateway is Initializable, OwnableUpgradeable {
     //Use hard coded constant values instead of storage variables for Secret VRF, saves around 10,000+ in gas per TX. 
     //Since contract is upgradeable, we can update these values as well with it.
 
-    address constant secret_gateway_signer_address = 0x2821E794B01ABF0cE2DA0ca171A1fAc68FaDCa06;
-    string constant chainId = "534351";
+    address constant secret_gateway_signer_address = 0x88e43F4016f8282Ea6235aC069D02BA1cE5417aB;
+    string constant chainId = "534352";
 
     /*//////////////////////////////////////////////////////////////
                               Structs
@@ -354,7 +354,7 @@ contract Gateway is Initializable, OwnableUpgradeable {
         bytes memory payload = bytes.concat(
             '{"data":"{\\"numWords\\":',
             bytes(uint256toString(_numWords)),
-            '}","routing_info": "secret1fxs74g8tltrngq3utldtxu9yys5tje8dzdvghr","routing_code_hash": "49ffed0df451622ac1865710380c14d4af98dca2d32342bb20f2b22faca3d00d" ,"user_address": "0x0000","user_key": "AAA=", "callback_address": "', //unused user_address here + 2 bytes of zeros in base64 for user_key, add RNG Contract address & code hash on Secret 
+            '}","routing_info": "secret16pcjalfuy72r4k26r4kn5f5x64ruzv30knflwx","routing_code_hash": "49ffed0df451622ac1865710380c14d4af98dca2d32342bb20f2b22faca3d00d" ,"user_address": "0x0000","user_key": "AAA=", "callback_address": "', //unused user_address here + 2 bytes of zeros in base64 for user_key, add RNG Contract address & code hash on Secret 
             callback_address,
             '","callback_selector": "OLpGFA==", "callback_gas_limit": ', // 0x38ba4614 hex value already converted into base64, callback_selector of the fullfillRandomWords function
             bytes(uint256toString(_callbackGasLimit)),
@@ -371,7 +371,7 @@ contract Gateway is Initializable, OwnableUpgradeable {
             user_key: emptyBytes, // equals AAA= in base64
             user_pubkey: emptyBytes, // Fill with 0 bytes
             routing_code_hash: "49ffed0df451622ac1865710380c14d4af98dca2d32342bb20f2b22faca3d00d", //RNG Contract codehash on Secret 
-            task_destination_network: "pulsar-3",
+            task_destination_network: "secret-4",
             handle: "request_random",
             nonce: bytes12(0),
             callback_gas_limit: _callbackGasLimit,
@@ -387,7 +387,7 @@ contract Gateway is Initializable, OwnableUpgradeable {
             _taskId,
             chainId,
             tx.origin,
-            "secret1fxs74g8tltrngq3utldtxu9yys5tje8dzdvghr", //RNG Contract address on Secret 
+            "secret16pcjalfuy72r4k26r4kn5f5x64ruzv30knflwx", //RNG Contract address on Secret 
             payloadHash,
             executionInfo
         );
