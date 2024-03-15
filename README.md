@@ -1,7 +1,9 @@
 # TNLS
-This repository is an alpha implementation of the Snakepath Network and its underlying TNLS protocol, currently connecting the Eth Goerli testnet to the Secret Network pulsar-3 testnet.
+This repository is a beta implementation of the Secretpath (formerly Snakepath) Network and its underlying TNLS protocol, currently connecting the Eth  testnet to the Secret Network pulsar-3 testnet.
 
-Docs (which are relatively barebones atm but will be being improved over time) can be found at [our gitbook](https://fortress-labs.gitbook.io/snakepath/).
+This project was started by Leor Fishman, Benjamin Simon, Kent Worchester. Continued by Alex | Secret Saturn.
+
+Docs (which are relatively barebones atm but will be being improved over time) can be found at [the docs](https://fortress-labs.gitbook.io/snakepath/) and [the docs] (https://docs.scrt.network/secret-network-documentation/development/ethereum-evm-developer-toolkit/basics/cross-chain-messaging/snakepath)
 
 # License
 

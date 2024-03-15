@@ -18,13 +18,13 @@ class EthInterface(BaseChainInterface):
     Implementaion of BaseChainInterface for eth.
     """
 
-    def __init__(self, private_key="", address="", provider=None, contract_address = "", chain_id="", api_endpoint="", **_kwargs):
+    def __init__(self, private_key="", address="", provider=None, contract_address = "", chain_id="", api_endpoint="", timeout = 1, **_kwargs):
         if provider is None:
             """
             If we don't have a set provider, read it from config.
             """
 
-            provider = Web3(Web3.HTTPProvider(api_endpoint, request_kwargs={'timeout': 2}))
+            provider = Web3(Web3.HTTPProvider(api_endpoint, request_kwargs={'timeout': timeout}))
             provider.middleware_onion.inject(geth_poa_middleware, layer=0)
             provider.middleware_onion.add(middleware.time_based_cache_middleware)
             provider.middleware_onion.add(middleware.latest_block_based_cache_middleware)
