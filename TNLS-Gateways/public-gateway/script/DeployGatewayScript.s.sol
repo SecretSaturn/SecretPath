@@ -6,7 +6,6 @@ import "forge-std/Vm.sol";
 import "forge-std/console2.sol";
 import "forge-std/Script.sol";
 import {Gateway} from "../src/Gateway.sol";
-import {RandomnessReceiver} from "../src/RandomnessReceiver.sol";
 import "@openzeppelin/contracts/proxy/transparent/ProxyAdmin.sol";
 import "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 
@@ -17,7 +16,6 @@ contract DeployGatewayScript is Script {
     ProxyAdmin proxyAdmin;
     Gateway gatewayLogic;
     TransparentUpgradeableProxy gatewayProxy;
-    RandomnessReceiver randomnessAddress;
 
     function run() public {
         vm.startBroadcast();

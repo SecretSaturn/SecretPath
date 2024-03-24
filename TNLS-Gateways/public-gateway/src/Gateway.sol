@@ -58,54 +58,17 @@ contract Gateway is Initializable, OwnableUpgradeable {
     mapping(uint256 => Task) public tasks;
 
     /*//////////////////////////////////////////////////////////////
-                              Errors
-    //////////////////////////////////////////////////////////////*/
-
-    /// @notice thrown when the signature length is invalid
-    error InvalidSignatureLength();
-
-    /// @notice thrown when the signature is invalid
-    error InvalidSignature();
-
-    /// @notice thrown when the PacketSignature is invalid
-    error InvalidPacketSignature();
-
-    /// @notice thrown when the PayloadHash is invalid
-    error InvalidPayloadHash();
-
-    /// @notice thrown when the Task was already completed
-    error TaskAlreadyCompleted();
-
-    /// @notice thrown when the Bytes Length is not a multiple of 32 bytes
-    error InvalidBytesLength();
-
-    /// @notice thrown when the user requests more Random Words than allowed
-    error TooManyVRFRandomWordsRequested();
-
-    /// @notice thrown when the paid fee was lower than expected: 
-    error PaidRequestFeeTooLow();
-
-    /*//////////////////////////////////////////////////////////////
                               Helpers
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice Splits a signature into its r, s, and v components
-    /// @param _sig The signature to split
-    /// @return r The r component of the signature
-    /// @return s The s component of the signature
-    /// @return v The recovery byte of the signature
-
-    function splitSignature(bytes memory _sig) private pure returns (bytes32 r, bytes32 s, uint8 v) {
-        if (_sig.length != 65) {
-            revert InvalidSignatureLength();
-        }
+    function ethSignedPayloadHash(bytes memory payload) public pure returns (bytes32 payloadHash) {
         assembly {
-            // first 32 bytes, after the length prefix
-            r := mload(add(_sig, 32))
-            // second 32 bytes
-            s := mload(add(_sig, 64))
-            // final byte (first byte of the next 32 bytes)
-            v := byte(0, mload(add(_sig, 96)))
+            // Allocate memory for the data to hash
+            let data := mload(0x40)
+            mstore(data,"\x19Ethereum Signed Message:\n32")
+            mstore(add(data, 28), keccak256(add(payload, 32), mload(payload)))
+            payloadHash := keccak256(data, 60)
+            mstore(0x40, add(data, 64))
         }
     }
 
@@ -114,10 +77,28 @@ contract Gateway is Initializable, OwnableUpgradeable {
     /// @param _signature The signature
     /// @return signerAddress The address of the signer
 
-    function recoverSigner(bytes32 _signedMessageHash, bytes calldata _signature) private pure returns (address signerAddress) {
-        (bytes32 r, bytes32 s, uint8 v) = splitSignature(_signature);
-        signerAddress = ecrecover(_signedMessageHash, v, r, s);
+    function recoverSigner(bytes32 _signedMessageHash, bytes calldata _signature) private view returns (address signerAddress) {
+        require(_signature.length == 65, "Invalid Signature Length");
+        
+        assembly {
+            //Loading in v,s,r from _signature calldata is like this:
+            //calldataload (4 bytes function selector + 32 bytes signed message hash + 32 bytes bytes _signature length 
+            //+ 32 bytes per v (reads 32 bytes in)
+            let m := mload(0x40) // Load free memory pointer
+            mstore(0x40, add(m, 128)) // Update free memory pointer
+            mstore(m, _signedMessageHash) // Store _signedMessageHash at memory location m
+            mstore(add(m, 32), byte(0, calldataload(164))) // Load v from _signature and store at m + 32
+            mstore(add(m, 64), calldataload(100)) // Load r from _signature and store at m + 64
+            mstore(add(m, 96), calldataload(132)) // Load s from _signature and store at m + 96
+            // Call ecrecover: returns 0 on error, address on success, 0 for failure
+            if iszero(staticcall(gas(), 0x01, m, 128, m, 32)) {
+                revert(0, 0)
+            }
+            //load result into result
+            signerAddress := mload(m) 
+        }
     }
+
 
     /// @notice Slices the last byte of an bytes32 to make it into a bytes31
     /// @param data The bytes32 data
@@ -131,59 +112,159 @@ contract Gateway is Initializable, OwnableUpgradeable {
     }
 
     /// @notice Encodes a bytes memory array into a Base64 string
-    /// @param addressData The bytes memory data to encode
-    /// @return result The Base64 encoded string
+    /// @param data The bytes20 data to encode
+    /// @return result The bytes28 encoded string
 
-    function encodeAddressToBase64(address addressData) private pure returns (bytes memory result) {
-        string memory table = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-        bytes memory data = bytes.concat(bytes20(addressData));
-        result = new bytes(28);
+    function encodeAddressToBase64(bytes20 data) private pure returns (bytes28 result) {
+        bytes memory table = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
         assembly {
-            let tablePtr := add(table, 1)
-            let resultPtr := add(result, 32)
-            for {
-                let dataPtr := data
-                let endPtr := add(data, mload(data))
-            } lt(dataPtr, endPtr) {
-            } {
-                dataPtr := add(dataPtr, 3)
-                let input := mload(dataPtr)
-                mstore8(resultPtr, mload(add(tablePtr, and(shr(18, input), 0x3F))))
-                resultPtr := add(resultPtr, 1)
-                mstore8(resultPtr, mload(add(tablePtr, and(shr(12, input), 0x3F))))
-                resultPtr := add(resultPtr, 1)
-                mstore8(resultPtr, mload(add(tablePtr, and(shr(6, input), 0x3F))))
-                resultPtr := add(resultPtr, 1)
-                mstore8(resultPtr, mload(add(tablePtr, and(input, 0x3F))))
-                resultPtr := add(resultPtr, 1)
-            }
-            mstore8(sub(resultPtr, 1), 0x3d)
+            let resultPtr := mload(0x40) // Load free memory pointer
+            table := add(table,1)
+            mstore8(resultPtr, mload(add(table, and(shr(250, data), 0x3F))))
+            mstore8(add(resultPtr, 1), mload(add(table, and(shr(244, data), 0x3F))))
+            mstore8(add(resultPtr, 2), mload(add(table, and(shr(238, data), 0x3F))))
+            mstore8(add(resultPtr, 3), mload(add(table, and(shr(232, data), 0x3F))))
+            mstore8(add(resultPtr, 4), mload(add(table, and(shr(226, data), 0x3F))))
+            mstore8(add(resultPtr, 5), mload(add(table, and(shr(220, data), 0x3F))))
+            mstore8(add(resultPtr, 6), mload(add(table, and(shr(214, data), 0x3F))))
+            mstore8(add(resultPtr, 7), mload(add(table, and(shr(208, data), 0x3F))))
+            mstore8(add(resultPtr, 8), mload(add(table, and(shr(202, data), 0x3F))))
+            mstore8(add(resultPtr, 9), mload(add(table, and(shr(196, data), 0x3F))))
+            mstore8(add(resultPtr, 10), mload(add(table, and(shr(190, data), 0x3F))))
+            mstore8(add(resultPtr, 11), mload(add(table, and(shr(184, data), 0x3F))))
+            mstore8(add(resultPtr, 12), mload(add(table, and(shr(178, data), 0x3F))))
+            mstore8(add(resultPtr, 13), mload(add(table, and(shr(172, data), 0x3F))))
+            mstore8(add(resultPtr, 14), mload(add(table, and(shr(166, data), 0x3F))))
+            mstore8(add(resultPtr, 15), mload(add(table, and(shr(160, data), 0x3F))))
+            mstore8(add(resultPtr, 16), mload(add(table, and(shr(154, data), 0x3F))))
+            mstore8(add(resultPtr, 17), mload(add(table, and(shr(148, data), 0x3F))))
+            mstore8(add(resultPtr, 18), mload(add(table, and(shr(142, data), 0x3F))))
+            mstore8(add(resultPtr, 19), mload(add(table, and(shr(136, data), 0x3F))))
+            mstore8(add(resultPtr, 20), mload(add(table, and(shr(130, data), 0x3F)))) 
+            mstore8(add(resultPtr, 21), mload(add(table, and(shr(124, data), 0x3F))))
+            mstore8(add(resultPtr, 22), mload(add(table, and(shr(118, data), 0x3F))))
+            mstore8(add(resultPtr, 23), mload(add(table, and(shr(112, data), 0x3F))))
+            mstore8(add(resultPtr, 24), mload(add(table, and(shr(106, data), 0x3F))))
+            mstore8(add(resultPtr, 25), mload(add(table, and(shr(100, data), 0x3F))))
+            mstore8(add(resultPtr, 26), mload(add(table, and(shr(94, data), 0x3F))))
+            mstore8(add(resultPtr, 27), 0x3d)
+            result := mload(resultPtr)
+            mstore(0x40, add(resultPtr,32))
         }
     }
 
     /// @notice Converts a uint256 value into its string representation
-    /// @param value The uint256 value to convert
-    /// @return ptr The string representation of the uint256 value
+    /// @param x The uint256 value to convert
+    /// @return s The string representation of the uint256 value
 
-    function uint256toString(uint256 value) private pure returns (string memory ptr) {
-        assembly {
-            ptr := add(mload(0x40), 128)
-            mstore(0x40, ptr)
-            let end := ptr
-            for { 
-                let temp := value
-                ptr := sub(ptr, 1)
-                mstore8(ptr, add(48, mod(temp, 10)))
-                temp := div(temp, 10)
-            } temp { 
-                temp := div(temp, 10)
-            } { 
-                ptr := sub(ptr, 1)
-                mstore8(ptr, add(48, mod(temp, 10)))
+    function uint256toString(uint256 x) private pure returns (string memory s) {
+        unchecked {
+            if (x < 1e31) { 
+                uint256 c1 = itoa31(x);
+                assembly {
+                    s := mload(0x40) // Set s to point to the free memory pointer
+                    let z := shr(248, c1)
+                    mstore(s, z) // Allocate 32 bytes for the string length
+                    mstore(add(s, 32), shl(sub(256, mul(z, 8)), c1)) // Store c2 adjusted by z digits
+                    mstore(0x40, add(s, 64)) // Update the free memory pointer
+                }
+            }   
+            else if (x < 1e62) {
+                uint256 c1 = itoa31(x);
+                uint256 c2 = itoa31(x/1e31);
+                assembly {
+                    s := mload(0x40) // Set s to the free memory pointer
+                    let z := shr(248, c2) // Extract the digit count for c2
+                    mstore(s, add(z, 31)) // Allocate space for z digits of c2 + 31 bytes of c1
+                    mstore(add(s, 32), shl(sub(256, mul(z, 8)), c2)) // Store c2 adjusted by z digits
+                    mstore(add(s, add(32, z)), shl(8,c1)) // Store the last 31 bytes of c1
+                    mstore(0x40, add(s, 96)) // Update the free memory pointer
+                }
+            } else {
+                uint256 c1 = itoa31(x);
+                uint256 c2 = itoa31(x/1e31);
+                uint256 c3 = itoa31(x/1e62);
+                assembly {
+                    s := mload(0x40) // Set s to point to the free memory pointer
+                    let z := shr(248, c3)
+                    mstore(s, add(z, 62)) // Allocate 32 bytes for the string length
+                    mstore(add(s, 32), shl(sub(256, mul(z, 8)), c3)) // Store c2 adjusted by z digits
+                    mstore(add(s, add(32, z)), shl(8, c2)) // Store the last 31 bytes of c1
+                    mstore(add(s, add(61, z)), shl(8, c1)) // Store the last 31 bytes of c1
+                    mstore(0x40, add(s, 128)) // Update the free memory pointer to point beyond the allocated space
+                }
             }
-            let length := sub(end, ptr)
-            ptr := sub(ptr, 32)
-            mstore(ptr, length)
+        }
+    }
+    /// @notice Helper function for UInt256 Conversion
+    /// @param x The uint256 value to convert
+    /// @return y The string representation of the uint256 value as a
+
+    function itoa31 (uint256 x) private pure returns (uint256 y) {
+        unchecked {
+            y = 0x0030303030303030303030303030303030303030303030303030303030303030;
+            y += x % 10; y += (x / 1e1 % 10) << 8; y += (x / 1e2 % 10) << 16;
+            if (x < 1e3) {
+                if (x < 1e1) return y += 1 << 248;
+                if (x < 1e2) return y += 2 << 248;
+                return y += 3 << 248;
+            }
+            y += (x / 1e3 % 10) << 24; y += (x / 1e4 % 10) << 32; y += (x / 1e5 % 10) << 40;
+            if (x < 1e6) {
+                if (x < 1e4)  return y += 4 << 248;
+                if (x < 1e5)  return y += 5 << 248;
+                return  y += 6 << 248; 
+            }
+            y += (x / 1e6 % 10) << 48; y += (x / 1e7 % 10) << 56; y += (x / 1e8 % 10) << 64;
+            if (x < 1e9) {
+                if (x < 1e7) return y += 7 << 248;
+                if (x < 1e8) return y += 8 << 248; 
+                return y += 9 << 248; 
+            }
+            y += (x / 1e9 % 10) << 72; y += (x / 1e10 % 10) << 80; y += (x / 1e11 % 10) << 88;
+            if (x < 1e12) {
+                if (x < 1e10) return y += 10 << 248; 
+                if (x < 1e11) return y += 11 << 248; 
+                return y += 12 << 248; 
+            }
+            y += (x / 1e12 % 10) << 96; y += (x / 1e13 % 10) << 104; y += (x / 1e14 % 10) << 112;
+            if (x < 1e15) {
+                if (x < 1e13) return y += 13 << 248; 
+                if (x < 1e14) return y += 14 << 248; 
+                return y += 15 << 248; 
+            }
+            y += (x / 1e15 % 10) << 120; y += (x / 1e16 % 10) << 128; y += (x / 1e17 % 10) << 136;
+            if (x < 1e18) {
+                if (x < 1e16) return y += 16 << 248; 
+                if (x < 1e17) return y += 17 << 248; 
+                return y += 18 << 248; 
+            }
+            y += (x / 1e18 % 10) << 144; y += (x / 1e19 % 10) << 152; y += (x / 1e20 % 10) << 160;
+            if (x < 1e21) {
+                if (x < 1e19) return y += 19 << 248; 
+                if (x < 1e20) return y += 20 << 248; 
+                return y += 21 << 248; 
+            }
+            y += (x / 1e21 % 10) << 168; y += (x / 1e22 % 10) << 176; y += (x / 1e23 % 10) << 184;
+            if (x < 1e24) {
+                if (x < 1e22) return y += 22 << 248; 
+                if (x < 1e23) return y += 23 << 248; 
+                return y += 24 << 248; 
+            }
+            y += (x / 1e24 % 10) << 192; y += (x / 1e25 % 10) << 200; y += (x / 1e26 % 10) << 208;
+            if (x < 1e27) {
+                if (x < 1e25) return y += 25 << 248; 
+                if (x < 1e26) return y += 26 << 248; 
+                return y += 27 << 248; 
+            }
+            y += (x / 1e27 % 10) << 216; y += (x / 1e28 % 10) << 224; y += (x / 1e29 % 10) << 232;
+            if (x < 1e30) {
+                if (x < 1e28) return y += 28 << 248; 
+                if (x < 1e29) return y += 29 << 248; 
+                return y += 30 << 248; 
+            }
+            y += (x / 1e30 % 10) << 240; 
+            return y += 31 << 248; 
         }
     }
     
@@ -191,14 +272,18 @@ contract Gateway is Initializable, OwnableUpgradeable {
     /// @param data The bytes memory data to convert
     /// @return uintArray The array of uint256
     
-   function bytesToUInt256Array(bytes memory data) private pure returns (uint256[] memory uintArray) {
-        if (data.length % 32 != 0) {
-            revert InvalidBytesLength();
-        }
+   function bytesToUInt256Array(bytes calldata data) private pure returns (uint256[] memory uintArray) {
+        require(data.length % 32 == 0, "Invalid Bytes Length");
+
         assembly {
-            // Cast the bytes array to a uint256[] array by setting the appropriate length
-            uintArray := data
-            mstore(uintArray, div(mload(data), 32))
+            uintArray := mload(0x40) 
+            mstore(uintArray, div(data.length, 32)) 
+            calldatacopy(
+                add(uintArray,32), 
+                data.offset,
+                data.length 
+            )
+            mstore(0x40, add(add(uintArray, 32), data.length))
         }
     }
 
@@ -287,21 +372,17 @@ contract Gateway is Initializable, OwnableUpgradeable {
 
         //checks if enough gas was paid for callback
         if (estimatedPrice > msg.value) {
-            revert PaidRequestFeeTooLow();
+            require(false, "Paid Callback Fee Too Low");
         }
         else if (estimatedPrice < msg.value) {
             payable(tx.origin).transfer(msg.value - estimatedPrice);
         }
 
         // Payload hash verification
-        if (keccak256(bytes.concat("\x19Ethereum Signed Message:\n32", keccak256(_info.payload))) != _payloadHash) {
-            revert InvalidPayloadHash();
-        }
+        require(ethSignedPayloadHash(_info.payload) == _payloadHash, "Invalid Payload Hash");
 
         // Payload signature verification
-        if (recoverSigner(_payloadHash, _info.payload_signature) != _userAddress) {
-            revert InvalidSignature();
-        }
+        require(recoverSigner(_payloadHash, _info.payload_signature) == _userAddress, "Invalid Payload Signature");
 
         // persisting the task
         tasks[taskId] = Task(sliceLastByte(_payloadHash), false);
@@ -333,22 +414,20 @@ contract Gateway is Initializable, OwnableUpgradeable {
         uint256 _taskId = taskId;
 
         //Set limit on how many random words can be requested
-        if (_numWords > 2000) {
-           revert TooManyVRFRandomWordsRequested();
-        }
+        require(_numWords <= 2000, "Too Many VRF RandomWords Requested");
 
         uint256 estimatedPrice = estimateRequestPrice(_callbackGasLimit);
 
         //checks if enough gas was paid for callback
         if (estimatedPrice > msg.value) {
-            revert PaidRequestFeeTooLow();
+            require(false, "Paid Callback Fee Too Low");
         }
         else if (estimatedPrice < msg.value) {
             payable(tx.origin).transfer(msg.value - estimatedPrice);
         }
 
         //Encode the callback_address as Base64
-        bytes memory callback_address = encodeAddressToBase64(msg.sender);
+        bytes28 callback_address = encodeAddressToBase64(bytes20(msg.sender));
 
         //construct the payload that is sent into the Secret Gateway
         bytes memory payload = bytes.concat(
@@ -362,7 +441,7 @@ contract Gateway is Initializable, OwnableUpgradeable {
         );
 
         //generate the payload hash using the ethereum hash format for messages
-        bytes32 payloadHash = keccak256(bytes.concat("\x19Ethereum Signed Message:\n32", keccak256(payload)));
+        bytes32 payloadHash = ethSignedPayloadHash(payload);
 
         bytes memory emptyBytes = hex"0000";
 
@@ -411,14 +490,10 @@ contract Gateway is Initializable, OwnableUpgradeable {
         Task memory task = tasks[_taskId];
 
         // Check if the task is already completed
-        if (task.completed) {
-            revert TaskAlreadyCompleted();
-        }
+        require(!task.completed,"Task Already Completed");
 
         // Check if the payload hashes match
-        if (sliceLastByte(_info.payload_hash) != task.payload_hash_reduced) {
-            revert InvalidPayloadHash();
-        }
+        require(sliceLastByte(_info.payload_hash) == task.payload_hash_reduced, "Invalid Payload Hash");
 
         // Concatenate packet data elements
         bytes memory data =  bytes.concat(
@@ -438,9 +513,7 @@ contract Gateway is Initializable, OwnableUpgradeable {
         bytes32 packetHash = SHA256.hash(keccak256(data));
 
         // Packet signature verification
-        if (packetHash != _info.packet_hash || recoverSigner(packetHash, _info.packet_signature) != secret_gateway_signer_address) {
-            revert InvalidPacketSignature();
-        }
+        require(packetHash == _info.packet_hash && recoverSigner(packetHash, _info.packet_signature) == secret_gateway_signer_address, "Invalid Packet Signature");
         
         //Mark the task as completed
         tasks[_taskId].completed = true;
