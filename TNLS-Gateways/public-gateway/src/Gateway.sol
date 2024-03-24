@@ -61,7 +61,7 @@ contract Gateway is Initializable, OwnableUpgradeable {
                               Helpers
     //////////////////////////////////////////////////////////////*/
 
-    function ethSignedPayloadHash(bytes memory payload) public pure returns (bytes32 payloadHash) {
+    function ethSignedPayloadHash(bytes memory payload) private pure returns (bytes32 payloadHash) {
         assembly {
             // Allocate memory for the data to hash
             let data := mload(0x40)
@@ -278,11 +278,7 @@ contract Gateway is Initializable, OwnableUpgradeable {
         assembly {
             uintArray := mload(0x40) 
             mstore(uintArray, div(data.length, 32)) 
-            calldatacopy(
-                add(uintArray,32), 
-                data.offset,
-                data.length 
-            )
+            calldatacopy(add(uintArray,32), data.offset, data.length)
             mstore(0x40, add(add(uintArray, 32), data.length))
         }
     }
@@ -305,7 +301,7 @@ contract Gateway is Initializable, OwnableUpgradeable {
     event TaskCompleted(uint256 indexed taskId, bool callbackSuccessful);
 
     /// @notice Emitted when the VRF callback was fulfilled
-    event fulfilledRandomWords(uint256 indexed requestId, uint256[] randomWords);
+    event fulfilledRandomWords(uint256 indexed requestId);
 
     /*//////////////////////////////////////////////////////////////
                              Initializer
@@ -510,7 +506,7 @@ contract Gateway is Initializable, OwnableUpgradeable {
         //bytes32 packetHash = sha256(bytes.concat(keccak256(data)));
 
         //For EVM Chains that don't support the sha256 precompile
-        bytes32 packetHash = SHA256.hash(keccak256(data));
+        bytes32 packetHash = hashSHA256(keccak256(data));
 
         // Packet signature verification
         require(packetHash == _info.packet_hash && recoverSigner(packetHash, _info.packet_signature) == secret_gateway_signer_address, "Invalid Packet Signature");
@@ -527,7 +523,7 @@ contract Gateway is Initializable, OwnableUpgradeable {
             (callbackSuccessful, ) = address(_info.callback_address).call(
                 abi.encodeWithSelector(0x38ba4614, _taskId, randomWords)
             );
-            emit fulfilledRandomWords(_taskId, randomWords);
+            emit fulfilledRandomWords(_taskId);
         }
         else {
             (callbackSuccessful, ) = address(_info.callback_address).call(
@@ -543,11 +539,7 @@ contract Gateway is Initializable, OwnableUpgradeable {
 
     function upgradeHandler() public {
     }
-}
-
-//only used if chain doesn't support SHA256 precompile
-library SHA256 {
-    function hash(bytes32 valueHash) external pure returns (bytes32 output) {
+    function hashSHA256(bytes32 valueHash) private pure returns (bytes32 output) {
         // pad and format input into array of uint32 words 
 
         uint32 a = 0x6a09e667;
@@ -569,6 +561,7 @@ library SHA256 {
                 mstore(add(32, dataPtr), shl(0xf8, 0x80))
                 // end padding with message length
                 mstore(add(56, dataPtr), shl(0xc0, 0x100))
+                mstore(0x40, add(dataPtr, 64))
                 //copy data into w directly
                 mstore(add(w, 0x00), shr(0xe0, mload(dataPtr)))
                 mstore(add(w, 0x20), shr(0xe0, mload(add(dataPtr, 0x04))))
@@ -966,44 +959,34 @@ library SHA256 {
                 mstore(add(ptr, 0x14), shl(0xe0, add(0x9b05688c,f)))
                 mstore(add(ptr, 0x18), shl(0xe0, add(0x1f83d9ab,g)))
                 mstore(add(ptr, 0x1c), shl(0xe0, add(0x5be0cd19,h)))
+                mstore(0x40, add(ptr,0x20)) //update free memory pointer
                 output := mload(ptr)
             }
         }
     }    
     
-    function sigma0(uint32 x) private  pure returns (uint32) {
-        unchecked {
-            return (x >> 2 | x << 30) ^ (x >> 13 | x << 19) ^ (x >> 22 | x << 10);
-        }
+    //do NOT change uint256 to uint32 here or it will break the memory layout for the shifts
+    function sigma0(uint256 x) private pure returns (uint32 result) {
+        assembly {result := xor(xor(or(shr(2, x),shl(30,x)),or(shr(13, x),shl(19,x))),or(shr(22, x),shl(10,x)))}
     }
-
-    function sigma1(uint32 x) private pure returns (uint32) {
-        unchecked {
-            return (x >> 6 | x << 26) ^ (x >> 11 | x << 21) ^ (x >> 25 | x << 7);
-        }
+    //do NOT change uint256 to uint32 here or it will break the memory layout for the shifts
+    function sigma1(uint256 x) private pure returns (uint32 result) {
+       assembly {result := xor(xor(or(shr(6, x),shl(26,x)),or(shr(11, x),shl(21,x))),or(shr(25, x),shl(7,x)))}
     }
 
     function gamma0(uint32 x) private pure returns (uint32 result) {
-        assembly {
-            result := xor(xor(or(shr(7, x), shl(25, x)), or(shr(18, x), shl(14, x))), shr(3, x))
-        }
+        assembly {result := xor(xor(or(shr(7, x), shl(25, x)), or(shr(18, x), shl(14, x))), shr(3, x))}
     }
 
     function gamma1(uint32 x) private pure returns (uint32 result) {
-        assembly {
-            result := xor(xor(or(shr(17, x), shl(15, x)), or(shr(19, x), shl(13, x))), shr(10, x))
-        }
+        assembly {result := xor(xor(or(shr(17, x), shl(15, x)), or(shr(19, x), shl(13, x))), shr(10, x))}
     }
 
    function Ch(uint32 x, uint32 y, uint32 z) private pure returns (uint32 result) {
-        assembly {
-            result := xor(z, and(x, xor(y, z)))
-        }
+        assembly {result := xor(z, and(x, xor(y, z)))}
     }
 
     function Maj(uint32 x, uint32 y, uint32 z) private pure returns (uint32 result) {
-        assembly {
-            result := or(and(or(x, y), z), and(x, y))
-        }
+        assembly {result := or(and(or(x, y), z), and(x, y))}
     }
 }
