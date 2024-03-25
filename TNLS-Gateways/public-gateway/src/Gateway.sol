@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+// Version: 0.2.0-beta2
 pragma solidity ^0.8.24;
 
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
@@ -14,8 +15,8 @@ contract Gateway is Initializable, OwnableUpgradeable {
     //Use hard coded constant values instead of storage variables for Secret VRF, saves around 10,000+ in gas per TX. 
     //Since contract is upgradeable, we can update these values as well with it.
 
-    address constant secret_gateway_signer_address = 0x88e43F4016f8282Ea6235aC069D02BA1cE5417aB;
-    string constant chainId = "534352";
+    address constant secret_gateway_signer_address = 0x2821E794B01ABF0cE2DA0ca171A1fAc68FaDCa06;
+    string constant chainId = "534351";
 
     /*//////////////////////////////////////////////////////////////
                               Structs
@@ -190,7 +191,7 @@ contract Gateway is Initializable, OwnableUpgradeable {
                     mstore(s, add(z, 62)) // Allocate 32 bytes for the string length
                     mstore(add(s, 32), shl(sub(256, mul(z, 8)), c3)) // Store c2 adjusted by z digits
                     mstore(add(s, add(32, z)), shl(8, c2)) // Store the last 31 bytes of c1
-                    mstore(add(s, add(61, z)), shl(8, c1)) // Store the last 31 bytes of c1
+                    mstore(add(s, add(63, z)), shl(8, c1)) // Store the last 31 bytes of c2
                     mstore(0x40, add(s, 128)) // Update the free memory pointer to point beyond the allocated space
                 }
             }
@@ -538,7 +539,9 @@ contract Gateway is Initializable, OwnableUpgradeable {
     //////////////////////////////////////////////////////////////*/
 
     function upgradeHandler() public {
+
     }
+
     function hashSHA256(bytes32 valueHash) private pure returns (bytes32 output) {
         // pad and format input into array of uint32 words 
 
