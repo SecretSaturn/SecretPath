@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Version: 0.2.0-beta2
-pragma solidity ^0.8.24;
+// Chain: Scroll Sepolia (SHA256 precompile)
+pragma solidity ^0.8.25;
 
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
@@ -15,7 +16,7 @@ contract Gateway is Initializable, OwnableUpgradeable {
     //Use hard coded constant values instead of storage variables for Secret VRF, saves around 10,000+ in gas per TX. 
     //Since contract is upgradeable, we can update these values as well with it.
 
-    address constant secret_gateway_signer_address = 0x2821E794B01ABF0cE2DA0ca171A1fAc68FaDCa06;
+    address constant secret_gateway_signer_address = 0x88e43F4016f8282Ea6235aC069D02BA1cE5417aB;
     string constant chainId = "534351";
 
     /*//////////////////////////////////////////////////////////////
@@ -150,7 +151,7 @@ contract Gateway is Initializable, OwnableUpgradeable {
             mstore8(add(resultPtr, 26), mload(add(table, and(shr(94, data), 0x3F))))
             mstore8(add(resultPtr, 27), 0x3d)
             result := mload(resultPtr)
-            mstore(0x40, add(resultPtr,32))
+            mstore(0x40, add(resultPtr,32)) // update the free memory pointer 
         }
     }
 
@@ -164,7 +165,7 @@ contract Gateway is Initializable, OwnableUpgradeable {
                 uint256 c1 = itoa31(x);
                 assembly {
                     s := mload(0x40) // Set s to point to the free memory pointer
-                    let z := shr(248, c1)
+                    let z := shr(248, c1) // Extract the digit count for c1
                     mstore(s, z) // Allocate 32 bytes for the string length
                     mstore(add(s, 32), shl(sub(256, mul(z, 8)), c1)) // Store c2 adjusted by z digits
                     mstore(0x40, add(s, 64)) // Update the free memory pointer
@@ -187,11 +188,11 @@ contract Gateway is Initializable, OwnableUpgradeable {
                 uint256 c3 = itoa31(x/1e62);
                 assembly {
                     s := mload(0x40) // Set s to point to the free memory pointer
-                    let z := shr(248, c3)
+                    let z := shr(248, c3) // Extract the digit count for c3
                     mstore(s, add(z, 62)) // Allocate 32 bytes for the string length
-                    mstore(add(s, 32), shl(sub(256, mul(z, 8)), c3)) // Store c2 adjusted by z digits
-                    mstore(add(s, add(32, z)), shl(8, c2)) // Store the last 31 bytes of c1
-                    mstore(add(s, add(63, z)), shl(8, c1)) // Store the last 31 bytes of c2
+                    mstore(add(s, 32), shl(sub(256, mul(z, 8)), c3)) // Store c3 adjusted by z digits
+                    mstore(add(s, add(32, z)), shl(8, c2)) // Store the last 31 bytes of c2 starting at z bytes
+                    mstore(add(s, add(63, z)), shl(8, c1)) // Store the last 31 bytes of c3 starting at z + 31 bytes
                     mstore(0x40, add(s, 128)) // Update the free memory pointer to point beyond the allocated space
                 }
             }
@@ -302,7 +303,7 @@ contract Gateway is Initializable, OwnableUpgradeable {
     event TaskCompleted(uint256 indexed taskId, bool callbackSuccessful);
 
     /// @notice Emitted when the VRF callback was fulfilled
-    event fulfilledRandomWords(uint256 indexed requestId);
+    event FulfilledRandomWords(uint256 indexed requestId);
 
     /*//////////////////////////////////////////////////////////////
                              Initializer
@@ -430,7 +431,7 @@ contract Gateway is Initializable, OwnableUpgradeable {
         bytes memory payload = bytes.concat(
             '{"data":"{\\"numWords\\":',
             bytes(uint256toString(_numWords)),
-            '}","routing_info": "secret16pcjalfuy72r4k26r4kn5f5x64ruzv30knflwx","routing_code_hash": "49ffed0df451622ac1865710380c14d4af98dca2d32342bb20f2b22faca3d00d" ,"user_address": "0x0000","user_key": "AAA=", "callback_address": "', //unused user_address here + 2 bytes of zeros in base64 for user_key, add RNG Contract address & code hash on Secret 
+            '}","routing_info": "secret1fxs74g8tltrngq3utldtxu9yys5tje8dzdvghr","routing_code_hash": "49ffed0df451622ac1865710380c14d4af98dca2d32342bb20f2b22faca3d00d" ,"user_address": "0x0000","user_key": "AAA=", "callback_address": "', //unused user_address here + 2 bytes of zeros in base64 for user_key, add RNG Contract address & code hash on Secret 
             callback_address,
             '","callback_selector": "OLpGFA==", "callback_gas_limit": ', // 0x38ba4614 hex value already converted into base64, callback_selector of the fullfillRandomWords function
             bytes(uint256toString(_callbackGasLimit)),
@@ -447,7 +448,7 @@ contract Gateway is Initializable, OwnableUpgradeable {
             user_key: emptyBytes, // equals AAA= in base64
             user_pubkey: emptyBytes, // Fill with 0 bytes
             routing_code_hash: "49ffed0df451622ac1865710380c14d4af98dca2d32342bb20f2b22faca3d00d", //RNG Contract codehash on Secret 
-            task_destination_network: "secret-4",
+            task_destination_network: "pulsar-3",
             handle: "request_random",
             nonce: bytes12(0),
             callback_gas_limit: _callbackGasLimit,
@@ -463,7 +464,7 @@ contract Gateway is Initializable, OwnableUpgradeable {
             _taskId,
             chainId,
             tx.origin,
-            "secret16pcjalfuy72r4k26r4kn5f5x64ruzv30knflwx", //RNG Contract address on Secret 
+            "secret1fxs74g8tltrngq3utldtxu9yys5tje8dzdvghr", //RNG Contract address on Secret 
             payloadHash,
             executionInfo
         );
@@ -493,7 +494,7 @@ contract Gateway is Initializable, OwnableUpgradeable {
         require(sliceLastByte(_info.payload_hash) == task.payload_hash_reduced, "Invalid Payload Hash");
 
         // Concatenate packet data elements
-        bytes memory data =  bytes.concat(
+        bytes memory data = bytes.concat(
             bytes(_sourceNetwork),
             bytes(chainId),
             bytes(uint256toString(_taskId)),
@@ -524,7 +525,7 @@ contract Gateway is Initializable, OwnableUpgradeable {
             (callbackSuccessful, ) = address(_info.callback_address).call(
                 abi.encodeWithSelector(0x38ba4614, _taskId, randomWords)
             );
-            emit fulfilledRandomWords(_taskId);
+            emit FulfilledRandomWords(_taskId);
         }
         else {
             (callbackSuccessful, ) = address(_info.callback_address).call(
