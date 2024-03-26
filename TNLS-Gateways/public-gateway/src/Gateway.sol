@@ -16,8 +16,8 @@ contract Gateway is Initializable, OwnableUpgradeable {
     //Use hard coded constant values instead of storage variables for Secret VRF, saves around 10,000+ in gas per TX. 
     //Since contract is upgradeable, we can update these values as well with it.
 
-    address constant secret_gateway_signer_address = 0x88e43F4016f8282Ea6235aC069D02BA1cE5417aB;
-    string constant chainId = "534351";
+    address constant secret_gateway_signer_address = 0x2821E794B01ABF0cE2DA0ca171A1fAc68FaDCa06;
+    string constant chainId = "421614";
 
     /*//////////////////////////////////////////////////////////////
                               Structs
@@ -87,17 +87,17 @@ contract Gateway is Initializable, OwnableUpgradeable {
             //calldataload (4 bytes function selector + 32 bytes signed message hash + 32 bytes bytes _signature length 
             //+ 32 bytes per v (reads 32 bytes in)
             let m := mload(0x40) // Load free memory pointer
-            mstore(0x40, add(m, 128)) // Update free memory pointer
             mstore(m, _signedMessageHash) // Store _signedMessageHash at memory location m
-            mstore(add(m, 32), byte(0, calldataload(164))) // Load v from _signature and store at m + 32
-            mstore(add(m, 64), calldataload(100)) // Load r from _signature and store at m + 64
-            mstore(add(m, 96), calldataload(132)) // Load s from _signature and store at m + 96
+            mstore(add(m, 32), byte(0, calldataload(add(_signature.offset,64)))) // Load v from _signature and store at m + 32
+            mstore(add(m, 64), calldataload(add(_signature.offset,0))) // Load r from _signature and store at m + 64
+            mstore(add(m, 96), calldataload(add(_signature.offset,32))) // Load s from _signature and store at m + 96
             // Call ecrecover: returns 0 on error, address on success, 0 for failure
             if iszero(staticcall(gas(), 0x01, m, 128, m, 32)) {
                 revert(0, 0)
             }
             //load result into result
             signerAddress := mload(m) 
+            mstore(0x40, add(m, 128)) // Update free memory pointer
         }
     }
 
@@ -508,10 +508,13 @@ contract Gateway is Initializable, OwnableUpgradeable {
         //bytes32 packetHash = sha256(bytes.concat(keccak256(data)));
 
         //For EVM Chains that don't support the sha256 precompile
-        bytes32 packetHash = hashSHA256(keccak256(data));
+        //bytes32 packetHash = hashSHA256(keccak256(data));
+
+        // Packet hash verification
+        require(packetHash == _info.packet_hash, "Invalid Packet Hash");
 
         // Packet signature verification
-        require(packetHash == _info.packet_hash && recoverSigner(packetHash, _info.packet_signature) == secret_gateway_signer_address, "Invalid Packet Signature");
+        require(recoverSigner(packetHash, _info.packet_signature) == secret_gateway_signer_address, "Invalid Packet Signature");
         
         //Mark the task as completed
         tasks[_taskId].completed = true;
@@ -542,6 +545,10 @@ contract Gateway is Initializable, OwnableUpgradeable {
     function upgradeHandler() public {
 
     }
+
+    /*//////////////////////////////////////////////////////////////
+            SHA256 for zkEVMs without a SHA256 precompile
+    //////////////////////////////////////////////////////////////*/
 
     function hashSHA256(bytes32 valueHash) private pure returns (bytes32 output) {
         // pad and format input into array of uint32 words 

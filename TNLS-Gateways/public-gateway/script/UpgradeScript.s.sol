@@ -19,7 +19,7 @@ contract UpgradeScript is Script {
 
         // Deploy New Gateway Logic Contract
         //newGatewayLogic = new Gateway();
-        newGatewayLogic = Gateway(0x05Ab2c25F67B6ACA9170144FcC61dc01e2b6b34C);
+        newGatewayLogic = Gateway(0x59D8C9591dB7179c5d592c5bCD42694021885aFC);
         
         gatewayProxyAdmin = ProxyAdmin(0xdDC6d94d9f9FBb0524f069882d7C98241040472E);
 

@@ -15,7 +15,7 @@ contract DeployRandomnessScript is Script {
     function run() public {
         vm.startBroadcast();
 
-        Gateway gateway = Gateway(0x4c14a6A0CD2DA2848D3C31285B828F6364087735);
+        Gateway gateway = Gateway(0xfaFCfceC4e29e9b4ECc8C0a3f7df1011580EEEf2);
         randomnessAddress = new RandomnessReceiver();
         console2.logAddress(address(randomnessAddress));
 
