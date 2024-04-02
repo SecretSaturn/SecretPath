@@ -17,7 +17,7 @@ contract Gateway is Initializable, OwnableUpgradeable {
     //Since contract is upgradeable, we can update these values as well with it.
 
     address constant secret_gateway_signer_address = 0x2821E794B01ABF0cE2DA0ca171A1fAc68FaDCa06;
-    string constant chainId = "421614";
+    string constant chainId = "534351";
 
     /*//////////////////////////////////////////////////////////////
                               Structs
@@ -151,15 +151,15 @@ contract Gateway is Initializable, OwnableUpgradeable {
             mstore8(add(resultPtr, 26), mload(add(table, and(shr(94, data), 0x3F))))
             mstore8(add(resultPtr, 27), 0x3d)
             result := mload(resultPtr)
-            mstore(0x40, add(resultPtr,32)) // update the free memory pointer 
+            mstore(0x40, add(resultPtr, 32)) // update the free memory pointer 
         }
     }
 
     /// @notice Converts a uint256 value into its string representation
     /// @param x The uint256 value to convert
-    /// @return s The string representation of the uint256 value
+    /// @return s The bytes string representation of the uint256 value
 
-    function uint256toString(uint256 x) private pure returns (string memory s) {
+    function uint256toBytesString(uint256 x) private pure returns (bytes memory s) {
         unchecked {
             if (x < 1e31) { 
                 uint256 c1 = itoa31(x);
@@ -272,16 +272,33 @@ contract Gateway is Initializable, OwnableUpgradeable {
     
     /// @notice Converts a bytes memory array to an array of uint256
     /// @param data The bytes memory data to convert
-    /// @return uintArray The array of uint256
+    /// @return result The calldata for the returned Randomness
     
-   function bytesToUInt256Array(bytes calldata data) private pure returns (uint256[] memory uintArray) {
+    function prepareRandomnessBytesToCallbackData(bytes4 callback_selector, uint256 requestId, bytes calldata data) private pure returns (bytes memory result) {
         require(data.length % 32 == 0, "Invalid Bytes Length");
 
         assembly {
-            uintArray := mload(0x40) 
-            mstore(uintArray, div(data.length, 32)) 
-            calldatacopy(add(uintArray,32), data.offset, data.length)
-            mstore(0x40, add(add(uintArray, 32), data.length))
+            result := mload(0x40) 
+            mstore(result, add(100, data.length))
+            mstore(add(result, 32), callback_selector)
+            mstore(add(result, 36), requestId)
+            mstore(add(result, 68), 0x40)
+            mstore(add(result, 100), div(data.length, 32)) 
+            calldatacopy(add(result, 132), data.offset, data.length)
+            mstore(0x40, add(add(result, 132), data.length))
+        }
+    }
+
+    function prepareResultBytesToCallbackData(bytes4 callback_selector, uint256 _taskId, bytes calldata data) private pure returns (bytes memory result) {
+        assembly {
+            result := mload(0x40) 
+            mstore(result, add(100, data.length))
+            mstore(add(result, 32), callback_selector)
+            mstore(add(result, 36), _taskId)
+            mstore(add(result, 68), 0x40)
+            mstore(add(result, 100), data.length) 
+            calldatacopy(add(result, 132), data.offset, data.length)
+            mstore(0x40, add(add(result, 132), data.length))
         }
     }
 
@@ -430,11 +447,11 @@ contract Gateway is Initializable, OwnableUpgradeable {
         //construct the payload that is sent into the Secret Gateway
         bytes memory payload = bytes.concat(
             '{"data":"{\\"numWords\\":',
-            bytes(uint256toString(_numWords)),
+            uint256toBytesString(_numWords),
             '}","routing_info": "secret1fxs74g8tltrngq3utldtxu9yys5tje8dzdvghr","routing_code_hash": "49ffed0df451622ac1865710380c14d4af98dca2d32342bb20f2b22faca3d00d" ,"user_address": "0x0000","user_key": "AAA=", "callback_address": "', //unused user_address here + 2 bytes of zeros in base64 for user_key, add RNG Contract address & code hash on Secret 
             callback_address,
             '","callback_selector": "OLpGFA==", "callback_gas_limit": ', // 0x38ba4614 hex value already converted into base64, callback_selector of the fullfillRandomWords function
-            bytes(uint256toString(_callbackGasLimit)),
+            uint256toBytesString(_callbackGasLimit),
             '}' 
         );
 
@@ -497,7 +514,7 @@ contract Gateway is Initializable, OwnableUpgradeable {
         bytes memory data = bytes.concat(
             bytes(_sourceNetwork),
             bytes(chainId),
-            bytes(uint256toString(_taskId)),
+            uint256toBytesString(_taskId),
             _info.payload_hash,
             _info.result,
             _info.callback_address,
@@ -508,7 +525,7 @@ contract Gateway is Initializable, OwnableUpgradeable {
         //bytes32 packetHash = sha256(bytes.concat(keccak256(data)));
 
         //For EVM Chains that don't support the sha256 precompile
-        //bytes32 packetHash = hashSHA256(keccak256(data));
+        bytes32 packetHash = hashSHA256(keccak256(data));
 
         // Packet hash verification
         require(packetHash == _info.packet_hash, "Invalid Packet Hash");
@@ -524,16 +541,13 @@ contract Gateway is Initializable, OwnableUpgradeable {
         // Additional conversion for Secret VRF into uint256[] if callback_selector matches the fullfillRandomWords selector.
         bool callbackSuccessful; 
         if (_info.callback_selector == 0x38ba4614) {
-            uint256[] memory randomWords = bytesToUInt256Array(_info.result);
             (callbackSuccessful, ) = address(_info.callback_address).call(
-                abi.encodeWithSelector(0x38ba4614, _taskId, randomWords)
-            );
+                prepareRandomnessBytesToCallbackData(0x38ba4614, _taskId, _info.result));
             emit FulfilledRandomWords(_taskId);
         }
         else {
             (callbackSuccessful, ) = address(_info.callback_address).call(
-                abi.encodeWithSelector(_info.callback_selector, _taskId, _info.result)
-            );
+                prepareResultBytesToCallbackData(_info.callback_selector, _taskId, _info.result));
         }
         emit TaskCompleted(_taskId, callbackSuccessful);
     }
