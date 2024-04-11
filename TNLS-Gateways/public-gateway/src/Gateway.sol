@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
-// Version: 0.2.0-beta2
-// Chain: Scroll Sepolia (SHA256 precompile)
+// Version: 0.2.0-RC
+// Chain: Scroll Sepolia
+// Chain-ID: 534351
+// NO SHA256 precompile
 pragma solidity ^0.8.25;
 
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
@@ -17,7 +19,7 @@ contract Gateway is Initializable, OwnableUpgradeable {
     //Since contract is upgradeable, we can update these values as well with it.
 
     //Core Routing
-    string constant chainId = "534351";
+    string constant chain_id = "534351";
     string constant task_destination_network = "pulsar-3";
     address constant secret_gateway_signer_address = 0x2821E794B01ABF0cE2DA0ca171A1fAc68FaDCa06;
 
@@ -64,7 +66,7 @@ contract Gateway is Initializable, OwnableUpgradeable {
     
     uint256 public taskId;
 
-    /// @dev Task ID ====> Task
+    /// @dev Task ID => Task
     mapping(uint256 => Task) public tasks;
 
     /*//////////////////////////////////////////////////////////////
@@ -106,18 +108,6 @@ contract Gateway is Initializable, OwnableUpgradeable {
             //load result into result
             signerAddress := mload(m) 
             mstore(0x40, add(m, 128)) // Update free memory pointer
-        }
-    }
-
-
-    /// @notice Slices the last byte of an bytes32 to make it into a bytes31
-    /// @param data The bytes32 data
-    /// @return slicedData The sliced bytes31 data
-
-   function sliceLastByte(bytes32 data) private pure returns (bytes31 slicedData) {
-        assembly {
-            // Shift the data right by 8 bits, effectively slicing off the last byte
-            slicedData := shr(8, data)
         }
     }
 
@@ -415,12 +405,12 @@ contract Gateway is Initializable, OwnableUpgradeable {
         require(recoverSigner(_payloadHash, _info.payload_signature) == _userAddress, "Invalid Payload Signature");
 
         // persisting the task
-        tasks[_taskId] = Task(sliceLastByte(_payloadHash), false);
+        tasks[_taskId] = Task(bytes31(_payloadHash), false);
 
         //emit the task to be picked up by the relayer
         emit logNewTask(
             _taskId,
-            chainId,
+            chain_id,
             _userAddress,
             _routingInfo,
             _payloadHash,
@@ -486,12 +476,12 @@ contract Gateway is Initializable, OwnableUpgradeable {
         });
 
         // persisting the task
-        tasks[requestId] = Task(sliceLastByte(payloadHash), false);
+        tasks[requestId] = Task(bytes31(payloadHash), false);
 
         //emit the task to be picked up by the relayer
         emit logNewTask(
             requestId,
-            chainId,
+            chain_id,
             tx.origin,
             VRF_routing_info, //RNG Contract address on Secret 
             payloadHash,
@@ -519,12 +509,12 @@ contract Gateway is Initializable, OwnableUpgradeable {
         require(!task.completed,"Task Already Completed");
 
         // Check if the payload hashes match
-        require(sliceLastByte(_info.payload_hash) == task.payload_hash_reduced, "Invalid Payload Hash");
+        require(bytes31(_info.payload_hash) == task.payload_hash_reduced, "Invalid Payload Hash");
 
         // Concatenate packet data elements
         bytes memory data = bytes.concat(
             bytes(_sourceNetwork),
-            bytes(chainId),
+            bytes(chain_id),
             uint256toBytesString(_taskId),
             _info.payload_hash,
             _info.result,
