@@ -16,8 +16,16 @@ contract Gateway is Initializable, OwnableUpgradeable {
     //Use hard coded constant values instead of storage variables for Secret VRF, saves around 10,000+ in gas per TX. 
     //Since contract is upgradeable, we can update these values as well with it.
 
-    address constant secret_gateway_signer_address = 0x2821E794B01ABF0cE2DA0ca171A1fAc68FaDCa06;
+    //Core Routing
     string constant chainId = "534351";
+    string constant task_destination_network = "pulsar-3";
+    address constant secret_gateway_signer_address = 0x2821E794B01ABF0cE2DA0ca171A1fAc68FaDCa06;
+
+    //Secret VRF additions
+    string constant VRF_routing_info = "secret1fxs74g8tltrngq3utldtxu9yys5tje8dzdvghr";
+    string constant VRF_routing_code_hash = "49ffed0df451622ac1865710380c14d4af98dca2d32342bb20f2b22faca3d00d";
+    bytes constant VRF_info = '}","routing_info": "secret1fxs74g8tltrngq3utldtxu9yys5tje8dzdvghr","routing_code_hash": "49ffed0df451622ac1865710380c14d4af98dca2d32342bb20f2b22faca3d00d" ,"user_address": "0x0000","user_key": "AAA=", "callback_address": "';
+
 
     /*//////////////////////////////////////////////////////////////
                               Structs
@@ -204,8 +212,13 @@ contract Gateway is Initializable, OwnableUpgradeable {
 
     function itoa31 (uint256 x) private pure returns (uint256 y) {
         unchecked {
+            //Core principle: last byte contains the mantissa of the number
+            //first 31 bytes contain the converted number. 
+            //Start with 0x30 byte offset, then add the number on it. 
+            //0x30 + the number = the byte in hex that represents that number
             y = 0x0030303030303030303030303030303030303030303030303030303030303030;
             y += x % 10; y += (x / 1e1 % 10) << 8; y += (x / 1e2 % 10) << 16;
+            //use "checkpoints" to not waste too many extra divisions & modulo operations when the "x" is small
             if (x < 1e3) {
                 if (x < 1e1) return y += 1 << 248;
                 if (x < 1e2) return y += 2 << 248;
@@ -381,16 +394,18 @@ contract Gateway is Initializable, OwnableUpgradeable {
         address _userAddress,
         string calldata _routingInfo,
         ExecutionInfo calldata _info) 
-        external payable {
+        external payable returns (uint256 _taskId) {
+
+        _taskId = taskId;
         
         uint256 estimatedPrice = estimateRequestPrice(_info.callback_gas_limit);
 
-        //checks if enough gas was paid for callback
-        if (estimatedPrice > msg.value) {
-            require(false, "Paid Callback Fee Too Low");
-        }
-        else if (estimatedPrice < msg.value) {
+        // Refund any excess gas paid beyond the estimated price
+        if (msg.value > estimatedPrice) {
             payable(tx.origin).transfer(msg.value - estimatedPrice);
+        } else {
+            // If not enough gas was paid, revert the transaction
+            require(msg.value >= estimatedPrice, "Paid Callback Fee Too Low");
         }
 
         // Payload hash verification
@@ -400,11 +415,11 @@ contract Gateway is Initializable, OwnableUpgradeable {
         require(recoverSigner(_payloadHash, _info.payload_signature) == _userAddress, "Invalid Payload Signature");
 
         // persisting the task
-        tasks[taskId] = Task(sliceLastByte(_payloadHash), false);
+        tasks[_taskId] = Task(sliceLastByte(_payloadHash), false);
 
         //emit the task to be picked up by the relayer
         emit logNewTask(
-            taskId,
+            _taskId,
             chainId,
             _userAddress,
             _routingInfo,
@@ -413,7 +428,7 @@ contract Gateway is Initializable, OwnableUpgradeable {
         );
 
         //Increase the taskId to be used in the next gateway call. 
-	    taskId++;
+	    taskId = _taskId + 1;
     }
 
     /// @notice Requests random words for VRF
@@ -426,30 +441,27 @@ contract Gateway is Initializable, OwnableUpgradeable {
         uint32 _callbackGasLimit
     ) external payable returns (uint256 requestId) {
 
-        uint256 _taskId = taskId;
+        requestId = taskId;
 
         //Set limit on how many random words can be requested
         require(_numWords <= 2000, "Too Many VRF RandomWords Requested");
 
         uint256 estimatedPrice = estimateRequestPrice(_callbackGasLimit);
 
-        //checks if enough gas was paid for callback
-        if (estimatedPrice > msg.value) {
-            require(false, "Paid Callback Fee Too Low");
-        }
-        else if (estimatedPrice < msg.value) {
+        // Refund any excess gas paid beyond the estimated price
+        if (msg.value > estimatedPrice) {
             payable(tx.origin).transfer(msg.value - estimatedPrice);
+        } else {
+            // If not enough gas was paid, revert the transaction
+            require(msg.value >= estimatedPrice, "Paid Callback Fee Too Low");
         }
-
-        //Encode the callback_address as Base64
-        bytes28 callback_address = encodeAddressToBase64(bytes20(msg.sender));
 
         //construct the payload that is sent into the Secret Gateway
         bytes memory payload = bytes.concat(
             '{"data":"{\\"numWords\\":',
             uint256toBytesString(_numWords),
-            '}","routing_info": "secret1fxs74g8tltrngq3utldtxu9yys5tje8dzdvghr","routing_code_hash": "49ffed0df451622ac1865710380c14d4af98dca2d32342bb20f2b22faca3d00d" ,"user_address": "0x0000","user_key": "AAA=", "callback_address": "', //unused user_address here + 2 bytes of zeros in base64 for user_key, add RNG Contract address & code hash on Secret 
-            callback_address,
+            VRF_info,
+            encodeAddressToBase64(bytes20(msg.sender)), //callback_address
             '","callback_selector": "OLpGFA==", "callback_gas_limit": ', // 0x38ba4614 hex value already converted into base64, callback_selector of the fullfillRandomWords function
             uint256toBytesString(_callbackGasLimit),
             '}' 
@@ -464,8 +476,8 @@ contract Gateway is Initializable, OwnableUpgradeable {
         ExecutionInfo memory executionInfo = ExecutionInfo({
             user_key: emptyBytes, // equals AAA= in base64
             user_pubkey: emptyBytes, // Fill with 0 bytes
-            routing_code_hash: "49ffed0df451622ac1865710380c14d4af98dca2d32342bb20f2b22faca3d00d", //RNG Contract codehash on Secret 
-            task_destination_network: "pulsar-3",
+            routing_code_hash: VRF_routing_code_hash, //RNG Contract codehash on Secret 
+            task_destination_network: task_destination_network,
             handle: "request_random",
             nonce: bytes12(0),
             callback_gas_limit: _callbackGasLimit,
@@ -474,21 +486,20 @@ contract Gateway is Initializable, OwnableUpgradeable {
         });
 
         // persisting the task
-        tasks[_taskId] = Task(sliceLastByte(payloadHash), false);
+        tasks[requestId] = Task(sliceLastByte(payloadHash), false);
 
         //emit the task to be picked up by the relayer
         emit logNewTask(
-            _taskId,
+            requestId,
             chainId,
             tx.origin,
-            "secret1fxs74g8tltrngq3utldtxu9yys5tje8dzdvghr", //RNG Contract address on Secret 
+            VRF_routing_info, //RNG Contract address on Secret 
             payloadHash,
             executionInfo
         );
 
         //Output the current task_id / request_id to the user and increase the taskId to be used in the next gateway call. 
-        taskId = _taskId + 1;
-        requestId = _taskId;
+        taskId = requestId + 1;
     }
 
     /*//////////////////////////////////////////////////////////////
