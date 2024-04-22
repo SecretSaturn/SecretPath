@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity ^0.8.23;
-
+pragma solidity ^0.8.25;
 
 /// @notice Interface of the VRF Gateway contract. Must be imported.
 interface ISecretVRF {
     function requestRandomness(uint32 _numWords, uint32 _callbackGasLimit) external payable returns (uint256 requestId);
 }
 
-contract RandomnessReciever {
+contract RandomnessReceiver {
 
     /// @notice VRFGateway stores address to the Gateway contract to call for VRF
     address public VRFGateway;

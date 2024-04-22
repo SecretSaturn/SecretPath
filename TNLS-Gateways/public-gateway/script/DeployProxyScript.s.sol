@@ -8,7 +8,7 @@ import "@openzeppelin/contracts/proxy/transparent/ProxyAdmin.sol";
 import "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 
 
-contract DeployGatewayScript is Script {
+contract DeployProxyScript is Script {
     function setUp() public {}
 
     ProxyAdmin proxyAdmin;
@@ -19,7 +19,7 @@ contract DeployGatewayScript is Script {
         vm.startBroadcast();
 
         // Deploy Gateway Logic Contract
-        gatewayLogic = new Gateway();
+        gatewayLogic = Gateway(0xEAe7aC0A51a0441D71A1Ee21005363B36f16EffC);
 
         // Prepare initializer data for Gateway
         bytes memory initializerData = abi.encodeWithSelector(

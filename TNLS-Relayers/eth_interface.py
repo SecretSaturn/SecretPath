@@ -6,7 +6,7 @@ from typing import List
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Lock
 
-from web3 import Web3
+from web3 import Web3, middleware
 from web3.datastructures import AttributeDict
 from web3.middleware import geth_poa_middleware
 
@@ -18,14 +18,17 @@ class EthInterface(BaseChainInterface):
     Implementaion of BaseChainInterface for eth.
     """
 
-    def __init__(self, private_key="", address="", provider=None, contract_address = "", chain_id="", api_endpoint="", **_kwargs):
+    def __init__(self, private_key="", address="", provider=None, contract_address = "", chain_id="", api_endpoint="", timeout = 1, **_kwargs):
         if provider is None:
             """
             If we don't have a set provider, read it from config.
             """
 
-            provider = Web3(Web3.HTTPProvider(api_endpoint, request_kwargs={'timeout': 2}))
+            provider = Web3(Web3.HTTPProvider(api_endpoint, request_kwargs={'timeout': timeout}))
             provider.middleware_onion.inject(geth_poa_middleware, layer=0)
+            provider.middleware_onion.add(middleware.time_based_cache_middleware)
+            provider.middleware_onion.add(middleware.latest_block_based_cache_middleware)
+            provider.middleware_onion.add(middleware.simple_cache_middleware)
 
         self.private_key = private_key
         self.provider = provider
@@ -49,13 +52,13 @@ class EthInterface(BaseChainInterface):
         # create task
         #structure is from eth_task_keys_to_msg
         #callback_gas_limit is on the 5th position on eth_task_keys_to_msgs
-        print(args[2][4])
         if kwargs is {}:
             callback_gas_limit = int(args[2][4], 16)
             tx = contract_function(*args).build_transaction({
                 'from': self.address,
                 'gas': callback_gas_limit,
-                'nonce': deepcopy(self.nonce)
+                'nonce': deepcopy(self.nonce),
+                'gasPrice': self.provider.eth.gas_price
                 #'maxFeePerGas': self.provider.eth.max_base
                 #'maxPriorityFeePerGas': self.provider.eth.max_priority_fee,
             })
@@ -63,7 +66,8 @@ class EthInterface(BaseChainInterface):
             tx = contract_function(**kwargs).build_transaction({
                 'from': self.address,
                 'gas': 2000000,
-                'nonce': deepcopy(self.nonce)
+                'nonce': deepcopy(self.nonce),
+                'gasPrice': self.provider.eth.gas_price
                 #'maxFeePerGas': self.provider.eth.max_priority_fee
                 #'maxPriorityFeePerGas': self.provider.eth.max_priority_fee,
             })
@@ -72,7 +76,8 @@ class EthInterface(BaseChainInterface):
             tx = contract_function(*args, **kwargs).build_transaction({
                 'from': self.address,
                 'gas': callback_gas_limit,
-                'nonce': deepcopy(self.nonce)
+                'nonce': deepcopy(self.nonce),
+                'gasPrice': self.provider.eth.gas_price
                 #'maxFeePerGas': self.provider.eth.max_priority_fee
                 #'maxPriorityFeePerGas': self.provider.eth.max_priority_fee,
             })
@@ -143,11 +148,8 @@ class EthInterface(BaseChainInterface):
 
     def process_transaction(self, transaction):
         try:
-            if str(transaction['chainId']) == str(self.chain_id):
-                tx_receipt = self.provider.eth.get_transaction_receipt(transaction['hash'])
-                return tx_receipt
-            else:
-                raise Exception("Chain_ID of TX and API don't match. Api chain_id: "+str(self.chain_id) + " TX chain_id: "+ str(transaction['chainId']))
+            tx_receipt = self.provider.eth.get_transaction_receipt(transaction['hash'])
+            return tx_receipt
         except Exception as e:
             self.logger.warning(e)
             return None

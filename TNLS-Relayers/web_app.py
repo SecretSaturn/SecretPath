@@ -31,9 +31,12 @@ def generate_eth_config(config_dict, provider=None):
     contract_schema = config_dict['contract_schema']
     chain_id = config_dict['chain_id']
     api_endpoint = config_dict['api_endpoint']
+    timeout = config_dict['timeout']
+
     event_name = 'logNewTask'
     function_name = 'postExecution'
-    initialized_chain = EthInterface(private_key=priv_key, address=address, provider=provider, chain_id=chain_id, api_endpoint=api_endpoint)
+
+    initialized_chain = EthInterface(private_key=priv_key, address=address, provider=provider, chain_id=chain_id, api_endpoint=api_endpoint, timeout=timeout)
     initialized_contract = EthContract(interface=initialized_chain, address=contract_address,
                                        abi=contract_schema)
     eth_tuple = (initialized_chain, initialized_contract, event_name, function_name)
@@ -69,7 +72,7 @@ def generate_scrt_config(config_dict, provider=None):
                                           api_url = api_endpoint, chain_id = chain_id, feegrant_address = feegrant_address)
     else:
         initialized_chain = SCRTInterface(private_key=priv_key, address = address, provider = provider, chain_id = chain_id,  feegrant_address = feegrant_address)
-   
+
     initialized_contract = SCRTContract(interface=initialized_chain, address=contract_address,
                                         abi=contract_schema, code_hash = code_hash)
     scrt_tuple = (initialized_chain, initialized_contract, event_name, function_name)
@@ -96,13 +99,11 @@ def generate_full_config(config_file, provider_pair=None):
     keys_dict = {}
     chains_dict = {}
     for chain in eth_chains:
-        if config_dict[chain]['active'] == True:
-            eth_config = generate_eth_config(config_dict[chain], provider=provider_eth)
-            chains_dict[chain] = eth_config
+        if config_dict[chain]['active']:
+            chains_dict[chain] = generate_eth_config(config_dict[chain], provider=provider_eth)
     for chain in scrt_chains:
-        if config_dict[chain]['active'] == True:
-            scrt_config = generate_scrt_config(config_dict[chain], provider=provider_scrt)
-            chains_dict[chain] = scrt_config
+        if config_dict[chain]['active']:
+            chains_dict[chain] = generate_scrt_config(config_dict[chain], provider=provider_scrt)
     return chains_dict, keys_dict
 
 route_blueprint = Blueprint('route_blueprint', __name__)
@@ -169,7 +170,7 @@ def keys():
 
 
 def app_factory(config_filename=f'{Path(__file__).parent.absolute()}/../config.yml',
-                config_file_converter=generate_full_config, num_loops=None, do_restart=True):
+                config_file_converter=generate_full_config, num_loops=None):
     """
     Creates a Flask app with a relayer running on the backend
     Args:
@@ -189,22 +190,6 @@ def app_factory(config_filename=f'{Path(__file__).parent.absolute()}/../config.y
     app.config['KEYS'] = keys_dict
     app.register_blueprint(route_blueprint)
     relayer.run()
-  #  thread = Thread(target=relayer.run)
-   # thread.start()
-
-    def _thread_restarter():
-        thread_target = thread
-        while True:
-            thread_target.join()
-            relayer = Relayer(config, num_loops=num_loops)
-            thread_2 = Thread(target=relayer.run)
-            thread_2.start()
-            thread_target = thread_2
-            app.config['RELAYER'] = relayer
-
-    thread_restarter = Thread(target=_thread_restarter)
-    if do_restart:
-        thread_restarter.start()
     return app
 
 
