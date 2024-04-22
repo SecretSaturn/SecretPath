@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Version: 0.2.0-RC
-// Chain: Scroll Sepolia
-// Chain-ID: 534351
-// NO SHA256 precompile
+// Chain: Lisk Sepolia Testnet
+// Chain-ID: 4202
+// HAS SHA256 precompile
 pragma solidity ^0.8.25;
 
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
@@ -19,7 +19,7 @@ contract Gateway is Initializable, OwnableUpgradeable {
     //Since contract is upgradeable, we can update these values as well with it.
 
     //Core Routing
-    string constant chain_id = "534351";
+    string constant chain_id = "4202";
     string constant task_destination_network = "pulsar-3";
     address constant secret_gateway_signer_address = 0x2821E794B01ABF0cE2DA0ca171A1fAc68FaDCa06;
 
@@ -523,10 +523,10 @@ contract Gateway is Initializable, OwnableUpgradeable {
         );
         
         // Perform Keccak256 + sha256 hash
-        //bytes32 packetHash = sha256(bytes.concat(keccak256(data)));
+        bytes32 packetHash = sha256(bytes.concat(keccak256(data)));
 
         //For EVM Chains that don't support the sha256 precompile
-        bytes32 packetHash = hashSHA256(keccak256(data));
+        //bytes32 packetHash = hashSHA256(keccak256(data));
 
         // Packet hash verification
         require(packetHash == _info.packet_hash, "Invalid Packet Hash");
