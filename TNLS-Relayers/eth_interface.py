@@ -122,12 +122,32 @@ class EthInterface(BaseChainInterface):
             block_number = self.get_last_block()
 
         valid_transactions = contract_interface.contract.events.logNewTask().get_logs(
-            fromBlock=block_number,
+            fromBlock=block_number
         )
+
+        if len(valid_transactions) == 0:
+            return []
+
         transaction_hashes = [event['transactionHash'].hex() for event in valid_transactions]
         try:
-            block_transactions = self.provider.eth.get_block(block_number, full_transactions=True)['transactions']
-            filtered_transactions = [tx for tx in block_transactions if tx['hash'].hex() in transaction_hashes]
+            # Fetch block with transaction hashes only
+            block_data = self.provider.eth.get_block(block_number, full_transactions=False)
+
+            # Convert transaction hashes to hexadecimal strings
+            transaction_hashes_hex = [tx.hex() for tx in block_data['transactions']]
+
+            # Set of required transaction hashes in hexadecimal
+            required_hashes = set(transaction_hashes)  # Your predefined list of hashes
+
+            # Find matching transaction hashes
+            matching_hashes = set(transaction_hashes_hex).intersection(required_hashes)
+
+            # Fetch full details for only the required transactions
+            filtered_transactions = []
+            if matching_hashes:
+                # Fetch each transaction individually based on matching hashes
+                for hash in matching_hashes:
+                    filtered_transactions.append(self.provider.eth.get_transaction(hash))
         except Exception as e:
             self.logger.warning(e)
             return []
