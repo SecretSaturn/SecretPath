@@ -4,6 +4,7 @@ from logging import getLogger, basicConfig, DEBUG, StreamHandler
 from threading import Lock, Timer
 from concurrent.futures import ThreadPoolExecutor
 from typing import List
+from time import sleep
 
 from secret_sdk.client.lcd import LCDClient
 from secret_sdk.client.lcd.api.tx import CreateTxOptions, BroadcastMode
@@ -37,12 +38,15 @@ class SCRTInterface(BaseChainInterface):
 
         # Initialize account number and sequence
         self.account_number = None
-        self.sequence = 0
+        self.sequence = None
+
+        self.timer = None;
+
+        self.sequence_lock = Lock()
 
         self.sync_interval = sync_interval
         self.executor = ThreadPoolExecutor(max_workers=1)
-        self.timer = Timer(0, self.schedule_sync)
-        self.timer.start()
+        self.schedule_sync()
 
     def schedule_sync(self):
         """
@@ -51,23 +55,29 @@ class SCRTInterface(BaseChainInterface):
         try:
             self.executor.submit(self.sync_account_number_and_sequence)
         except Exception as e:
-            self.logger.error(f"Error during schedule sync: {e}")
+            self.logger.error(f"Error during Secret sequence sync: {e}")
         finally:
             self.timer = Timer(self.sync_interval, self.schedule_sync)
             self.timer.start()
 
 
     def sync_account_number_and_sequence(self):
+        """
+        Syncs the account number and sequence with the latest data from the provider
+        """
         try:
-            account_info = self.wallet.account_number_and_sequence()
-            self.account_number = account_info['account_number']
-            new_sequence = int(account_info['sequence'])
-            if self.sequence is None or new_sequence > self.sequence:
-                self.sequence = new_sequence
-                self.logger.info("Account number and sequence synced")
-            else:
-                self.logger.warning(
-                    f"New sequence {new_sequence} is not greater than the old sequence {self.sequence}.")
+            with self.sequence_lock:
+                self.logger.info("Starting Secret sequence sync")
+                sleep(3)
+                account_info = self.wallet.account_number_and_sequence()
+                self.account_number = account_info['account_number']
+                new_sequence = int(account_info['sequence'])
+                if self.sequence is None or new_sequence >= self.sequence:
+                    self.sequence = new_sequence
+                    self.logger.info("Secret sequence synced")
+                else:
+                    self.logger.warning(
+                        f"New sequence {new_sequence} is not greater than the old sequence {self.sequence}.")
         except Exception as e:
             self.logger.error(f"Error syncing account number and sequence: {e}")
 
@@ -259,7 +269,7 @@ class SCRTContract(BaseContractInterface):
             args = args[0]
         if isinstance(args, str):
             args = json.loads(args)
-        with self.lock:
+        with self.lock and self.interface.sequence_lock:
             txn = self.construct_txn(function_schema, function_name, args)
         transaction_result = self.interface.sign_and_send_transaction(txn)
         try:
