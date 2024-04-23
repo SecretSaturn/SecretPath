@@ -37,28 +37,39 @@ class SCRTInterface(BaseChainInterface):
 
         # Initialize account number and sequence
         self.account_number = None
-        self.sequence = None
+        self.sequence = 0
+
         self.sync_interval = sync_interval
         self.executor = ThreadPoolExecutor(max_workers=1)
-        self.timer = Timer(self.sync_interval, self.schedule_sync)
+        self.timer = Timer(0, self.schedule_sync)
         self.timer.start()
 
     def schedule_sync(self):
         """
         Schedule the sync task with the executor and restart the timer
         """
-        self.executor.submit(self.sync_account_number_and_sequence)
-        self.timer = Timer(self.sync_interval, self.schedule_sync)
-        self.timer.start()
+        try:
+            self.executor.submit(self.sync_account_number_and_sequence)
+        except Exception as e:
+            self.logger.error(f"Error during schedule sync: {e}")
+        finally:
+            self.timer = Timer(self.sync_interval, self.schedule_sync)
+            self.timer.start()
+
 
     def sync_account_number_and_sequence(self):
-        """
-        Syncs the account number and sequence with the latest data from the provider
-        """
-        account_info = self.wallet.account_number_and_sequence()
-        self.account_number = account_info['account_number']
-        self.sequence = int(account_info['sequence'])
-        self.logger.info("Account number and sequence synced")
+        try:
+            account_info = self.wallet.account_number_and_sequence()
+            self.account_number = account_info['account_number']
+            new_sequence = int(account_info['sequence'])
+            if self.sequence is None or new_sequence > self.sequence:
+                self.sequence = new_sequence
+                self.logger.info("Account number and sequence synced")
+            else:
+                self.logger.warning(
+                    f"New sequence {new_sequence} is not greater than the old sequence {self.sequence}.")
+        except Exception as e:
+            self.logger.error(f"Error syncing account number and sequence: {e}")
 
     def sign_and_send_transaction(self, tx):
         """
