@@ -4,6 +4,7 @@ use cosmwasm_std::{
 };
 use secret_toolkit::{
     utils::{pad_handle_result, pad_query_result, HandleCallback},
+    crypto::sha_256,
 };
 use crate::{
     msg::{ExecuteMsg, GatewayMsg, InstantiateMsg, QueryMsg, InputStoreMsg, ResponseStoreMsg, InputRetrieveMsg, ResponseRetrieveMsg},
@@ -48,18 +49,34 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
 fn try_handle(
     deps: DepsMut,
     env: Env,
-    _info: MessageInfo,
+    info: MessageInfo,
     msg: PrivContractHandleMsg,
 ) -> StdResult<Response> {
     // verify signature with stored gateway public key
-    let gateway_key = CONFIG.load(deps.storage)?.gateway_key;
-    deps.api
-        .secp256k1_verify(
+    
+    let config = CONFIG.load(deps.storage)?;
+
+    if info.sender != config.gateway_address {
+        return Err(StdError::generic_err("Only SecretPath Gateway can call this function"));
+    }
+
+    deps.api.secp256k1_verify(
             msg.input_hash.as_slice(),
             msg.signature.as_slice(),
-            gateway_key.as_slice(),
+            config.gateway_key.as_slice(),
         )
         .map_err(|err| StdError::generic_err(err.to_string()))?;
+
+    // combine input values and task to create verification hash, once with the unsafe_payload flag = true and once = falsecargo 
+    let input_hash_safe = sha_256(&[msg.input_values.as_bytes(), msg.task.task_id.as_bytes(),&[0u8]].concat());
+    let input_hash_unsafe = sha_256(&[msg.input_values.as_bytes(), msg.task.task_id.as_bytes(),&[1u8]].concat());
+
+    if msg.input_hash.as_slice() != input_hash_safe.as_slice() {
+        if msg.input_hash.as_slice() == input_hash_unsafe.as_slice() {
+            return Err(StdError::generic_err("Payload was marked as unsafe, not executing"));
+        }
+        return Err(StdError::generic_err("Safe input hash does not match provided input hash"));
+    }
 
     // determine which function to call based on the included handle
     let handle = msg.handle.as_str();
@@ -69,6 +86,9 @@ fn try_handle(
         }
         "retrieve_value" => {
             retrieve_value(deps, env, msg.input_values, msg.task, msg.input_hash)
+        }
+        "change_value" => {
+            change_value(deps, env, msg.input_values, msg.task, msg.input_hash)
         }
         _ => Err(StdError::generic_err("invalid handle".to_string())),
     }
@@ -93,8 +113,78 @@ fn store_value(
         addresses: input.addresses
     };
 
+    let map_contains_kv = KV_MAP.contains(deps.storage, &input.key);
+
+    if map_contains_kv {
+        return Err(StdError::generic_err("Stored value already exists, not executing again"));
+    }
+
     // map task to task info
     KV_MAP.insert(deps.storage, &input.key, &storage_item)?;
+
+    let data = ResponseStoreMsg {
+        key: input.key.to_string(),
+        message: "Value store completed successfully".to_string(),
+    };
+
+    // Serialize the struct to a JSON string1
+    let json_string = serde_json_wasm::to_string(&data)
+        .map_err(|err| StdError::generic_err(err.to_string()))?;
+
+    // Encode the JSON string to base64
+    let result = base64::encode(json_string);
+
+    let callback_msg = GatewayMsg::Output {
+        outputs: PostExecutionMsg {
+            result,
+            task,
+            input_hash,
+        },
+    }
+    .to_cosmos_msg(
+        config.gateway_hash,
+        config.gateway_address.to_string(),
+        None,
+    )?;
+
+    Ok(Response::new()
+        .add_message(callback_msg)
+        .add_attribute("status", "stored value with key"))
+}
+
+fn change_value(
+    deps: DepsMut,
+    _env: Env,
+    input_values: String,
+    task: Task,
+    input_hash: Binary,
+) -> StdResult<Response> {
+    let config = CONFIG.load(deps.storage)?;
+
+    let input: InputStoreMsg = serde_json_wasm::from_str(&input_values)
+    .map_err(|err| StdError::generic_err(err.to_string()))?;
+
+    let value = KV_MAP.get(deps.storage, &input.key)
+        .ok_or_else(|| StdError::generic_err("Value for this key not found"))?;
+
+    if value.viewing_key != input.viewing_key {
+        return Err(StdError::generic_err("Viewing Key incorrect or not found, not allowed to change value"));
+    }
+
+    // create a task information store
+    let storage_item = StorageItem { 
+        value: input.value,
+        viewing_key: input.viewing_key,
+        addresses: input.addresses
+    };
+
+    // Remove old value first
+    KV_MAP.remove(deps.storage, &input.key)
+    .map_err(|err| StdError::generic_err(err.to_string()))?;
+
+    // Insert new value
+    KV_MAP.insert(deps.storage, &input.key, &storage_item)
+    .map_err(|err| StdError::generic_err(err.to_string()))?;
 
     let data = ResponseStoreMsg {
         key: input.key.to_string(),
