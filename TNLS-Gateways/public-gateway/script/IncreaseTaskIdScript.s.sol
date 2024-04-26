@@ -1,5 +1,5 @@
-// SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.23;
+// SPDX-License-Identifier: Apache-2.0
+pragma solidity ^0.8.25;
 
 import "forge-std/Test.sol";
 import "forge-std/Vm.sol";
@@ -22,7 +22,7 @@ contract IncreaseTaskIdScript is Script {
         vm.startBroadcast();
 
         // Gateway (Proxy) Contract
-        gateway = Gateway(0xBFE44aF8e40B6468946e9AA88fe2c6c9D0352F62);
+        gateway = Gateway(0x22A6ddbf431Fb9D657062B8D6eAB27A9Dd499752);
 
         //Increase the task_id to the appropriate value
         gateway.increaseTaskId(50);

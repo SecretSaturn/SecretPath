@@ -6,11 +6,10 @@ from typing import List
 import asyncio
 
 from secret_sdk.client.lcd import LCDClient
-from secret_sdk.client.lcd.api.tx import CreateTxOptions
+from secret_sdk.client.lcd.api.tx import CreateTxOptions, BroadcastMode
 from secret_sdk.core import TxLog
 from secret_sdk.exceptions import LCDResponseError
 from secret_sdk.key.raw import RawKey
-from secret_sdk.protobuf.cosmos.tx.v1beta1 import BroadcastMode
 
 from base_interface import BaseChainInterface, BaseContractInterface, Task
 
@@ -22,7 +21,7 @@ class SCRTInterface(BaseChainInterface):
     """
 
     def __init__(self, private_key="",
-                 address=None, api_url="", chain_id="", provider=None,
+                 address=None, api_url="", chain_id="", provider=None, feegrant_address = None,
                  **kwargs):
         if isinstance(private_key, str):
             self.private_key = RawKey.from_hex(private_key)
@@ -33,6 +32,7 @@ class SCRTInterface(BaseChainInterface):
         else:
             self.provider = provider
         self.address = address
+        self.feegrant_address = feegrant_address
         assert self.address == str(self.private_key.acc_address), f"Address {self.address} and private key " \
                                                                   f"{self.private_key.acc_address} mismatch"
         self.wallet = self.provider.wallet(self.private_key)
@@ -191,12 +191,24 @@ class SCRTContract(BaseContractInterface):
             handle_msg=function_schema,
             contract_code_hash = self.code_hash
         )
+        gas = '3000000'
+        gas_prices = '0.05uscrt'
         tx_options = CreateTxOptions(
             msgs=[txn_msgs],
-            gas="3000000",
-            gas_prices='0.05uscrt',
+            gas=gas,
+            gas_prices=gas_prices,
             sequence=deepcopy(self.interface.sequence),
-            account_number=self.interface.account_number
+            account_number=self.interface.account_number,
+        )
+        fee = self.interface.provider.tx.estimate_fee(options=tx_options)
+        fee.granter = self.interface.feegrant_address
+        tx_options = CreateTxOptions(
+            msgs=[txn_msgs],
+            gas=gas,
+            gas_prices=gas_prices,
+            sequence=deepcopy(self.interface.sequence),
+            account_number=self.interface.account_number,
+            fee = fee
         )
         txn = self.interface.wallet.create_and_sign_tx(options=tx_options)
         self.interface.sequence = self.interface.sequence + 1

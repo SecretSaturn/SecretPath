@@ -1,6 +1,5 @@
-// SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.23;
-
+// SPDX-License-Identifier: Apache-2.0
+pragma solidity ^0.8.25;
 
 /// @notice Interface of the VRF Gateway contract. Must be imported.
 interface ISecretVRF {

@@ -1,12 +1,9 @@
-// SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.23;
+// SPDX-License-Identifier: Apache-2.0
+pragma solidity ^0.8.25;
 
-import "forge-std/Test.sol";
 import "forge-std/Vm.sol";
-import "forge-std/console2.sol";
 import "forge-std/Script.sol";
 import {Gateway} from "../src/Gateway.sol";
-import {RandomnessReciever} from "../src/RandomnessReciever.sol";
 import "@openzeppelin/contracts/proxy/transparent/ProxyAdmin.sol";
 import "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 
@@ -21,12 +18,13 @@ contract UpgradeScript is Script {
         vm.startBroadcast();
 
         // Deploy New Gateway Logic Contract
-        newGatewayLogic = new Gateway();
+        //newGatewayLogic = new Gateway();
+        newGatewayLogic = Gateway(0x59D8C9591dB7179c5d592c5bCD42694021885aFC);
         
-        gatewayProxyAdmin = ProxyAdmin(0x952350102fd243B353fd734B5Cc4e3b4088a4aE7);
+        gatewayProxyAdmin = ProxyAdmin(0xdDC6d94d9f9FBb0524f069882d7C98241040472E);
 
         bytes memory selector = abi.encodeWithSelector(Gateway.upgradeHandler.selector);
-        gatewayProxyAdmin.upgradeAndCall(ITransparentUpgradeableProxy(0x5e16dbD2728d66B4189b2e3AAB71837683Dfd2d7), address(newGatewayLogic),selector);
+        gatewayProxyAdmin.upgradeAndCall(ITransparentUpgradeableProxy(0xfaFCfceC4e29e9b4ECc8C0a3f7df1011580EEEf2), address(newGatewayLogic),selector);
 
         vm.stopBroadcast();
     }
