@@ -1,9 +1,10 @@
 import json
 from copy import deepcopy
 from logging import getLogger, basicConfig, DEBUG, StreamHandler
-from threading import Lock
+from threading import Lock, Timer
+from concurrent.futures import ThreadPoolExecutor
 from typing import List
-import asyncio
+from time import sleep
 
 from secret_sdk.client.lcd import LCDClient
 from secret_sdk.client.lcd.api.tx import CreateTxOptions, BroadcastMode
@@ -20,9 +21,7 @@ class SCRTInterface(BaseChainInterface):
     NOTE: the below default private key is for testing only, and does not correspond to any real account/wallet
     """
 
-    def __init__(self, private_key="",
-                 address=None, api_url="", chain_id="", provider=None, feegrant_address = None,
-                 **kwargs):
+    def __init__(self, private_key="", address=None, api_url="", chain_id="", provider=None, feegrant_address=None, sync_interval=30, **kwargs):
         if isinstance(private_key, str):
             self.private_key = RawKey.from_hex(private_key)
         else:
@@ -33,13 +32,54 @@ class SCRTInterface(BaseChainInterface):
             self.provider = provider
         self.address = address
         self.feegrant_address = feegrant_address
-        assert self.address == str(self.private_key.acc_address), f"Address {self.address} and private key " \
-                                                                  f"{self.private_key.acc_address} mismatch"
+        assert self.address == str(self.private_key.acc_address), f"Address {self.address} and private key {self.private_key.acc_address} mismatch"
         self.wallet = self.provider.wallet(self.private_key)
-        account_number_and_sequence = self.wallet.account_number_and_sequence()
-        self.account_number = account_number_and_sequence['account_number']
-        self.sequence = int(account_number_and_sequence['sequence'])
         self.logger = getLogger()
+
+        # Initialize account number and sequence
+        self.account_number = None
+        self.sequence = None
+
+        self.timer = None;
+
+        self.sequence_lock = Lock()
+
+        self.sync_interval = sync_interval
+        self.executor = ThreadPoolExecutor(max_workers=1)
+        self.schedule_sync()
+
+    def schedule_sync(self):
+        """
+        Schedule the sync task with the executor and restart the timer
+        """
+        try:
+            self.executor.submit(self.sync_account_number_and_sequence)
+        except Exception as e:
+            self.logger.error(f"Error during Secret sequence sync: {e}")
+        finally:
+            self.timer = Timer(self.sync_interval, self.schedule_sync)
+            self.timer.start()
+
+
+    def sync_account_number_and_sequence(self):
+        """
+        Syncs the account number and sequence with the latest data from the provider
+        """
+        try:
+            with self.sequence_lock:
+                self.logger.info("Starting Secret sequence sync")
+                sleep(3)
+                account_info = self.wallet.account_number_and_sequence()
+                self.account_number = account_info['account_number']
+                new_sequence = int(account_info['sequence'])
+                if self.sequence is None or new_sequence >= self.sequence:
+                    self.sequence = new_sequence
+                    self.logger.info("Secret sequence synced")
+                else:
+                    self.logger.warning(
+                        f"New sequence {new_sequence} is not greater than the old sequence {self.sequence}.")
+        except Exception as e:
+            self.logger.error(f"Error syncing account number and sequence: {e}")
 
     def sign_and_send_transaction(self, tx):
         """
@@ -229,7 +269,7 @@ class SCRTContract(BaseContractInterface):
             args = args[0]
         if isinstance(args, str):
             args = json.loads(args)
-        with self.lock:
+        with self.lock and self.interface.sequence_lock:
             txn = self.construct_txn(function_schema, function_name, args)
         transaction_result = self.interface.sign_and_send_transaction(txn)
         try:

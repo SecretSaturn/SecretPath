@@ -1,10 +1,10 @@
 import json
-import os
 from copy import deepcopy
 from logging import getLogger, basicConfig, INFO, StreamHandler
 from typing import List
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from threading import Lock
+from threading import Lock, Timer
+from time import sleep
 
 from web3 import Web3, middleware
 from web3.datastructures import AttributeDict
@@ -18,12 +18,9 @@ class EthInterface(BaseChainInterface):
     Implementaion of BaseChainInterface for eth.
     """
 
-    def __init__(self, private_key="", address="", provider=None, contract_address = "", chain_id="", api_endpoint="", timeout = 1, **_kwargs):
+    def __init__(self, private_key="", address="", provider=None, contract_address="", chain_id="", api_endpoint="", timeout=1, sync_interval=30, **_kwargs):
         if provider is None:
-            """
-            If we don't have a set provider, read it from config.
-            """
-
+            # If no provider, set a default with middleware for various blockchain scenarios
             provider = Web3(Web3.HTTPProvider(api_endpoint, request_kwargs={'timeout': timeout}))
             provider.middleware_onion.inject(geth_poa_middleware, layer=0)
             provider.middleware_onion.add(middleware.time_based_cache_middleware)
@@ -37,13 +34,53 @@ class EthInterface(BaseChainInterface):
         self.chain_id = chain_id
         self.nonce = self.provider.eth.get_transaction_count(self.address, 'pending')
 
+        # Set up logging
         basicConfig(
             level=INFO,
             format="%(asctime)s [Eth Interface: %(levelname)8.8s] %(message)s",
             handlers=[StreamHandler()],
         )
         self.logger = getLogger()
-        pass
+
+        # Initialize lock, executor, and sync interval
+        self.nonce_lock = Lock()
+        self.timer = None
+        self.sync_interval = sync_interval
+        self.executor = ThreadPoolExecutor(max_workers=1)
+
+        # Schedule nonce synchronization
+        self.schedule_sync()
+
+    def schedule_sync(self):
+        """
+        Schedule nonce sync task with the executor and restart the timer
+        """
+        try:
+            self.executor.submit(self.sync_nonce)
+        except Exception as e:
+            self.logger.error(f"Error during Ethereum nonce sync: {e}")
+        finally:
+            # Re-run the sync at specified intervals
+            self.timer = Timer(self.sync_interval, self.schedule_sync)
+            self.timer.start()
+
+    def sync_nonce(self):
+        """
+        Sync the nonce with the latest data from the provider
+        """
+        try:
+            with self.nonce_lock:
+                self.logger.info(f"Starting Chain-id {self.chain_id} nonce sync")
+                sleep(1)  # Introduce a delay if needed to reduce frequency of sync errors
+                new_nonce = self.provider.eth.get_transaction_count(self.address, 'pending')
+                if self.nonce is None or new_nonce >= self.nonce:
+                    self.nonce = new_nonce
+                    self.logger.info(f"Chain-id {self.chain_id} nonce synced")
+                else:
+                    self.logger.warning(
+                        f"New nonce {new_nonce} is not greater than or equal to the old nonce {self.nonce}.")
+        except Exception as e:
+            self.logger.error(f"Error syncing nonce: {e}")
 
     def create_transaction(self, contract_function, *args, **kwargs):
         """
@@ -122,12 +159,32 @@ class EthInterface(BaseChainInterface):
             block_number = self.get_last_block()
 
         valid_transactions = contract_interface.contract.events.logNewTask().get_logs(
-            fromBlock=block_number,
+            fromBlock=block_number
         )
+
+        if len(valid_transactions) == 0:
+            return []
+
         transaction_hashes = [event['transactionHash'].hex() for event in valid_transactions]
         try:
-            block_transactions = self.provider.eth.get_block(block_number, full_transactions=True)['transactions']
-            filtered_transactions = [tx for tx in block_transactions if tx['hash'].hex() in transaction_hashes]
+            # Fetch block with transaction hashes only
+            block_data = self.provider.eth.get_block(block_number, full_transactions=False)
+
+            # Convert transaction hashes to hexadecimal strings
+            transaction_hashes_hex = [tx.hex() for tx in block_data['transactions']]
+
+            # Set of required transaction hashes in hexadecimal
+            required_hashes = set(transaction_hashes)  # Your predefined list of hashes
+
+            # Find matching transaction hashes
+            matching_hashes = set(transaction_hashes_hex).intersection(required_hashes)
+
+            # Fetch full details for only the required transactions
+            filtered_transactions = []
+            if matching_hashes:
+                # Fetch each transaction individually based on matching hashes
+                for hash in matching_hashes:
+                    filtered_transactions.append(self.provider.eth.get_transaction(hash))
         except Exception as e:
             self.logger.warning(e)
             return []
@@ -199,7 +256,7 @@ class EthContract(BaseContractInterface):
                     if isinstance(value, list):
                         args[i] = tuple(value)
                 kwargs = None
-        with self.lock:
+        with self.lock and self.interface.nonce_lock:
             if kwargs is None:
                 txn = self.interface.create_transaction(function, *args)
             elif args is None:
