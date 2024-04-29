@@ -29,3 +29,4 @@ TNLS-Gateways/public-gateway/broadcast/*
 TNLS-Gateways/public-gateway/lib/*
 *.gz
 TNLS-Samples/RNG/contract.wasm.gz
+/TNLS-Gateways/solana-gateway/node_modules
