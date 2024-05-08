@@ -42,6 +42,28 @@ def generate_eth_config(config_dict, provider=None):
     eth_tuple = (initialized_chain, initialized_contract, event_name, function_name)
     return eth_tuple
 
+def generate_solana_config(config_dict):
+    """
+    Converts a config dict into a tuple of (rpc_client, contract_address, wallet_address, function_name) for Solana.
+    Args:
+        config_dict: a dictionary containing relevant information such as RPC endpoint, contract address, wallet address, etc.
+
+    Returns:
+        A tuple of Solana RPC client, contract address, wallet public key, and a function name.
+    """
+
+    rpc_endpoint = config_dict["rpc_endpoint"]
+    contract_address = PublicKey(config_dict["contract_address"])
+    wallet_address = PublicKey(config_dict["wallet_address"])
+
+    # Create a Solana RPC client
+    rpc_client = Client(rpc_endpoint)
+
+    # Create a transaction for interacting with the contract
+    function_name = "executeInstruction"  # Example function name for the Solana program
+
+    solana_tuple = (rpc_client, contract_address, wallet_address, function_name)
+    return solana_tuple
 
 def generate_scrt_config(config_dict, provider=None):
     """
