@@ -1,104 +1,316 @@
 use anchor_lang::prelude::*;
-use solana_program::{
-    account_info::{next_account_info, AccountInfo},
-    entrypoint,
-    entrypoint::ProgramResult,
-    program_error::ProgramError,
-    pubkey::Pubkey,
-    msg,
-};
-use solana_program::keccak::hash;
+use anchor_lang::system_program::{transfer, Transfer};
+use anchor_lang::solana_program::{sysvar::fees::Fees, sysvar::rent::Rent ,sysvar::Sysvar};
+use base64::engine::general_purpose::STANDARD;
+use base64::Engine;
+use solana_program::hash::hashv;
 use solana_program::keccak::Hasher;
-use solana_program::program_pack::{IsInitialized, Pack, Sealed};
-use borsh::{BorshDeserialize, BorshSerialize};
+use solana_program::program::invoke;
+use solana_program::instruction::Instruction;
+use solana_program::secp256k1_recover::{secp256k1_recover, Secp256k1Pubkey};
 
+declare_id!("3KU2e3f5sHiZ7KnxJvRgeHAaVHuw8fJLiyGQmonGy4YZ");
 
 // Constants
 const TASK_DESTINATION_NETWORK: &str = "pulsar-3";
-const SECRET_GATEWAY_SIGNER_ADDRESS: &str = "2821E794B01ABF0cE2DA0ca171A1fAc68FaDCa06";
+const SECRET_GATEWAY_PUBKEY: &str = "BG0KrD7xDmkFXpNMqJn1CLpRaDLcdKpO1NdBBS7VpWh3TZnTv+1kGnk1rnOqyONJONt0fC8OiyqpXCXQaaV1zIs=";
 
 #[program]
-pub mod solana_gateway {
+mod solana_gateway {
     use super::*;
 
     pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
+        let gateway_state = &mut ctx.accounts.gateway_state;
+        gateway_state.owner = *ctx.accounts.user.key;
+        gateway_state.task_id = 0;
+        gateway_state.tasks = Vec::new();
         Ok(())
     }
-    #[derive(BorshDeserialize, BorshSerialize, Debug, PartialEq)]
-pub struct Task {
-    payload_hash_reduced: [u8; 31],
-    completed: bool,
-}
 
-#[derive(BorshDeserialize, BorshSerialize, Debug)]
-pub struct ExecutionInfo {
-    user_key: Vec<u8>,
-    user_pubkey: Vec<u8>,
-    routing_code_hash: String,
-    task_destination_network: String,
-    handle: String,
-    nonce: [u8; 12],
-    callback_gas_limit: u32,
-    payload: Vec<u8>,
-    payload_signature: Vec<u8>,
-}
-
-#[derive(BorshDeserialize, BorshSerialize, Debug)]
-pub struct PostExecutionInfo {
-    payload_hash: [u8; 32],
-    packet_hash: [u8; 32],
-    callback_address: [u8; 20],
-    callback_selector: [u8; 4],
-    callback_gas_limit: [u8; 4],
-    packet_signature: Vec<u8>,
-    result: Vec<u8>,
-}
-
-#[derive(BorshDeserialize, BorshSerialize, Debug)]
-pub struct GatewayState {
-    task_id: u32,
-    tasks: Vec<Task>,
-}
-
-impl Sealed for GatewayState {}
-impl IsInitialized for GatewayState {
-    fn is_initialized(&self) -> bool {
-        self.task_id > 0
+    pub fn increase_task_id(ctx: Context<IncreaseTaskId>, new_task_id: u64) -> Result<()> {
+        let gateway_state = &mut ctx.accounts.gateway_state;
+        if new_task_id <= gateway_state.task_id {
+            return Err(GatewayError::InvalidTaskId.into());
+        }
+        gateway_state.task_id = new_task_id;
+        Ok(())
     }
-}
 
-// Entry point for the Solana program
-entrypoint!(process_instruction);
-fn process_instruction(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
-    instruction_data: &[u8],
-) -> ProgramResult {
-    let account_info_iter = &mut accounts.iter();
+    pub fn send(
+        ctx: Context<Send>,
+        payload_hash: [u8; 32],
+        user_address: Pubkey,
+        routing_info: String,
+        execution_info: ExecutionInfo,
+    ) -> Result<()> {
+        let gateway_state = &mut ctx.accounts.gateway_state;
 
-    let state_account = next_account_info(account_info_iter)?;
-    let mut state = GatewayState::try_from_slice(&state_account.data.borrow())?;
+        // Fetch the current lamports per signature cost for the singature 
+        let lamports_per_signature = Fees::get().unwrap().fee_calculator.lamports_per_signature;
 
-    let task_id = state.task_id;
+        let lamports_per_byte_year = Rent::get().unwrap().lamports_per_byte_year;
+        
+        // Estimate the cost based on the callback gas limit
+        let estimated_price = execution_info.callback_gas_limit as u64 * lamports_per_signature + 33*2*lamports_per_byte_year;
+                
+        let lamports_sent = ctx.accounts.user.lamports();
 
-    // Emitting events would differ on Solana, but you could log messages as events
-    msg!(
-        "logNewTask: task_id: {}, source_network: {}, user_address: {}, routing_info: {}, payload_hash: {:?}, ExecutionInfo",
-        task_id,
-        CHAIN_ID,
-        TASK_DESTINATION_NETWORK,
-        VRF_ROUTING_INFO,
-        hash(instruction_data)
-    );
+        //Check if enough lamports were sent to cover the callback + the extra storage costs
+        require!(
+            lamports_sent >= estimated_price,
+            TaskError::InsufficientFunds
+        );
 
-    // Update state
-    state.task_id += 1;
-    state.serialize(&mut *state_account.data.borrow_mut())?;
+        // Refund any excess lamports paid beyond the estimated price
+        if lamports_sent > estimated_price {
+            let refund_amount = lamports_sent - estimated_price;
+            
+            let cpi_accounts = Transfer {
+                from: ctx.accounts.user.to_account_info(),
+                to: ctx.accounts.user.to_account_info(),
+            };
+        
+            let cpi_context = CpiContext::new(ctx.accounts.system_program.to_account_info(), cpi_accounts);
+        
+            transfer(cpi_context, refund_amount)?;
+        }
 
-    Ok(())
-}
+        //Hash the payload
+        let mut hasher = Hasher::default();
+        hasher.hash(&execution_info.payload);
+        let generated_payload_hash = hasher.result();
+
+        // Payload hash verification
+        require!(
+            generated_payload_hash.to_bytes() == payload_hash,
+            TaskError::InvalidPayloadHash
+        );
+
+        // Persist the task
+        let task = Task {
+            payload_hash,
+            completed: false,
+        };
+
+        gateway_state.tasks.push(task);
+
+        emit!(LogNewTask {
+            task_id: gateway_state.task_id,
+            task_destination_network: TASK_DESTINATION_NETWORK.to_string(),
+            user_address: user_address,
+            payload_hash: payload_hash,
+            execution_info: execution_info,
+        });
+
+        gateway_state.task_id += 1;
+        Ok(())
+    }
+
+    pub fn post_execution(
+        ctx: Context<PostExecution>,
+        task_id: u64,
+        source_network: String,
+        post_execution_info: PostExecutionInfo,
+    ) -> Result<()> {
+        let gateway_state = &mut ctx.accounts.gateway_state;
+
+        let task = gateway_state
+            .tasks
+            .get_mut(task_id as usize)
+            .ok_or(TaskError::TaskNotFound)?;
+
+        // Check if the task is already completed
+        require!(!task.completed, TaskError::TaskAlreadyCompleted);
+
+        // Check if the payload hashes match
+        require!(
+            task.payload_hash == post_execution_info.payload_hash,
+            TaskError::InvalidPayloadHash
+        );
+
+        // Concatenate packet data elements
+        let data = [
+            post_execution_info.source_network.as_bytes(),
+            TASK_DESTINATION_NETWORK.as_bytes(),
+            &task_id.to_le_bytes(),
+            &post_execution_info.payload_hash,
+            &post_execution_info.result,
+            &post_execution_info.callback_address.as_bytes(),
+            &post_execution_info.callback_selector.as_bytes(),
+        ]
+            .concat();
+
+        // Perform Keccak256 + sha256 hash
+        let packet_hash = hashv(&[hashv(&[&data]).to_bytes().as_ref()]);
+
+        // Packet hash verification
+        require!(
+            packet_hash.to_bytes() == post_execution_info.packet_hash,
+            TaskError::InvalidPacketHash
+        );
+
+        // Decode the base64 public key
+        let pubkey_bytes = STANDARD.decode(SECRET_GATEWAY_PUBKEY).unwrap();
+        let expected_pubkey = Secp256k1Pubkey(pubkey_bytes.try_into().unwrap());
+
+        // Extract the recovery ID and signature from the packet signature
+        // RecoveryID here might me 27,28 due to the ethereum bug
+        let recovery_id = post_execution_info.packet_signature[64];
+        let signature = &post_execution_info.packet_signature[..64];
+
+        // Perform the signature recovery
+        let recovered_pubkey = secp256k1_recover(&packet_hash.to_bytes(), recovery_id, signature)
+            .map_err(|_| error!(TaskError::InvalidPacketSignature))?;
+
+        // Verify that the recovered public key matches the expected public key
+        require!(
+            recovered_pubkey == expected_pubkey,
+            TaskError::InvalidPacketSignature
+        );
+
+        // Mark the task as completed
+        task.completed = true;
+
+        let callback_data = CallbackData {
+            callback_selector: post_execution_info.callback_selector,
+            task_id: task_id,
+            result: post_execution_info.result,
+        };
+
+        let borsh_data = callback_data.try_to_vec().unwrap();
+
+        // Execute the callback
+        let callback_result = invoke(
+            &Instruction {
+                program_id: ctx.accounts.callback_program.key(),
+                accounts: vec![AccountMeta::new(ctx.accounts.callback_address.key(), false)],
+                data: borsh_data,
+            },
+            &[ctx.accounts.callback_address.clone()],
+        );
+
+        emit!(TaskCompleted {
+            task_id,
+            callback_successful: callback_result.is_ok()
+        });
+
+        Ok(())
+    }
 }
 
 #[derive(Accounts)]
-pub struct Initialize {}
+pub struct Initialize<'info> {
+    #[account(init, payer = user, space = 8 + 5000)]
+    pub gateway_state: Account<'info, GatewayState>,
+    #[account(mut)]
+    pub user: Signer<'info>,
+    pub system_program: Program<'info, System>,
+}
 
+#[derive(Accounts)]
+pub struct IncreaseTaskId<'info> {
+    #[account(mut, has_one = owner)]
+    pub gateway_state: Account<'info, GatewayState>,
+    pub owner: Signer<'info>,
+}
+
+#[derive(Accounts)]
+pub struct Send<'info> {
+    #[account(mut)]
+    pub gateway_state: Account<'info, GatewayState>,
+    pub user: Signer<'info>,
+    pub system_program: Program<'info, System>,
+    pub callback_program: Program<'info, System>,
+    pub callback_address: AccountInfo<'info>,
+}
+
+#[derive(Accounts)]
+pub struct PostExecution<'info> {
+    #[account(mut)]
+    pub gateway_state: Account<'info, GatewayState>,
+    pub callback_program: Program<'info, System>,
+    pub callback_address: AccountInfo<'info>,
+}
+
+#[account]
+pub struct GatewayState {
+    pub owner: Pubkey,
+    pub task_id: u64,
+    pub tasks: Vec<Task>,
+}
+
+#[derive(Debug, Clone, AnchorSerialize, AnchorDeserialize)]
+pub struct Task {
+    pub payload_hash: [u8; 32],
+    pub completed: bool,
+}
+
+#[derive(Debug, Clone, AnchorSerialize, AnchorDeserialize)]
+pub struct ExecutionInfo {
+    pub user_key: Vec<u8>,
+    pub user_pubkey: Vec<u8>,
+    pub routing_code_hash: String,
+    pub task_destination_network: String,
+    pub handle: String,
+    pub nonce: [u8; 12],
+    pub callback_gas_limit: u32,
+    pub payload: Vec<u8>,
+    pub payload_signature: Vec<u8>,
+}
+
+#[derive(Debug, Clone, AnchorSerialize, AnchorDeserialize)]
+pub struct PostExecutionInfo {
+    pub source_network: String,
+    pub payload_hash: [u8; 32],
+    pub packet_hash: [u8; 32],
+    pub callback_address: String,
+    pub callback_selector: String,
+    pub callback_gas_limit: u32,
+    pub packet_signature: Vec<u8>,
+    pub result: Vec<u8>,
+}
+
+//#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, AnchorSerialize, AnchorDeserialize)]
+pub struct CallbackData {
+    callback_selector: String,
+    task_id: u64,
+    result: Vec<u8>,
+}
+
+#[event]
+pub struct TaskCompleted {
+    pub task_id: u64,
+    pub callback_successful: bool,
+}
+
+#[event]
+pub struct LogNewTask {
+    pub task_id: u64,
+    pub task_destination_network: String,
+    pub user_address: Pubkey,
+    pub payload_hash: [u8; 32],
+    pub execution_info: ExecutionInfo,
+}
+
+#[error_code]
+pub enum TaskError {
+    #[msg("Task already completed")]
+    TaskAlreadyCompleted,
+    #[msg("Invalid payload hash")]
+    InvalidPayloadHash,
+    #[msg("Invalid packet hash")]
+    InvalidPacketHash,
+    #[msg("Invalid packet signature")]
+    InvalidPacketSignature,
+    #[msg("Task not found")]
+    TaskNotFound,
+    #[msg("Insufficient funds")]
+    InsufficientFunds,
+}
+
+#[error_code]
+pub enum GatewayError {
+    #[msg("The new task_id must be greater than the current task_id.")]
+    InvalidTaskId,
+}
