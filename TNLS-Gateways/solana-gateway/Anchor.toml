@@ -11,7 +11,7 @@ solana_gateway = "C59pZRudUup3CnQ8yDZt4ScgwD85Z65tDJZAzdtmyRwd"
 url = "https://api.apr.dev"
 
 [provider]
-cluster = "Localnet"
+cluster = "https://api.devnet.solana.com"
 wallet = "~/.config/solana/id.json"
 
 [scripts]
