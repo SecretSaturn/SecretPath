@@ -1,13 +1,24 @@
-use anchor_lang::prelude::*;
-use anchor_lang::system_program::{transfer, Transfer, create_account, CreateAccount};
-use anchor_lang::solana_program::{sysvar::fees::Fees, sysvar::rent::Rent ,sysvar::Sysvar};
-use base64::engine::general_purpose::STANDARD;
-use base64::Engine;
-use solana_program::hash::hashv;
-use solana_program::keccak::Hasher;
-use solana_program::program::invoke;
-use solana_program::instruction::Instruction;
-use solana_program::secp256k1_recover::{secp256k1_recover, Secp256k1Pubkey};
+use anchor_lang::{
+        prelude::*,
+        system_program::{transfer, Transfer},
+        solana_program::{
+            sysvar::{rent::Rent, Sysvar}
+        }
+};
+
+use solana_program::{
+    program::invoke,
+    instruction::Instruction,
+    secp256k1_recover::{secp256k1_recover, Secp256k1Pubkey}
+};
+
+use base64::{
+    engine::general_purpose::STANDARD,
+    Engine
+};
+
+pub mod errors;
+use crate::errors::{TaskError, GatewayError};
 
 declare_id!("3KU2e3f5sHiZ7KnxJvRgeHAaVHuw8fJLiyGQmonGy4YZ");
 
@@ -23,15 +34,15 @@ mod solana_gateway {
         let gateway_state = &mut ctx.accounts.gateway_state;
         gateway_state.owner = *ctx.accounts.user.key;
         gateway_state.task_id = 0;
-        gateway_state.length = 0;
-        gateway_state.page_count = 0;
+        gateway_state.tasks = Vec::new();
+
         Ok(())
     }
 
     pub fn increase_task_id(ctx: Context<IncreaseTaskId>, new_task_id: u64) -> Result<()> {
         let gateway_state = &mut ctx.accounts.gateway_state;
         if new_task_id <= gateway_state.task_id {
-            return Err(GatewayError::InvalidTaskId.into());
+            return Err(GatewayError::TaskIdTooLow.into());
         }
         gateway_state.task_id = new_task_id;
         Ok(())
@@ -41,19 +52,20 @@ mod solana_gateway {
         ctx: Context<Send>,
         payload_hash: [u8; 32],
         user_address: Pubkey,
-        _routing_info: String,
+        routing_info: String,
         execution_info: ExecutionInfo,
     ) -> Result<()> {
         let gateway_state = &mut ctx.accounts.gateway_state;
 
         // Fetch the current lamports per signature cost for the singature 
-        let lamports_per_signature = Fees::get().unwrap().fee_calculator.lamports_per_signature;
+        let lamports_per_signature = 10;
 
         //Calculate the rent for extra storage
         let lamports_per_byte_year = Rent::get().unwrap().lamports_per_byte_year;
         
         // Estimate the cost based on the callback gas limit
-        let estimated_price = execution_info.callback_gas_limit as u64 * lamports_per_signature + 33*2*lamports_per_byte_year;
+        let estimated_price = execution_info.callback_gas_limit as u64 * lamports_per_signature 
+        + 33*2*lamports_per_byte_year;
                 
         let lamports_sent = ctx.accounts.user.lamports();
 
@@ -78,98 +90,62 @@ mod solana_gateway {
         }
 
         //Hash the payload
-        let mut hasher = Hasher::default();
-        hasher.hash(&execution_info.payload);
-        let generated_payload_hash = hasher.result();
+        let generated_payload_hash = solana_program::keccak::hash(&execution_info.payload);
 
-        // Payload hash verification
+/*      // Payload hash verification
         require!(
             generated_payload_hash.to_bytes() == payload_hash,
             TaskError::InvalidPayloadHash
-        );
+        ); */
 
         // Persist the task
         let task = Task {
             payload_hash: payload_hash,
-            completed: false,
+            task_id: gateway_state.task_id,
+            completed: false
         };
 
-        // Determine the page index and element index within the page
-        let page_index = gateway_state.length / ELEMENTS_PER_PAGE as u64;
-        let element_index = (gateway_state.length % ELEMENTS_PER_PAGE as u64) as usize;
+        // Calculate the array index
+        let index = (gateway_state.task_id % gateway_state.max_tasks) as usize;
 
-
-        // Check if a new page is needed
-        if gateway_state.length % ELEMENTS_PER_PAGE as u64 == 0 {
-
-            // Create a new page account
-            let gateway_key = gateway_state.key();
-            let page_index_bytes = page_index.to_le_bytes();
-
-            let page_seeds = &[
-                b"page",
-                gateway_key.as_ref(),
-                &page_index_bytes,
-            ];
-
-            let page_signer = &[&page_seeds[..]];
-
-            let space = 8 + 8 + std::mem::size_of::<Task>() * ELEMENTS_PER_PAGE;
-            let lamports = Rent::get()?.minimum_balance(space);
-            
-            let cpi_accounts = CreateAccount {
-                from: ctx.accounts.user.to_account_info(),
-                to: ctx.accounts.page_account.to_account_info(),
-            };
-
-            let cpi_context = CpiContext::new_with_signer(
-                ctx.accounts.system_program.to_account_info(),
-                cpi_accounts,
-                page_signer,
-            );
-
-            create_account(cpi_context, lamports, space as u64, &id())?;
-            gateway_state.page_count += 1;
+        // If the array isn't filled up yet, just push it to the end 
+        if index >= gateway_state.tasks.len() {
+            gateway_state.tasks.push(task);
         }
-
-        let page_account = &mut ctx.accounts.page_account;
-        page_account.elements[element_index] = task;
-        page_account.count += 1;
-
-        gateway_state.length += 1;
+        else {
+            //If a task already exists, it will be overwritten as expected from the max.
+            gateway_state.tasks[index] = task;
+        }
 
         emit!(LogNewTask {
             task_id: gateway_state.task_id,
             task_destination_network: TASK_DESTINATION_NETWORK.to_string(),
             user_address: user_address,
+            routing_info: routing_info,
             payload_hash: payload_hash,
             execution_info: execution_info,
         });
 
         gateway_state.task_id += 1;
+
         Ok(())
     }
 
     pub fn post_execution(
         ctx: Context<PostExecution>,
         task_id: u64,
-        _source_network: String,
+        source_network: String,
         post_execution_info: PostExecutionInfo,
     ) -> Result<()> {
-        let _gateway_state = &mut ctx.accounts.gateway_state;
+        let gateway_state = &mut ctx.accounts.gateway_state;
+        
+        let index = (task_id % gateway_state.max_tasks) as usize;
 
-        let _page_index = task_id / ELEMENTS_PER_PAGE as u64;
-        let element_index = (task_id % ELEMENTS_PER_PAGE as u64) as usize;
-    
-        // Fetch the page account
-        let page_account = &ctx.accounts.page_account;
-    
-        // Retrieve the task from the page
-        let mut task = page_account
-            .elements
-            .get(element_index)
-            .ok_or(TaskError::TaskNotFound)?
-            .clone();
+        require!(index < gateway_state.tasks.len(), TaskError::InvalidIndex);
+
+        let task = gateway_state.tasks[index];
+
+        require!(task_id != task.task_id, TaskError::TaskIdAlreadyPruned);
 
         // Check if the task is already completed
         require!(!task.completed, TaskError::TaskAlreadyCompleted);
@@ -182,18 +158,17 @@ mod solana_gateway {
 
         // Concatenate packet data elements
         let data = [
-            post_execution_info.source_network.as_bytes(),
+            source_network.as_bytes(),
             TASK_DESTINATION_NETWORK.as_bytes(),
             &task_id.to_le_bytes(),
             &post_execution_info.payload_hash,
             &post_execution_info.result,
             &post_execution_info.callback_address.as_bytes(),
             &post_execution_info.callback_selector.as_bytes(),
-        ]
-            .concat();
+        ].concat();
 
         // Perform Keccak256 + sha256 hash
-        let packet_hash = hashv(&[hashv(&[&data]).to_bytes().as_ref()]);
+        let packet_hash = solana_program::keccak::hash(&solana_program::hash::hash(&data).to_bytes());
 
         // Packet hash verification
         require!(
@@ -221,7 +196,7 @@ mod solana_gateway {
         );
 
         // Mark the task as completed
-        task.completed = true;
+        gateway_state.tasks[index].completed = true;
 
         let callback_data = CallbackData {
             callback_selector: post_execution_info.callback_selector.clone(),
@@ -258,7 +233,7 @@ mod solana_gateway {
 
 #[derive(Accounts)]
 pub struct Initialize<'info> {
-    #[account(init, payer = user, space = 8 + 8 + 8 + 100)]
+    #[account(init, payer = user, space = 8 + 8 + 8 + 9000)]
     pub gateway_state: Account<'info, GatewayState>,
     #[account(mut)]
     pub user: Signer<'info>,
@@ -272,42 +247,19 @@ pub struct IncreaseTaskId<'info> {
     pub owner: Signer<'info>,
 }
 
-const ELEMENTS_PER_PAGE: usize = 100; // Adjust based on the element size and 10,000 bytes limit
-
-#[account]
-pub struct Page {
-    pub elements: [Task; ELEMENTS_PER_PAGE],
-    pub count: u64, // Number of elements in the page
-}
-
 #[derive(Accounts)]
-#[instruction(page_index: u64)]
 pub struct Send<'info> {
     #[account(mut)]
     pub gateway_state: Account<'info, GatewayState>,
-    #[account(
-        init,
-        payer = user, 
-        space = 8 + 8 + std::mem::size_of::<Task>() * ELEMENTS_PER_PAGE, 
-        seeds = [b"page", gateway_state.key().as_ref(), &page_index.to_le_bytes()], 
-        bump
-    )]
-    pub page_account: Account<'info, Page>,
     #[account(mut)]
     pub user: Signer<'info>,
     pub system_program: Program<'info, System>,
 }
 
 #[derive(Accounts)]
-#[instruction(task_id: u64)]
 pub struct PostExecution<'info> {
     #[account(mut)]
     pub gateway_state: Account<'info, GatewayState>,
-    #[account(
-        seeds = [b"page", gateway_state.key().as_ref(), &(task_id / ELEMENTS_PER_PAGE as u64).to_le_bytes()],
-        bump
-    )]
-    pub page_account: Account<'info, Page>,
     #[account(mut)]
     pub user: Signer<'info>,
     pub system_program: Program<'info, System>,
@@ -317,13 +269,14 @@ pub struct PostExecution<'info> {
 pub struct GatewayState {
     pub owner: Pubkey,
     pub task_id: u64,
-    pub length: u64,
-    pub page_count: u64,
+    pub tasks: Vec<Task>,
+    pub max_tasks: u64, 
 }
 
-#[derive(Debug, Clone, AnchorSerialize, AnchorDeserialize)]
+#[derive(Debug, Clone, AnchorSerialize, AnchorDeserialize, Copy)]
 pub struct Task {
     pub payload_hash: [u8; 32],
+    pub task_id: u64,
     pub completed: bool,
 }
 
@@ -342,7 +295,6 @@ pub struct ExecutionInfo {
 
 #[derive(Debug, Clone, AnchorSerialize, AnchorDeserialize)]
 pub struct PostExecutionInfo {
-    pub source_network: String,
     pub payload_hash: [u8; 32],
     pub packet_hash: [u8; 32],
     pub callback_address: String,
@@ -352,7 +304,6 @@ pub struct PostExecutionInfo {
     pub result: Vec<u8>,
 }
 
-//#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[derive(Debug, Clone, AnchorSerialize, AnchorDeserialize)]
 pub struct CallbackData {
     callback_selector: String,
@@ -371,28 +322,7 @@ pub struct LogNewTask {
     pub task_id: u64,
     pub task_destination_network: String,
     pub user_address: Pubkey,
+    pub routing_info: String,
     pub payload_hash: [u8; 32],
     pub execution_info: ExecutionInfo,
-}
-
-#[error_code]
-pub enum TaskError {
-    #[msg("Task already completed")]
-    TaskAlreadyCompleted,
-    #[msg("Invalid payload hash")]
-    InvalidPayloadHash,
-    #[msg("Invalid packet hash")]
-    InvalidPacketHash,
-    #[msg("Invalid packet signature")]
-    InvalidPacketSignature,
-    #[msg("Task not found")]
-    TaskNotFound,
-    #[msg("Insufficient funds")]
-    InsufficientFunds,
-}
-
-#[error_code]
-pub enum GatewayError {
-    #[msg("The new task_id must be greater than the current task_id.")]
-    InvalidTaskId,
 }
