@@ -5,13 +5,11 @@ use anchor_lang::{
             sysvar::{rent::Rent, Sysvar}
         }
 };
-
 use solana_program::{
     program::invoke,
     instruction::Instruction,
     secp256k1_recover::{secp256k1_recover, Secp256k1Pubkey}
 };
-
 use base64::{
     engine::general_purpose::STANDARD,
     Engine
@@ -90,7 +88,7 @@ mod solana_gateway {
         }
 
         //Hash the payload
-        let generated_payload_hash = solana_program::keccak::hash(&execution_info.payload);
+        let generated_payload_hash = solana_program::keccak::hash(&["\x19Ethereum Signed Message:\n32".as_bytes(),&solana_program::keccak::hash(&execution_info.payload).to_bytes()].concat());
 
 /*      // Payload hash verification
         require!(
