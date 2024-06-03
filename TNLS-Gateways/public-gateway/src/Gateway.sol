@@ -1,8 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Version: 0.2.0
-// Chain: Fhenix Frontier Testnet
-// Chain-ID: 42069
-// HAS SHA256 precompile
+// Version: 0.2.1
 pragma solidity ^0.8.25;
 
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
@@ -19,14 +16,15 @@ contract Gateway is Initializable, OwnableUpgradeable {
     //Since contract is upgradeable, we can update these values as well with it.
 
     //Core Routing
-    string constant chain_id = "42069";
-    string constant task_destination_network = "pulsar-3";
-    address constant secret_gateway_signer_address = 0x2821E794B01ABF0cE2DA0ca171A1fAc68FaDCa06;
+    bytes32 immutable chain_id_1; bytes32 immutable chain_id_2; 
+    bytes32 immutable chain_id_3; uint256 immutable chain_id_length; 
+    string constant task_destination_network = "secret-4";
+    address constant secret_gateway_signer_address = 0x88e43F4016f8282Ea6235aC069D02BA1cE5417aB;
 
     //Secret VRF additions
-    string constant VRF_routing_info = "secret1fxs74g8tltrngq3utldtxu9yys5tje8dzdvghr";
+    string constant VRF_routing_info = "secret16pcjalfuy72r4k26r4kn5f5x64ruzv30knflwx";
     string constant VRF_routing_code_hash = "49ffed0df451622ac1865710380c14d4af98dca2d32342bb20f2b22faca3d00d";
-    bytes constant VRF_info = '}","routing_info": "secret1fxs74g8tltrngq3utldtxu9yys5tje8dzdvghr","routing_code_hash": "49ffed0df451622ac1865710380c14d4af98dca2d32342bb20f2b22faca3d00d" ,"user_address": "0x0000","user_key": "AAA=", "callback_address": "';
+    bytes constant VRF_info = abi.encodePacked('}","routing_info": "',VRF_routing_info,'"routing_code_hash": "',VRF_routing_code_hash,'" ,"user_address": "0x0000","user_key": "AAA=", "callback_address": "');
 
 
     /*//////////////////////////////////////////////////////////////
@@ -75,12 +73,11 @@ contract Gateway is Initializable, OwnableUpgradeable {
 
     function ethSignedPayloadHash(bytes memory payload) private pure returns (bytes32 payloadHash) {
         assembly {
-            // Allocate memory for the data to hash
-            let data := mload(0x40)
+            // Take scratch memory for the data to hash
+            let data := mload(0x00)
             mstore(data,"\x19Ethereum Signed Message:\n32")
             mstore(add(data, 28), keccak256(add(payload, 32), mload(payload)))
             payloadHash := keccak256(data, 60)
-            mstore(0x40, add(data, 64))
         }
     }
 
@@ -98,9 +95,9 @@ contract Gateway is Initializable, OwnableUpgradeable {
             //+ 32 bytes per v (reads 32 bytes in)
             let m := mload(0x40) // Load free memory pointer
             mstore(m, _signedMessageHash) // Store _signedMessageHash at memory location m
-            mstore(add(m, 32), byte(0, calldataload(add(_signature.offset,64)))) // Load v from _signature and store at m + 32
-            mstore(add(m, 64), calldataload(add(_signature.offset,0))) // Load r from _signature and store at m + 64
-            mstore(add(m, 96), calldataload(add(_signature.offset,32))) // Load s from _signature and store at m + 96
+            mstore8(add(m, 32), byte(0, calldataload(add(_signature.offset, 64)))) // Load v from _signature and store at m + 32
+            mstore(add(m, 64), calldataload(add(_signature.offset, 0))) // Load r from _signature and store at m + 64
+            mstore(add(m, 96), calldataload(add(_signature.offset, 32))) // Load s from _signature and store at m + 96
             // Call ecrecover: returns 0 on error, address on success, 0 for failure
             if iszero(staticcall(gas(), 0x01, m, 128, m, 32)) {
                 revert(0, 0)
@@ -112,46 +109,46 @@ contract Gateway is Initializable, OwnableUpgradeable {
     }
 
     /// @notice Encodes a bytes memory array into a Base64 string
-    /// @param data The bytes20 data to encode
+    /// @param data The address data to encode
     /// @return result The bytes28 encoded string
 
-    function encodeAddressToBase64(bytes20 data) private pure returns (bytes28 result) {
+    function encodeAddressToBase64(address data) private pure returns (bytes28 result) {
         bytes memory table = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
         assembly {
-            let resultPtr := mload(0x40) // Load free memory pointer
-            table := add(table,1)
-            mstore8(resultPtr, mload(add(table, and(shr(250, data), 0x3F))))
-            mstore8(add(resultPtr, 1), mload(add(table, and(shr(244, data), 0x3F))))
-            mstore8(add(resultPtr, 2), mload(add(table, and(shr(238, data), 0x3F))))
-            mstore8(add(resultPtr, 3), mload(add(table, and(shr(232, data), 0x3F))))
-            mstore8(add(resultPtr, 4), mload(add(table, and(shr(226, data), 0x3F))))
-            mstore8(add(resultPtr, 5), mload(add(table, and(shr(220, data), 0x3F))))
-            mstore8(add(resultPtr, 6), mload(add(table, and(shr(214, data), 0x3F))))
-            mstore8(add(resultPtr, 7), mload(add(table, and(shr(208, data), 0x3F))))
-            mstore8(add(resultPtr, 8), mload(add(table, and(shr(202, data), 0x3F))))
-            mstore8(add(resultPtr, 9), mload(add(table, and(shr(196, data), 0x3F))))
-            mstore8(add(resultPtr, 10), mload(add(table, and(shr(190, data), 0x3F))))
-            mstore8(add(resultPtr, 11), mload(add(table, and(shr(184, data), 0x3F))))
-            mstore8(add(resultPtr, 12), mload(add(table, and(shr(178, data), 0x3F))))
-            mstore8(add(resultPtr, 13), mload(add(table, and(shr(172, data), 0x3F))))
-            mstore8(add(resultPtr, 14), mload(add(table, and(shr(166, data), 0x3F))))
-            mstore8(add(resultPtr, 15), mload(add(table, and(shr(160, data), 0x3F))))
-            mstore8(add(resultPtr, 16), mload(add(table, and(shr(154, data), 0x3F))))
-            mstore8(add(resultPtr, 17), mload(add(table, and(shr(148, data), 0x3F))))
-            mstore8(add(resultPtr, 18), mload(add(table, and(shr(142, data), 0x3F))))
-            mstore8(add(resultPtr, 19), mload(add(table, and(shr(136, data), 0x3F))))
-            mstore8(add(resultPtr, 20), mload(add(table, and(shr(130, data), 0x3F)))) 
-            mstore8(add(resultPtr, 21), mload(add(table, and(shr(124, data), 0x3F))))
-            mstore8(add(resultPtr, 22), mload(add(table, and(shr(118, data), 0x3F))))
-            mstore8(add(resultPtr, 23), mload(add(table, and(shr(112, data), 0x3F))))
-            mstore8(add(resultPtr, 24), mload(add(table, and(shr(106, data), 0x3F))))
-            mstore8(add(resultPtr, 25), mload(add(table, and(shr(100, data), 0x3F))))
-            mstore8(add(resultPtr, 26), mload(add(table, and(shr(94, data), 0x3F))))
+            let resultPtr := mload(0x00) // Load scratch memory pointer
+            table := add(table, 1)
+            mstore8(resultPtr, mload(add(table, shr(154, data))))
+            mstore8(add(resultPtr, 1), mload(add(table, and(shr(148, data), 0x3F))))
+            mstore8(add(resultPtr, 2), mload(add(table, and(shr(142, data), 0x3F))))
+            mstore8(add(resultPtr, 3), mload(add(table, and(shr(136, data), 0x3F))))
+            mstore8(add(resultPtr, 4), mload(add(table, and(shr(130, data), 0x3F))))
+            mstore8(add(resultPtr, 5), mload(add(table, and(shr(124, data), 0x3F))))
+            mstore8(add(resultPtr, 6), mload(add(table, and(shr(118, data), 0x3F))))
+            mstore8(add(resultPtr, 7), mload(add(table, and(shr(112, data), 0x3F))))
+            mstore8(add(resultPtr, 8), mload(add(table, and(shr(106, data), 0x3F))))
+            mstore8(add(resultPtr, 9), mload(add(table, and(shr(100, data), 0x3F))))
+            mstore8(add(resultPtr, 10), mload(add(table, and(shr(94, data), 0x3F))))
+            mstore8(add(resultPtr, 11), mload(add(table, and(shr(88, data), 0x3F))))
+            mstore8(add(resultPtr, 12), mload(add(table, and(shr(82, data), 0x3F))))
+            mstore8(add(resultPtr, 13), mload(add(table, and(shr(76, data), 0x3F))))
+            mstore8(add(resultPtr, 14), mload(add(table, and(shr(70, data), 0x3F))))
+            mstore8(add(resultPtr, 15), mload(add(table, and(shr(64, data), 0x3F))))
+            mstore8(add(resultPtr, 16), mload(add(table, and(shr(58, data), 0x3F))))
+            mstore8(add(resultPtr, 17), mload(add(table, and(shr(52, data), 0x3F))))
+            mstore8(add(resultPtr, 18), mload(add(table, and(shr(46, data), 0x3F))))
+            mstore8(add(resultPtr, 19), mload(add(table, and(shr(40, data), 0x3F))))
+            mstore8(add(resultPtr, 20), mload(add(table, and(shr(34, data), 0x3F)))) 
+            mstore8(add(resultPtr, 21), mload(add(table, and(shr(28, data), 0x3F))))
+            mstore8(add(resultPtr, 22), mload(add(table, and(shr(22, data), 0x3F))))
+            mstore8(add(resultPtr, 23), mload(add(table, and(shr(16, data), 0x3F))))
+            mstore8(add(resultPtr, 24), mload(add(table, and(shr(10, data), 0x3F))))
+            mstore8(add(resultPtr, 25), mload(add(table, and(shr(4, data), 0x3F))))
+            mstore8(add(resultPtr, 26), mload(add(table, and(shl(2, data), 0x3F))))
             mstore8(add(resultPtr, 27), 0x3d)
             result := mload(resultPtr)
-            mstore(0x40, add(resultPtr, 32)) // update the free memory pointer 
         }
     }
+
 
     /// @notice Converts a uint256 value into its string representation
     /// @param x The uint256 value to convert
@@ -272,6 +269,17 @@ contract Gateway is Initializable, OwnableUpgradeable {
             return y += 31 << 248; 
         }
     }
+
+    function getChainId(bytes32 chain_id_1_tmp, bytes32 chain_id_2_tmp, bytes32 chain_id_3_tmp, uint256 chain_id_length_tmp) private pure returns (string memory result) {
+        assembly {
+            result := mload(0x40)
+            mstore(result, chain_id_length_tmp)
+            mstore(add(result, 32), chain_id_1_tmp)
+            mstore(add(result, 64), chain_id_2_tmp)
+            mstore(add(result, 96), chain_id_3_tmp)
+            mstore(0x40, add(result, 128))
+        }
+    }
     
     /// @notice Converts a bytes memory array to an array of uint256
     /// @param data The bytes memory data to convert
@@ -291,6 +299,10 @@ contract Gateway is Initializable, OwnableUpgradeable {
             mstore(0x40, add(add(result, 132), data.length))
         }
     }
+
+    /// @notice Converts a bytes memory array into a callback data array
+    /// @param data The bytes memory data to convert
+    /// @return result The calldata for the returned data
 
     function prepareResultBytesToCallbackData(bytes4 callback_selector, uint256 _taskId, bytes calldata data) private pure returns (bytes memory result) {
         assembly {
@@ -338,6 +350,25 @@ contract Gateway is Initializable, OwnableUpgradeable {
 
     constructor() {
         _disableInitializers();
+        //Burn in the Chain-ID into the byte code into chain_id_1, chain_id_2 and chain_id_3 and chain_id_length. 
+        bytes memory chain_id = uint256toBytesString(block.chainid);
+        bytes32 chain_id_1_tmp; bytes32 chain_id_2_tmp; bytes32 chain_id_3_tmp; 
+        uint256 chain_id_length_tmp = chain_id.length;
+
+        assembly {
+            chain_id_1_tmp := mload(add(chain_id, 32))
+            if gt(chain_id_length_tmp, 32) {
+                chain_id_2_tmp := mload(add(chain_id, 64))
+                if gt(chain_id_length_tmp, 64) {
+                    chain_id_3_tmp := mload(add(chain_id, 96))
+                }  
+            }
+        }
+
+        chain_id_1 = chain_id_1_tmp; 
+        chain_id_2 = chain_id_2_tmp;
+        chain_id_3 = chain_id_3_tmp;
+        chain_id_length = chain_id.length;
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -410,7 +441,7 @@ contract Gateway is Initializable, OwnableUpgradeable {
         //emit the task to be picked up by the relayer
         emit logNewTask(
             _taskId,
-            chain_id,
+            getChainId(chain_id_1, chain_id_2, chain_id_3, chain_id_length),
             _userAddress,
             _routingInfo,
             _payloadHash,
@@ -451,7 +482,7 @@ contract Gateway is Initializable, OwnableUpgradeable {
             '{"data":"{\\"numWords\\":',
             uint256toBytesString(_numWords),
             VRF_info,
-            encodeAddressToBase64(bytes20(msg.sender)), //callback_address
+            encodeAddressToBase64(msg.sender), //callback_address
             '","callback_selector": "OLpGFA==", "callback_gas_limit": ', // 0x38ba4614 hex value already converted into base64, callback_selector of the fullfillRandomWords function
             uint256toBytesString(_callbackGasLimit),
             '}' 
@@ -481,7 +512,7 @@ contract Gateway is Initializable, OwnableUpgradeable {
         //emit the task to be picked up by the relayer
         emit logNewTask(
             requestId,
-            chain_id,
+            getChainId(chain_id_1, chain_id_2, chain_id_3, chain_id_length),
             tx.origin,
             VRF_routing_info, //RNG Contract address on Secret 
             payloadHash,
@@ -514,7 +545,7 @@ contract Gateway is Initializable, OwnableUpgradeable {
         // Concatenate packet data elements
         bytes memory data = bytes.concat(
             bytes(_sourceNetwork),
-            bytes(chain_id),
+            bytes(getChainId(chain_id_1, chain_id_2, chain_id_3, chain_id_length)),
             uint256toBytesString(_taskId),
             _info.payload_hash,
             _info.result,
@@ -560,8 +591,11 @@ contract Gateway is Initializable, OwnableUpgradeable {
     function upgradeHandler() public {
 
     }
+}
 
-    /*//////////////////////////////////////////////////////////////
+library SHA256 {
+
+     /*//////////////////////////////////////////////////////////////
             SHA256 for zkEVMs without a SHA256 precompile
     //////////////////////////////////////////////////////////////*/
 
