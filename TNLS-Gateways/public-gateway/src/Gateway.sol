@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Version: 0.2.2
+// Version: 0.2.3
 pragma solidity ^0.8.25;
 
 
@@ -355,7 +355,7 @@ contract Gateway is Initializable, OwnableUpgradeable {
     string constant public VRF_routing_info = "secret1fxs74g8tltrngq3utldtxu9yys5tje8dzdvghr";
 
     string constant public VRF_routing_code_hash = "49ffed0df451622ac1865710380c14d4af98dca2d32342bb20f2b22faca3d00d";
-    bytes constant VRF_info = abi.encodePacked('}","routing_info":"',VRF_routing_info,'",routing_code_hash":"',VRF_routing_code_hash,'","user_address":"0x0000","user_key":"AAA=","callback_address":"');
+    bytes constant VRF_info = abi.encodePacked('}","routing_info":"',VRF_routing_info,'","routing_code_hash":"',VRF_routing_code_hash,'","user_address":"0x0000","user_key":"AAA=","callback_address":"');
 
 
     /*//////////////////////////////////////////////////////////////
@@ -427,7 +427,7 @@ contract Gateway is Initializable, OwnableUpgradeable {
             //+ 32 bytes per v (reads 32 bytes in)
             let m := mload(0x40) // Load free memory pointer
             mstore(m, _signedMessageHash) // Store _signedMessageHash at memory location m
-            mstore8(add(m, 32), byte(0, calldataload(add(_signature.offset, 64)))) // Load v from _signature and store at m + 32
+            mstore(add(m, 32), byte(0, calldataload(add(_signature.offset, 64)))) // Load v from _signature and store at m + 32
             mstore(add(m, 64), calldataload(add(_signature.offset, 0))) // Load r from _signature and store at m + 64
             mstore(add(m, 96), calldataload(add(_signature.offset, 32))) // Load s from _signature and store at m + 96
             // Call ecrecover: returns 0 on error, address on success, 0 for failure
