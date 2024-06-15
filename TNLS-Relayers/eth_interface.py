@@ -150,7 +150,7 @@ class EthInterface(BaseChainInterface):
         Gets the transactions from a particular block for a particular address.
         Args:
             block_number:  Which block to get
-            address: Which address to get transactions for
+            contract_interface: Which contract to get transactions for
 
         Returns: a list of transaction receipts
 
@@ -158,42 +158,25 @@ class EthInterface(BaseChainInterface):
         if block_number is None:
             block_number = self.get_last_block()
 
-        valid_transactions = contract_interface.contract.events.logNewTask().get_logs(
-            fromBlock=block_number
-        )
+        try:
+            valid_transactions = contract_interface.contract.events.logNewTask().get_logs(
+                fromBlock=block_number,
+                toBlock=block_number
+            )
+        except Exception as e:
+            self.logger.warning(e)
 
         if len(valid_transactions) == 0:
             return []
 
         transaction_hashes = [event['transactionHash'].hex() for event in valid_transactions]
-        try:
-            # Fetch block with transaction hashes only
-            block_data = self.provider.eth.get_block(block_number, full_transactions=False)
-
-            # Convert transaction hashes to hexadecimal strings
-            transaction_hashes_hex = [tx.hex() for tx in block_data['transactions']]
-
-            # Set of required transaction hashes in hexadecimal
-            required_hashes = set(transaction_hashes)  # Your predefined list of hashes
-
-            # Find matching transaction hashes
-            matching_hashes = set(transaction_hashes_hex).intersection(required_hashes)
-
-            # Fetch full details for only the required transactions
-            filtered_transactions = []
-            if matching_hashes:
-                # Fetch each transaction individually based on matching hashes
-                for hash in matching_hashes:
-                    filtered_transactions.append(self.provider.eth.get_transaction(hash))
-        except Exception as e:
-            self.logger.warning(e)
-            return []
 
         correct_transactions = []
+
         try:
             with ThreadPoolExecutor(max_workers=50) as executor:
                 # Create a future for each transaction
-                future_to_transaction = {executor.submit(self.process_transaction, tx): tx for tx in filtered_transactions}
+                future_to_transaction = {executor.submit(self.process_transaction, tx_hash): tx_hash for tx_hash in transaction_hashes}
                 for future in as_completed(future_to_transaction):
                     result = future.result()
                     if result is not None:
@@ -203,9 +186,9 @@ class EthInterface(BaseChainInterface):
 
         return correct_transactions
 
-    def process_transaction(self, transaction):
+    def process_transaction(self, transaction_hash):
         try:
-            tx_receipt = self.provider.eth.get_transaction_receipt(transaction['hash'])
+            tx_receipt = self.provider.eth.get_transaction_receipt(transaction_hash)
             return tx_receipt
         except Exception as e:
             self.logger.warning(e)
@@ -275,15 +258,20 @@ class EthContract(BaseContractInterface):
             return []
         task_list = []
         for task in tasks:
-            args = task['args']
-            # Convert to a regular dictionary
-            args_dict = dict(args)
+            try:
+                args = task['args']
 
-            # Convert ExecutionInfo into single arguments
-            info_part = args_dict.pop('info')
-            args_dict.update(info_part)
-            args = AttributeDict(args_dict)
-            task_list.append(Task(args))
+                # Convert to a regular dictionary
+                args_dict = dict(args)
+
+                # Convert ExecutionInfo into single arguments
+                info_part = args_dict.pop('info')
+                args_dict.update(info_part)
+                args = AttributeDict(args_dict)
+                task_list.append(Task(args))
+
+            except Exception as e:
+                self.logger.warning(e)
 
         return task_list
 
