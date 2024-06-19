@@ -1,8 +1,7 @@
 import asyncio
 from solana.rpc.api import Client
-from solana.account import Account
+from solders.keypair import Keypair
 from solana.transaction import Transaction
-from solana.system_program import CreateAccountParams, create_account
 from threading import Lock, Timer
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from logging import getLogger, basicConfig, INFO, StreamHandler
@@ -10,11 +9,11 @@ from typing import List
 
 # Base class for interaction with Solana
 class SolanaInterface:
-    def __init__(self, api_endpoint, private_key="", sync_interval=30, timeout=1):
+    def __init__(self, private_key="", provider=None, contract_address="", chain_id="", address ="", api_endpoint="", timeout=1, sync_interval=30):
         # Connect to Solana network
         self.client = Client(api_endpoint, timeout)
         self.private_key = private_key
-        self.account = Account.from_secret_key(bytes.fromhex(private_key))
+        self.account = Keypair.from_base58_string(private_key)
         self.sync_interval = sync_interval
         self.lock = Lock()
         self.executor = ThreadPoolExecutor(max_workers=1)
@@ -70,11 +69,29 @@ class SolanaInterface:
         """
         return self.client.get_slot()
 
+    def get_confirmed_signatures_for_address2(self, address):
+        response = requests.post(self.rpc_url, json={
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "getConfirmedSignaturesForAddress2",
+            "params": [address]
+        })
+        return response.json()
+
+    def get_transaction(self, txn):
+        response = requests.post(self.rpc_url, json={
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "getConfirmedTransaction",
+            "params": [txn]
+        })
+        return response.json()
+
     def get_transactions(self, address):
         """
         Get transactions for a given address.
         """
-        response = self.client.get_confirmed_signatures_for_address2(address)
+        response = self.get_confirmed_signatures_for_address2(address)
         return response['result']
 
     def process_transaction(self, txn):
@@ -82,17 +99,51 @@ class SolanaInterface:
         Process a transaction and return its receipt.
         """
         try:
-            tx_receipt = self.client.get_transaction(txn)
+            tx_receipt = self.get_transaction(txn)
             return tx_receipt
         except Exception as e:
             self.logger.warning(e)
             return None
 
+    def fetch_events(self, address):
+        """
+        Fetch and parse events for a given address.
+        """
+        transactions = self.get_transactions(address)
+        events = []
+
+        for txn_info in transactions:
+            txn = txn_info['signature']
+            tx_receipt = self.process_transaction(txn)
+            if tx_receipt and 'result' in tx_receipt:
+                log_messages = tx_receipt['result']['meta']['logMessages']
+                for log in log_messages:
+                    if 'LogNewTask' in log:
+                        event = self.parse_log(log)
+                        if event:
+                            events.append(event)
+        return events
+
+    def parse_log(self, log):
+        """
+        Parse a log message to extract event data.
+        """
+        try:
+            # Custom parsing logic for your log to extract event data
+            # Example: Extract JSON-like string and parse it
+            event_data = log.split('LogNewTask: ')[1]
+            return json.loads(event_data)
+        except (IndexError, json.JSONDecodeError) as e:
+            self.logger.warning(f"Failed to parse log: {log} with error: {e}")
+            return None
+
+
 # Base class for interaction with Solana contracts (programs)
 class SolanaContract:
-    def __init__(self, interface, program_id):
+    def __init__(self, interface, program_id, program_account):
         self.interface = interface
         self.program_id = program_id
+        self.address = program_account
         self.lock = Lock()
         self.logger = getLogger()
         self.logger.info("Initialized Solana contract with program ID: %s", program_id)

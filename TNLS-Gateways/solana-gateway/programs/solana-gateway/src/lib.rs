@@ -52,7 +52,7 @@ mod solana_gateway {
         user_address: Pubkey,
         routing_info: String,
         execution_info: ExecutionInfo,
-    ) -> Result<()> {
+    ) -> Result<SendResponse> {
         let gateway_state = &mut ctx.accounts.gateway_state;
 
         // Fetch the current lamports per signature cost for the singature 
@@ -106,17 +106,27 @@ mod solana_gateway {
         // Calculate the array index
         let index = (gateway_state.task_id % gateway_state.max_tasks) as usize;
 
-        // If the array isn't filled up yet, just push it to the end 
-        if index >= gateway_state.tasks.len() {
-            gateway_state.tasks.push(task);
-        }
-        else {
-            //If a task already exists, it will be overwritten as expected from the max.
-            gateway_state.tasks[index] = task;
-        }
+         // Reallocate account space if necessary
+         if index >= gateway_state.tasks.len() {
+             let current_len = gateway_state.tasks.len();
+             if current_len >= gateway_state.max_tasks as usize {
+                 let new_max_tasks = gateway_state.max_tasks + 10;
+                 let new_space = 8 + 8 + 8 + (std::mem::size_of::<Task>() * new_max_tasks as usize);
+                 gateway_state.to_account_info().realloc(new_space, false)?;
+                 gateway_state.max_tasks = new_max_tasks;
+             }
+ 
+             // If the array isn't filled up yet, just push it to the end 
+             gateway_state.tasks.push(task);
+         } else {
+             // If a task already exists, it will be overwritten as expected from the max.
+             gateway_state.tasks[index] = task;
+         }
+
+        let task_id = gateway_state.task_id;
 
         emit!(LogNewTask {
-            task_id: gateway_state.task_id,
+            task_id: task_id,
             task_destination_network: TASK_DESTINATION_NETWORK.to_string(),
             user_address: user_address,
             routing_info: routing_info,
@@ -126,7 +136,7 @@ mod solana_gateway {
 
         gateway_state.task_id += 1;
 
-        Ok(())
+        Ok(SendResponse { request_id: task_id })
     }
 
     pub fn post_execution(
@@ -143,7 +153,7 @@ mod solana_gateway {
 
         let task = gateway_state.tasks[index];
 
-        require!(task_id != task.task_id, TaskError::TaskIdAlreadyPruned);
+        require!(task_id == task.task_id, TaskError::TaskIdAlreadyPruned);
 
         // Check if the task is already completed
         require!(!task.completed, TaskError::TaskAlreadyCompleted);
@@ -307,6 +317,11 @@ pub struct CallbackData {
     callback_selector: String,
     task_id: u64,
     result: Vec<u8>,
+}
+
+#[derive(Debug, Clone, AnchorSerialize, AnchorDeserialize)]
+pub struct SendResponse {
+    pub request_id: u64,
 }
 
 #[event]

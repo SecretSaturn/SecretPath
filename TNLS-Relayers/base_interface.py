@@ -8,6 +8,7 @@ from pathlib import Path
 with open(f'{Path(__file__).parent.absolute()}/../config.yml') as f:
     data = safe_load(f)
 eth_chains = [info['chain_id'] for key, info in data.items() if info['type'] == 'evm']
+solana_chains = [info['chain_id'] for key, info in data.items() if info['type'] == 'solana']
 scrt_chains = [info['chain_id'] for key, info in data.items() if info['type'] == 'secret']
 
 eth_task_keys_to_msg = {

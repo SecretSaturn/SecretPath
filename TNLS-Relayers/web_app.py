@@ -1,7 +1,6 @@
 import json
 import os
 from pathlib import Path
-from threading import Thread
 
 from flask import Flask, current_app, Blueprint
 from yaml import safe_load
@@ -9,7 +8,8 @@ from yaml import safe_load
 from eth_interface import EthInterface, EthContract
 from relayer import Relayer
 from scrt_interface import SCRTInterface, SCRTContract
-from base_interface import eth_chains, scrt_chains
+from sol_interface import SolanaInterface, SolanaContract
+from base_interface import eth_chains, scrt_chains, solana_chains
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -36,13 +36,14 @@ def generate_eth_config(config_dict, provider=None):
     event_name = 'logNewTask'
     function_name = 'postExecution'
 
-    initialized_chain = EthInterface(private_key=priv_key, address=address, provider=provider, chain_id=chain_id, api_endpoint=api_endpoint, timeout=timeout)
+    initialized_chain = EthInterface(private_key=priv_key, address=address, provider=provider, chain_id=chain_id,
+                                     api_endpoint=api_endpoint, timeout=timeout)
     initialized_contract = EthContract(interface=initialized_chain, address=contract_address,
                                        abi=contract_schema)
     eth_tuple = (initialized_chain, initialized_contract, event_name, function_name)
     return eth_tuple
 
-def generate_solana_config(config_dict):
+def generate_solana_config(config_dict, provider=None):
     """
     Converts a config dict into a tuple of (rpc_client, contract_address, wallet_address, function_name) for Solana.
     Args:
@@ -52,17 +53,23 @@ def generate_solana_config(config_dict):
         A tuple of Solana RPC client, contract address, wallet public key, and a function name.
     """
 
-    rpc_endpoint = config_dict["rpc_endpoint"]
-    contract_address = PublicKey(config_dict["contract_address"])
-    wallet_address = PublicKey(config_dict["wallet_address"])
+    priv_key = os.environ['solana-private-key']
+    wallet_address = config_dict["wallet_address"]
+    api_endpoint = config_dict["api_endpoint"]
+    program_id = config_dict['program_id']
+    program_account = config_dict['program_account']
+    chain_id = config_dict['chain_id']
+    timeout = config_dict['timeout']
 
-    # Create a Solana RPC client
-    rpc_client = Client(rpc_endpoint)
+    event_name = 'logNewTask'
+    function_name = 'postExecution'
 
-    # Create a transaction for interacting with the contract
-    function_name = "executeInstruction"  # Example function name for the Solana program
+    initialized_chain = SolanaInterface(private_key=priv_key, address=wallet_address,
+                                        provider=provider, chain_id=chain_id, api_endpoint=api_endpoint, timeout=timeout)
+    initialized_contract = SolanaContract(interface=initialized_chain, program_id = program_id
+                                          ,program_account = program_account)
 
-    solana_tuple = (rpc_client, contract_address, wallet_address, function_name)
+    solana_tuple = (initialized_chain, initialized_contract, event_name, function_name)
     return solana_tuple
 
 def generate_scrt_config(config_dict, provider=None):
@@ -101,12 +108,12 @@ def generate_scrt_config(config_dict, provider=None):
     return scrt_tuple
 
 
-def generate_full_config(config_file, provider_pair=None):
+def generate_full_config(config_file, providers=None):
     """
     Takes in a yaml filepath and generates a config dict for eth and scrt relays
     Args:
         config_file: the path to the relevant config file
-        provider_pair: a pair of scrt and eth providers, optional
+        providers: inject all providers if needed
 
     Returns:
             a dict mapping scrt and eth to their respective configs
@@ -114,19 +121,23 @@ def generate_full_config(config_file, provider_pair=None):
     """
     with open(config_file) as f:
         config_dict = safe_load(f)
-    if provider_pair is None:
-        provider_eth, provider_scrt = None, None
+    if providers is None:
+        provider_eth, provider_solana, provider_scrt = None, None, None
     else:
-        provider_eth, provider_scrt = provider_pair
+        provider_eth, provider_solana, provider_scrt = providers
     keys_dict = {}
     chains_dict = {}
     for chain in eth_chains:
         if config_dict[chain]['active']:
             chains_dict[chain] = generate_eth_config(config_dict[chain], provider=provider_eth)
+    for chain in solana_chains:
+        if config_dict[chain]['active']:
+            chains_dict[chain] = generate_solana_config(config_dict[chain], provider=provider_solana)
     for chain in scrt_chains:
         if config_dict[chain]['active']:
             chains_dict[chain] = generate_scrt_config(config_dict[chain], provider=provider_scrt)
     return chains_dict, keys_dict
+
 
 route_blueprint = Blueprint('route_blueprint', __name__)
 
