@@ -87,8 +87,8 @@ class Relayer:
                 return block_num, tasks_tmp
 
             with ThreadPoolExecutor(max_workers = 30) as executor2:
-                futures = [executor2.submit(fetch_transactions, block_num) for block_num in range(prev_height + 1, curr_height + 1)]
-                for future in futures:
+                futures2 = [executor2.submit(fetch_transactions, block_num) for block_num in range(prev_height + 1, curr_height + 1)]
+                for future in futures2:
                     block_num, tasks = future.result()
                     self.logger.info(f'Processed block {block_num} on {name}')
                     for task in tasks:
