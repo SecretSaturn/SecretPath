@@ -1,6 +1,8 @@
 import asyncio
+import requests
 from solana.rpc.api import Client
 from solders.keypair import Keypair
+from solders.pubkey import Pubkey
 from solana.transaction import Transaction
 from threading import Lock, Timer
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -67,16 +69,11 @@ class SolanaInterface:
         """
         Gets the most recent block number on the Solana network.
         """
-        return self.client.get_slot()
-
-    def get_confirmed_signatures_for_address2(self, address):
-        response = requests.post(self.rpc_url, json={
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "getConfirmedSignaturesForAddress2",
-            "params": [address]
-        })
-        return response.json()
+        try:
+            return self.client.get_slot(commitment="finalized").value
+        except Exception as e:
+            self.logger.error(f"Error fetching the most recent block: {e}")
+            return None
 
     def get_transaction(self, txn):
         response = requests.post(self.rpc_url, json={
@@ -87,17 +84,28 @@ class SolanaInterface:
         })
         return response.json()
 
-    def get_transactions(self, address):
+    def get_transactions(self, contract_interface, height):
         """
         Get transactions for a given address.
         """
-        response = self.get_confirmed_signatures_for_address2(address)
-        return response['result']
+        try:
+            response = self.client.get_signatures_for_address(account = contract_interface.address, limit=1000,
+                                                              commitment="confirmed")
+            if response.value:
+                # Filter transactions by slot height
+                filtered_transactions = [tx for tx in response.value if tx.slot == height]
+                return filtered_transactions
+            else:
+                return None
+        except Exception as e:
+            self.logger.error(f"Error fetching transactions: {e}", exc_info=True)
+            return None
 
     def process_transaction(self, txn):
         """
         Process a transaction and return its receipt.
         """
+        print("dgsdfhsdh")
         try:
             tx_receipt = self.get_transaction(txn)
             return tx_receipt
@@ -142,8 +150,8 @@ class SolanaInterface:
 class SolanaContract:
     def __init__(self, interface, program_id, program_account):
         self.interface = interface
-        self.program_id = program_id
-        self.address = program_account
+        self.program_id = Pubkey.from_string(program_id)
+        self.address = Pubkey.from_string(program_account)
         self.lock = Lock()
         self.logger = getLogger()
         self.logger.info("Initialized Solana contract with program ID: %s", program_id)

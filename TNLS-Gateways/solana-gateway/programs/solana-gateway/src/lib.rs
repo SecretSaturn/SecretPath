@@ -18,7 +18,7 @@ use base64::{
 pub mod errors;
 use crate::errors::{TaskError, GatewayError};
 
-declare_id!("3KU2e3f5sHiZ7KnxJvRgeHAaVHuw8fJLiyGQmonGy4YZ");
+declare_id!("5sVmrdZyK8vt7xwyyE8vXJCZDtkaGDA2jJCcgDPNUiaL");
 
 // Constants
 const TASK_DESTINATION_NETWORK: &str = "pulsar-3";
@@ -30,9 +30,10 @@ mod solana_gateway {
 
     pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
         let gateway_state = &mut ctx.accounts.gateway_state;
-        gateway_state.owner = *ctx.accounts.user.key;
+        gateway_state.owner = *ctx.accounts.owner.key;
         gateway_state.task_id = 0;
         gateway_state.tasks = Vec::new();
+        gateway_state.max_tasks = 10;
 
         Ok(())
     }
@@ -48,7 +49,7 @@ mod solana_gateway {
 
     pub fn send(
         ctx: Context<Send>,
-        payload_hash: [u8; 32],
+        payload_hash: Vec<u8>,
         user_address: Pubkey,
         routing_info: String,
         execution_info: ExecutionInfo,
@@ -88,17 +89,17 @@ mod solana_gateway {
         }
 
         //Hash the payload
-        let generated_payload_hash = solana_program::keccak::hash(&["\x19Ethereum Signed Message:\n32".as_bytes(),&solana_program::keccak::hash(&execution_info.payload).to_bytes()].concat());
+        let generated_payload_hash = solana_program::keccak::hash(&execution_info.payload).to_bytes();
 
-/*      // Payload hash verification
+        // Payload hash verification
         require!(
-            generated_payload_hash.to_bytes() == payload_hash,
+            generated_payload_hash.as_slice() == payload_hash,
             TaskError::InvalidPayloadHash
-        ); */
-
+        ); 
+        
         // Persist the task
         let task = Task {
-            payload_hash: payload_hash,
+            payload_hash: payload_hash.clone(),
             task_id: gateway_state.task_id,
             completed: false
         };
@@ -122,7 +123,6 @@ mod solana_gateway {
              // If a task already exists, it will be overwritten as expected from the max.
              gateway_state.tasks[index] = task;
          }
-
         let task_id = gateway_state.task_id;
 
         emit!(LogNewTask {
@@ -151,7 +151,7 @@ mod solana_gateway {
 
         require!(index < gateway_state.tasks.len(), TaskError::InvalidIndex);
 
-        let task = gateway_state.tasks[index];
+        let task = &gateway_state.tasks[index];
 
         require!(task_id == task.task_id, TaskError::TaskIdAlreadyPruned);
 
@@ -180,7 +180,7 @@ mod solana_gateway {
 
         // Packet hash verification
         require!(
-            packet_hash.to_bytes() == post_execution_info.packet_hash,
+            packet_hash.to_bytes().as_slice() == post_execution_info.packet_hash,
             TaskError::InvalidPacketHash
         );
 
@@ -241,10 +241,10 @@ mod solana_gateway {
 
 #[derive(Accounts)]
 pub struct Initialize<'info> {
-    #[account(init, payer = user, space = 8 + 8 + 8 + 9000)]
+    #[account(init, payer = owner, space = 8 + 8 + 8 + 9000)]
     pub gateway_state: Account<'info, GatewayState>,
     #[account(mut)]
-    pub user: Signer<'info>,
+    pub owner: Signer<'info>,
     pub system_program: Program<'info, System>,
 }
 
@@ -281,9 +281,9 @@ pub struct GatewayState {
     pub max_tasks: u64, 
 }
 
-#[derive(Debug, Clone, AnchorSerialize, AnchorDeserialize, Copy)]
+#[derive(Debug, Clone, AnchorSerialize, AnchorDeserialize)]
 pub struct Task {
-    pub payload_hash: [u8; 32],
+    pub payload_hash: Vec<u8>,
     pub task_id: u64,
     pub completed: bool,
 }
@@ -295,7 +295,7 @@ pub struct ExecutionInfo {
     pub routing_code_hash: String,
     pub task_destination_network: String,
     pub handle: String,
-    pub nonce: [u8; 12],
+    pub nonce: Vec<u8>,
     pub callback_gas_limit: u32,
     pub payload: Vec<u8>,
     pub payload_signature: Vec<u8>,
@@ -303,8 +303,8 @@ pub struct ExecutionInfo {
 
 #[derive(Debug, Clone, AnchorSerialize, AnchorDeserialize)]
 pub struct PostExecutionInfo {
-    pub payload_hash: [u8; 32],
-    pub packet_hash: [u8; 32],
+    pub payload_hash: Vec<u8>,
+    pub packet_hash: Vec<u8>,
     pub callback_address: String,
     pub callback_selector: String,
     pub callback_gas_limit: u32,
@@ -336,6 +336,6 @@ pub struct LogNewTask {
     pub task_destination_network: String,
     pub user_address: Pubkey,
     pub routing_info: String,
-    pub payload_hash: [u8; 32],
+    pub payload_hash: Vec<u8>,
     pub execution_info: ExecutionInfo,
 }

@@ -282,7 +282,7 @@
   chain_id: "SolanaDevNet"
   api_endpoint: https://api.devnet.solana.com
   program_id: "5sVmrdZyK8vt7xwyyE8vXJCZDtkaGDA2jJCcgDPNUiaL"
-  program_account: "XX"
+  program_account: "BgcAjpZ4J6no7i37vHfPBrQ5Rvt8VssC2P4UPAiewgEE"
   timeout: 2
   wallet_address: "0xbb6B8abe049466f637b3Ac648E7Dd9850E193346"
 
