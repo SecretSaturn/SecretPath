@@ -215,20 +215,12 @@ class EthContract(BaseContractInterface):
         self.logger.info("Initialized Eth contract with address: %s", self.address)
         pass
 
-    def get_function(self, function_name):
-        """
-        Gets a particular function from the contract.
-        Args:
-            function_name: The name of the function to get.
-        """
-        return self.contract.functions[function_name]
-
     def call_function(self, function_name, *args):
         """
         See base_interface.py for documentation
         """
         kwargs = None
-        function = self.get_function(function_name)
+        function = self.contract.functions[function_name]
         if len(args) == 1:
             args = json.loads(args[0])
             if isinstance(args, dict):

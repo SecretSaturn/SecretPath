@@ -345,6 +345,336 @@
   program_id: "5sVmrdZyK8vt7xwyyE8vXJCZDtkaGDA2jJCcgDPNUiaL"
   program_account: "9aWPyJRewTwAen5SRGSqw9uswPpqJhXDqnmyMdUD8Z8J"
   timeout: 2
+  idl: '{
+  "version": "0.1.0",
+  "name": "solana_gateway",
+  "instructions": [
+    {
+      "name": "initialize",
+      "accounts": [
+        {
+          "name": "gatewayState",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "owner",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "increaseTaskId",
+      "accounts": [
+        {
+          "name": "gatewayState",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "owner",
+          "isMut": false,
+          "isSigner": true
+        }
+      ],
+      "args": [
+        {
+          "name": "newTaskId",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "send",
+      "accounts": [
+        {
+          "name": "gatewayState",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "user",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "payloadHash",
+          "type": "bytes"
+        },
+        {
+          "name": "userAddress",
+          "type": "publicKey"
+        },
+        {
+          "name": "routingInfo",
+          "type": "string"
+        },
+        {
+          "name": "executionInfo",
+          "type": {
+            "defined": "ExecutionInfo"
+          }
+        }
+      ],
+      "returns": {
+        "defined": "SendResponse"
+      }
+    },
+    {
+      "name": "postExecution",
+      "accounts": [
+        {
+          "name": "gatewayState",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "user",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "taskId",
+          "type": "u64"
+        },
+        {
+          "name": "sourceNetwork",
+          "type": "string"
+        },
+        {
+          "name": "postExecutionInfo",
+          "type": {
+            "defined": "PostExecutionInfo"
+          }
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "GatewayState",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "publicKey"
+          },
+          {
+            "name": "taskId",
+            "type": "u64"
+          },
+          {
+            "name": "tasks",
+            "type": {
+              "vec": {
+                "defined": "Task"
+              }
+            }
+          },
+          {
+            "name": "maxTasks",
+            "type": "u64"
+          }
+        ]
+      }
+    }
+  ],
+  "types": [
+    {
+      "name": "ExecutionInfo",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "userKey",
+            "type": "bytes"
+          },
+          {
+            "name": "userPubkey",
+            "type": "bytes"
+          },
+          {
+            "name": "routingCodeHash",
+            "type": "string"
+          },
+          {
+            "name": "taskDestinationNetwork",
+            "type": "string"
+          },
+          {
+            "name": "handle",
+            "type": "string"
+          },
+          {
+            "name": "nonce",
+            "type": "bytes"
+          },
+          {
+            "name": "callbackGasLimit",
+            "type": "u32"
+          },
+          {
+            "name": "payload",
+            "type": "bytes"
+          },
+          {
+            "name": "payloadSignature",
+            "type": "bytes"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PostExecutionInfo",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "payloadHash",
+            "type": "bytes"
+          },
+          {
+            "name": "packetHash",
+            "type": "bytes"
+          },
+          {
+            "name": "callbackAddress",
+            "type": "string"
+          },
+          {
+            "name": "callbackSelector",
+            "type": "string"
+          },
+          {
+            "name": "callbackGasLimit",
+            "type": "u32"
+          },
+          {
+            "name": "packetSignature",
+            "type": "bytes"
+          },
+          {
+            "name": "result",
+            "type": "bytes"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SendResponse",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "requestId",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Task",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "payloadHash",
+            "type": "bytes"
+          },
+          {
+            "name": "taskId",
+            "type": "u64"
+          },
+          {
+            "name": "completed",
+            "type": "bool"
+          }
+        ]
+      }
+    }
+  ],
+  "events": [
+    {
+      "name": "TaskCompleted",
+      "fields": [
+        {
+          "name": "taskId",
+          "type": "u64",
+          "index": false
+        },
+        {
+          "name": "callbackSuccessful",
+          "type": "bool",
+          "index": false
+        }
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "TaskAlreadyCompleted",
+      "msg": "Task already completed"
+    },
+    {
+      "code": 6001,
+      "name": "InvalidPayloadHash",
+      "msg": "Invalid payload hash"
+    },
+    {
+      "code": 6002,
+      "name": "InvalidPacketHash",
+      "msg": "Invalid packet hash"
+    },
+    {
+      "code": 6003,
+      "name": "InvalidPacketSignature",
+      "msg": "Invalid packet signature"
+    },
+    {
+      "code": 6004,
+      "name": "TaskNotFound",
+      "msg": "Task not found"
+    },
+    {
+      "code": 6005,
+      "name": "InsufficientFunds",
+      "msg": "Insufficient funds"
+    },
+    {
+      "code": 6006,
+      "name": "InvalidIndex",
+      "msg": "Invalid lookup index"
+    },
+    {
+      "code": 6007,
+      "name": "TaskIdAlreadyPruned",
+      "msg": "Task Id already pruned"
+    }
+  ]
+}'
   wallet_address: "0xbb6B8abe049466f637b3Ac648E7Dd9850E193346"
 
 "1802203764": #Kakarot Sepolia
@@ -412,7 +742,7 @@
   type: "secret"
   chain_id: "pulsar-3"
   api_endpoint: "https://lcd.testnet.secretsaturn.net"
-  contract_address: "secret1dlgahwupflmyq5aenlvnzlfk2cgjmw8wch02mm"
-  code_hash: "396701616f3eef6adc5ed23997fd6e0aa49925e1696ec125d2f4994e7878db4c"
+  contract_address: "secret1jmdjmlmw8qda2yujg8664zafz9dkgxzzx7qpwh"
+  code_hash: "eafd45338f8ece88dc55b58f6901cca7b03440ddad45f70da6c864280f9c032c"
   wallet_address: "secret1ppry6a0puedwt5mkzdqk9h5smq98vcx0qweswf"
   feegrant_address: "secret1gutgtpw0caqfsp8ja0r5yecv8jxz2y8vhpnck8"

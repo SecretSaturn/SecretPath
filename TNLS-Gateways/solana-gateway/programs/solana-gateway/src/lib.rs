@@ -142,12 +142,8 @@ mod solana_gateway {
             payload: execution_info.payload,
             payload_signature: execution_info.payload_signature,
         };
-        
-        let serialized_bytes = log_new_task.try_to_vec().unwrap();
-
-        let base64_string = STANDARD.encode(&serialized_bytes);
             
-        msg!(&format!("LogNewTask:{}", base64_string));
+        msg!(&format!("LogNewTask:{}", STANDARD.encode(&log_new_task.try_to_vec().unwrap())));
 
         gateway_state.task_id += 1;
 
@@ -245,10 +241,12 @@ mod solana_gateway {
             &[],
         );
 
-        emit!(TaskCompleted {
+        let task_completed = TaskCompleted {
             task_id,
             callback_successful: callback_result.is_ok()
-        });
+        };
+            
+        msg!(&format!("TaskCompleted:{}", STANDARD.encode(&task_completed.try_to_vec().unwrap())));
 
         Ok(())
     }

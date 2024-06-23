@@ -242,14 +242,14 @@ fn pre_execution(deps: DepsMut, _env: Env, msg: PreExecutionMsg) -> StdResult<Re
     let new_task = Task {
         network: msg.source_network.clone(),
         task_id: msg.task_id.clone()
-    }.clone();
+    };
 
     // check if the task wasn't executed before already
     let map_contains_task = TASK_MAP.contains(deps.storage, &new_task);
 
-    if map_contains_task {
+    /* if map_contains_task {
         return Err(StdError::generic_err("Task already exists, not executing again"));
-    }
+    } */
 
     let input_values = payload.data;
 
@@ -281,9 +281,7 @@ fn pre_execution(deps: DepsMut, _env: Env, msg: PreExecutionMsg) -> StdResult<Re
     // map task to task info
     TASK_MAP.insert(deps.storage, &new_task, &task_info)?;
 
-    // load this gateway's signing key
-    let mut signing_key_bytes = [0u8; 32];
-    signing_key_bytes.copy_from_slice(config.signing_keys.sk.as_slice());
+    let signing_key_bytes = <[u8; 32]>::try_from(config.signing_keys.sk.as_slice()).unwrap();
 
     // used in production to create signature
     #[cfg(target_arch = "wasm32")]
@@ -355,15 +353,12 @@ fn post_execution(deps: DepsMut, env: Env, msg: PostExecutionMsg) -> StdResult<R
         result.as_slice(),                       // result
         task_info.callback_address.as_slice(),   // callback address
         task_info.callback_selector.as_slice(),  // callback selector
-    ]
-    .concat();
+    ].concat();
     hasher.update(&data);
     let packet_hash = hasher.finalize();
 
     // load this gateway's signing key
-    let private_key = CONFIG.load(deps.storage)?.signing_keys.sk;
-    let mut signing_key_bytes = [0u8; 32];
-    signing_key_bytes.copy_from_slice(private_key.as_slice());
+    let signing_key_bytes = <[u8; 32]>::try_from(CONFIG.load(deps.storage)?.signing_keys.sk.as_slice()).unwrap();
 
     // used in production to create signature
     // NOTE: api.secp256k1_sign() will perform an additional sha_256 hash operation on the given data

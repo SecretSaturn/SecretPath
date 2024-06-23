@@ -178,24 +178,3 @@ pub struct PostExecutionMsg {
 impl HandleCallback for PostExecutionMsg {
     const BLOCK_SIZE: usize = 256;
 }
-
-/// Message sent to the relayer.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct BroadcastMsg {
-    /// JSON string of results from the private contract.
-    pub result: String,
-    /// Encryption of (data, routing info, and user info).
-    pub payload: Binary,
-    /// Task ID coming from the gateway.
-    pub task_id: String,
-    /// SHA256 hash of (result, packet, task_id).
-    pub output_hash: Binary,
-    /// `output_hash` signed with Private Gateway key.
-    pub signature: Binary,
-    /// Source network (where to go once pulled into the next gateway).
-    pub routing_info: String,
-}
-
-impl HandleCallback for BroadcastMsg {
-    const BLOCK_SIZE: usize = 256;
-}

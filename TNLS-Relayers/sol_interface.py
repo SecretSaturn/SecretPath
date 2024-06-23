@@ -1,9 +1,9 @@
-import asyncio
-import requests
+import json
+
 from solana.rpc.api import Client
 from solders.keypair import Keypair
 from solders.pubkey import Pubkey
-from solana.transaction import Transaction
+from anchorpy import Program, Context, Idl
 from threading import Lock, Timer
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from logging import getLogger, basicConfig, INFO, StreamHandler
@@ -69,16 +69,6 @@ class SolanaInterface:
         """Sync any necessary data or nonce value."""
         # Solana does not use nonce like Ethereum, but you can sync any necessary data
         self.logger.info("Solana synchronization task running.")
-
-    def create_transaction(self, instructions, signers):
-        """
-        Create a transaction with the given instructions and signers.
-        """
-        txn = Transaction()
-        for instruction in instructions:
-            txn.add(instruction)
-
-        return txn
 
     def sign_and_send_transaction(self, txn):
         """
@@ -156,25 +146,53 @@ class SolanaInterface:
 
 # Base class for interaction with Solana contracts (programs)
 class SolanaContract:
-    def __init__(self, interface, program_id, program_account):
+    def __init__(self, interface, program_id, program_account, idl):
         self.interface = interface
         self.program_id = Pubkey.from_string(program_id)
+        # Load your program's IDL (you should have the IDL file available)
+        idl_path = "/Users/alexanderhertlein/Desktop/SecretPath/TNLS-Gateways/solana-gateway/target/idl/solana_gateway.json"
+        with open(idl_path, "r") as f:
+            self.idl = Program(Idl.from_json(json.load(f)), self.program_id, interface)
         self.address = Pubkey.from_string(program_account)
         self.lock = Lock()
         self.logger = getLogger()
         self.logger.info("Initialized Solana contract with program ID: %s", program_id)
 
-    def get_function(self, function_name):
-        """Placeholder to simulate getting a specific function."""
-        return None  # Functions are not explicitly defined in Solana contracts.
-
-    def call_function(self, instructions):
+    def call_function(self, function_name, *args):
         """
         Build a transaction and call a specific function with given instructions.
         """
+        print(args)
         with self.lock:
-            txn = self.interface.create_transaction(instructions, [self.interface.account])
-            submitted_txn = self.interface.sign_and_send_transaction(txn)
+            """
+                    Create a transaction with the given instructions and signers.
+                    """
+            # Create context
+
+            ctx = Context(
+                accounts={
+                    "gateway_state": self.address,
+                    "payer": self.interface.provider.wallet.public_key,
+                    "system_program": SYS_PROGRAM_ID,
+                },
+                signers=[self.interface.provider.wallet.payer]
+            )
+
+            tx = self.program.rpc["post_execution"](
+            ctx,
+            task_id,
+            source_network,
+            {
+                "payload_hash": post_execution_info.payload_hash,
+                "packet_hash": post_execution_info.packet_hash,
+                "callback_address": post_execution_info.callback_address,
+                "callback_selector": post_execution_info.callback_selector,
+                "callback_gas_limit": post_execution_info.callback_gas_limit,
+                "packet_signature": post_execution_info.packet_signature,
+                "result": post_execution_info.result,
+            }
+        )
+            submitted_txn = self.interface.sign_and_send_transaction(tx)
         return submitted_txn
 
     def parse_event_from_txn(self, event_name, txn) -> List[Task]:
