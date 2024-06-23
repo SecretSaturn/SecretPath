@@ -32,3 +32,6 @@ TNLS-Samples/RNG/contract.wasm.gz
 /TNLS-Gateways/solana-gateway/node_modules
 /venv
 /TNLS-Gateways/solana-gateway/.anchor/program-logs
+/secret-deploy/node_modules
+secret-deploy/secret_gateway.log
+secret-deploy/secret_sample.log

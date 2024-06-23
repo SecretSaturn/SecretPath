@@ -39,11 +39,11 @@ describe("solana-gateway", () => {
         console.log("Gateway state initialized:", gatewayState.publicKey.toString());
       
       const task_destination_network = "pulsar-3"
-      const routing_contract = "secret1fxs74g8tltrngq3utldtxu9yys5tje8dzdvghr" //the contract you want to call in secret
+      const routing_contract = "secret1rcpxtvaf2ccs7tgml7d25xr5n8suvdxr6w9nen" //the contract you want to call in secret
       const routing_code_hash = "49ffed0df451622ac1865710380c14d4af98dca2d32342bb20f2b22faca3d00d" //its codehash
   
       const numWords = 10;
-        const callback_gas_limit = "10000";
+      const callback_gas_limit = 1000000;
         
         const data = JSON.stringify({
             numWords: Number(numWords)
@@ -53,24 +53,40 @@ describe("solana-gateway", () => {
         //This is an empty callback for the sake of having a callback in the sample code.
         //Here, you would put your callback selector for you contract in. 
        //const callbackSelector = iface.getSighash(iface.getFunction("upgradeHandler"))
-       const callbackSelector = "0x00"
+        const callbackSelector = "0x00"
         const callbackGasLimit = Number(callback_gas_limit)
 
         //the function name of the function that is called on the private contract
         const handle = "request_random"
 
+/*         pub data: String,
+        /// Destination contract address.
+        pub routing_info: Addr,
+        /// Destination contract code hash.
+        pub routing_code_hash: String,
+        /// User public chain address.
+        pub user_address: Addr,
+        /// User public key from payload encryption (not their wallet public key).
+        pub user_key: Binary,
+        /// Callback address for the post execution message.
+        pub callback_address: Binary,
+        /// Callback selector for the post execution message.
+        pub callback_selector: Binary,
+        /// Callback gas limit for the post execution message.
+        pub callback_gas_limit: u32,
+        */
         //payload data that are going to be encrypted
-        const payload = {
+        const payload = { 
             data: data,
             routing_info: routing_contract,
             routing_code_hash: routing_code_hash,
-            user_address: provider.publicKey.toString(),
-            user_key: "AA==",
-            callback_address: "AA==",
-            callback_selector: "AA==",
+            user_address: provider.publicKey.toBase58(),
+            user_key: Buffer.from(new Uint8Array(4)).toString('base64'),
+            callback_address: callbackAddress,
+            callback_selector: Buffer.from(new Uint8Array(4)).toString('base64'),
             callback_gas_limit: callbackGasLimit,
         }
-
+       
         //build a Json of the payload
         const payloadJson = JSON.stringify(payload);
         const plaintext = Buffer.from(payloadJson);
@@ -100,17 +116,17 @@ describe("solana-gateway", () => {
        // const payload_signature = web3.sign(payload_buffer, keypair.secretKey);
 
         const executionInfo = {
-          userKey: Buffer.from(new Uint8Array(32)), // Replace with actual user key
-          userPubkey: Buffer.from(new Uint8Array(32)), // Replace with actual user pubkey
+          userKey: Buffer.from(new Uint8Array(4)), // Replace with actual user key
+          userPubkey: Buffer.from(new Uint8Array(4)), // Replace with actual user pubkey
           routingCodeHash: routing_code_hash,
           taskDestinationNetwork: task_destination_network,
           handle: handle,
           nonce: Buffer.from(nonce), // Replace with actual nonce
-          callbackGasLimit: 2000000, // Replace with actual gas limit
+          callbackGasLimit: callback_gas_limit, // Replace with actual gas limit
           payload: plaintext, // Ensure payload is a Buffer
           payloadSignature: Buffer.from("AA="), // Replace with actual payload signature, as a Buffer
       };
-      
+
         const tx2 = await program.methods.send(
           payloadHash,
           provider.publicKey,

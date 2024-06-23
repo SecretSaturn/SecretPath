@@ -7,7 +7,30 @@ from solana.transaction import Transaction
 from threading import Lock, Timer
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from logging import getLogger, basicConfig, INFO, StreamHandler
+from borsh_construct import CStruct, U64, String, Vec, U8, U32
 from typing import List
+import base64
+
+from base_interface import BaseChainInterface, BaseContractInterface, Task
+
+class LogNewTask:
+
+    layout = CStruct(
+        "task_id" / U64,
+        "source_network" / String,
+        "user_address" / Vec(U8),
+        "routing_info" / String,
+        "payload_hash" / Vec(U8),
+        "user_key" / Vec(U8),
+        "user_pubkey" / Vec(U8),
+        "routing_code_hash" / String,
+        "task_destination_network" / String,
+        "handle" / String,
+        "nonce" / Vec(U8),
+        "callback_gas_limit" / U32,
+        "payload" / Vec(U8),
+        "payload_signature" / Vec(U8)
+    )
 
 # Base class for interaction with Solana
 class SolanaInterface:
@@ -75,74 +98,59 @@ class SolanaInterface:
             self.logger.error(f"Error fetching the most recent block: {e}")
             return None
 
-    def get_transaction(self, txn):
-        response = requests.post(self.rpc_url, json={
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "getConfirmedTransaction",
-            "params": [txn]
-        })
-        return response.json()
-
     def get_transactions(self, contract_interface, height):
         """
         Get transactions for a given address.
         """
+        filtered_transactions = []
         try:
-            response = self.client.get_signatures_for_address(account = contract_interface.address, limit=1000,
+            response = self.client.get_signatures_for_address(account = contract_interface.address, limit=100,
                                                               commitment="confirmed")
             if response.value:
                 # Filter transactions by slot height
-                filtered_transactions = [tx for tx in response.value if tx.slot == height]
-                return filtered_transactions
+                filtered_transactions = [tx.signature for tx in response.value if tx.slot == height]
             else:
-                return None
+                return []
         except Exception as e:
-            self.logger.error(f"Error fetching transactions: {e}", exc_info=True)
-            return None
+            self.logger.error(f"Error fetching transactions: {e}")
+            return []
 
-    def process_transaction(self, txn):
+        correct_transactions = []
+
+        try:
+            with ThreadPoolExecutor(max_workers=50) as executor:
+                # Create a future for each transaction
+                future_to_transaction = {executor.submit(self.process_transaction, signature): signature
+                                         for signature in filtered_transactions}
+                for future in as_completed(future_to_transaction):
+                    result = future.result()
+                    if result is not None:
+                        correct_transactions.append(result)
+        except Exception as e:
+            self.logger.error(f"Error fetching transactions: {e}")
+            return []
+
+        return correct_transactions
+
+    def process_transaction(self, signature):
         """
         Process a transaction and return its receipt.
         """
-        print("dgsdfhsdh")
         try:
-            tx_receipt = self.get_transaction(txn)
-            return tx_receipt
-        except Exception as e:
-            self.logger.warning(e)
-            return None
+            response = self.client.get_transaction(signature, commitment="confirmed")
+            if response.value:
+                self.logger.info(f"Transaction found: {signature}")
+                log_messages = response.value.transaction.meta.log_messages
 
-    def fetch_events(self, address):
-        """
-        Fetch and parse events for a given address.
-        """
-        transactions = self.get_transactions(address)
-        events = []
-
-        for txn_info in transactions:
-            txn = txn_info['signature']
-            tx_receipt = self.process_transaction(txn)
-            if tx_receipt and 'result' in tx_receipt:
-                log_messages = tx_receipt['result']['meta']['logMessages']
                 for log in log_messages:
-                    if 'LogNewTask' in log:
-                        event = self.parse_log(log)
-                        if event:
-                            events.append(event)
-        return events
-
-    def parse_log(self, log):
-        """
-        Parse a log message to extract event data.
-        """
-        try:
-            # Custom parsing logic for your log to extract event data
-            # Example: Extract JSON-like string and parse it
-            event_data = log.split('LogNewTask: ')[1]
-            return json.loads(event_data)
-        except (IndexError, json.JSONDecodeError) as e:
-            self.logger.warning(f"Failed to parse log: {log} with error: {e}")
+                    if "LogNewTask:" in log:
+                        return response.value
+                return None
+            else:
+                self.logger.error(f"Transaction not found: {signature}")
+                return None
+        except Exception as e:
+            self.logger.error(e)
             return None
 
 
@@ -169,16 +177,37 @@ class SolanaContract:
             submitted_txn = self.interface.sign_and_send_transaction(txn)
         return submitted_txn
 
-    def parse_event_from_txn(self, txn):
+    def parse_event_from_txn(self, event_name, txn) -> List[Task]:
         """
         Parse an event from a transaction receipt.
         """
-        events = []
+        task_list = []
         try:
-            tx_receipt = self.interface.process_transaction(txn)
-            # Depending on the program's design, extract relevant information
-            # Add appropriate parsing logic to extract events from the transaction receipt
-        except Exception as e:
-            self.logger.warning(e)
+            log_messages = txn.transaction.meta.log_messages
 
-        return events
+            for log in log_messages:
+                if "LogNewTask:" in log:
+                    log_data = log.split("LogNewTask:")[1]
+                    event_data = LogNewTask.layout.parse(base64.b64decode(log_data))
+
+                    args = {'task_id': event_data.task_id,
+                            'task_destination_network': event_data.task_destination_network,
+                            'source_network': event_data.source_network,
+                            'user_address': base64.b64encode(bytes(event_data.user_address)).decode('ASCII'),
+                            'routing_info': event_data.routing_info,
+                            'routing_code_hash': event_data.routing_code_hash,
+                            'payload': base64.b64encode(bytes(event_data.payload)).decode('ASCII'),
+                            'payload_hash': base64.b64encode(bytes(event_data.payload_hash)).decode('ASCII'),
+                            'payload_signature': base64.b64encode(bytes(event_data.payload_signature[:-1])).decode('ASCII'),
+                            'user_key': base64.b64encode(bytes(event_data.user_key)).decode('ASCII'),
+                            'user_pubkey': base64.b64encode(bytes(event_data.user_pubkey)).decode('ASCII'),
+                            'handle': event_data.handle,
+                            'callback_gas_limit': event_data.callback_gas_limit,
+                            'nonce': base64.b64encode(bytes(event_data.nonce)).decode('ASCII')
+                    }
+                    task_list.append(Task(args))
+
+            return task_list
+        except Exception as e:
+            self.logger.error(f"Error parsing transaction: {e}")
+

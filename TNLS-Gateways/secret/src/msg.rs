@@ -98,14 +98,15 @@ impl PreExecutionMsg {
             self.payload_signature.as_slice(),
             self.user_pubkey.as_slice(),
         ) {
-            Ok(_) => Ok(()),
-            Err(_) => {
+            Ok(true) => Ok(()),
+            Ok(false) | Err(_) => {
                 deps.api.ed25519_verify(
                     general_purpose::STANDARD.encode(self.payload_hash.as_slice()).as_bytes(),
                     self.payload_signature.as_slice(),
                     self.user_pubkey.as_slice(),
                 )
                 .map_err(|err| StdError::generic_err(err.to_string()))
+                .and_then(|verified| if verified { Ok(()) } else { Err(StdError::generic_err("Verification failed")) })
             }
         }
     }

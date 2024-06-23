@@ -22,6 +22,7 @@ declare_id!("5sVmrdZyK8vt7xwyyE8vXJCZDtkaGDA2jJCcgDPNUiaL");
 
 // Constants
 const TASK_DESTINATION_NETWORK: &str = "pulsar-3";
+const SOURCE_NETWORK: &str = "SolanaDevNet";
 const SECRET_GATEWAY_PUBKEY: &str = "BG0KrD7xDmkFXpNMqJn1CLpRaDLcdKpO1NdBBS7VpWh3TZnTv+1kGnk1rnOqyONJONt0fC8OiyqpXCXQaaV1zIs=";
 
 #[program]
@@ -31,7 +32,7 @@ mod solana_gateway {
     pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
         let gateway_state = &mut ctx.accounts.gateway_state;
         gateway_state.owner = *ctx.accounts.owner.key;
-        gateway_state.task_id = 0;
+        gateway_state.task_id = 1;
         gateway_state.tasks = Vec::new();
         gateway_state.max_tasks = 10;
 
@@ -62,7 +63,7 @@ mod solana_gateway {
         //Calculate the rent for extra storage
         let lamports_per_byte_year = Rent::get().unwrap().lamports_per_byte_year;
         
-        // Estimate the cost based on the callback gas limit
+       /*  // Estimate the cost based on the callback gas limit
         let estimated_price = execution_info.callback_gas_limit as u64 * lamports_per_signature 
         + 33*2*lamports_per_byte_year;
                 
@@ -86,7 +87,7 @@ mod solana_gateway {
             let cpi_context = CpiContext::new(ctx.accounts.system_program.to_account_info(), cpi_accounts);
         
             transfer(cpi_context, refund_amount)?;
-        }
+        } */
 
         //Hash the payload
         let generated_payload_hash = solana_program::keccak::hash(&execution_info.payload).to_bytes();
@@ -109,8 +110,7 @@ mod solana_gateway {
 
          // Reallocate account space if necessary
          if index >= gateway_state.tasks.len() {
-             let current_len = gateway_state.tasks.len();
-             if current_len >= gateway_state.max_tasks as usize {
+             if gateway_state.tasks.len() >= gateway_state.max_tasks as usize {
                  let new_max_tasks = gateway_state.max_tasks + 10;
                  let new_space = 8 + 8 + 8 + (std::mem::size_of::<Task>() * new_max_tasks as usize);
                  gateway_state.to_account_info().realloc(new_space, false)?;
@@ -122,17 +122,32 @@ mod solana_gateway {
          } else {
              // If a task already exists, it will be overwritten as expected from the max.
              gateway_state.tasks[index] = task;
-         }
+        }
+
         let task_id = gateway_state.task_id;
 
-        emit!(LogNewTask {
+        let log_new_task = LogNewTask {
             task_id: task_id,
-            task_destination_network: TASK_DESTINATION_NETWORK.to_string(),
-            user_address: user_address,
+            source_network: SOURCE_NETWORK.to_string(),
+            user_address: user_address.to_bytes().to_vec(),
             routing_info: routing_info,
             payload_hash: payload_hash,
-            execution_info: execution_info,
-        });
+            user_key: execution_info.user_key,
+            user_pubkey: execution_info.user_pubkey,
+            routing_code_hash: execution_info.routing_code_hash,
+            task_destination_network: TASK_DESTINATION_NETWORK.to_string(),
+            handle: execution_info.handle,
+            nonce: execution_info.nonce,
+            callback_gas_limit: execution_info.callback_gas_limit,
+            payload: execution_info.payload,
+            payload_signature: execution_info.payload_signature,
+        };
+        
+        let serialized_bytes = log_new_task.try_to_vec().unwrap();
+
+        let base64_string = STANDARD.encode(&serialized_bytes);
+            
+        msg!(&format!("LogNewTask:{}", base64_string));
 
         gateway_state.task_id += 1;
 
@@ -330,12 +345,20 @@ pub struct TaskCompleted {
     pub callback_successful: bool,
 }
 
-#[event]
+#[derive(Debug, Clone, AnchorSerialize, AnchorDeserialize)]
 pub struct LogNewTask {
     pub task_id: u64,
-    pub task_destination_network: String,
-    pub user_address: Pubkey,
+    pub source_network: String,
+    pub user_address: Vec<u8>,
     pub routing_info: String,
     pub payload_hash: Vec<u8>,
-    pub execution_info: ExecutionInfo,
+    pub user_key: Vec<u8>,
+    pub user_pubkey: Vec<u8>,
+    pub routing_code_hash: String,
+    pub task_destination_network: String,
+    pub handle: String,
+    pub nonce: Vec<u8>,
+    pub callback_gas_limit: u32,
+    pub payload: Vec<u8>,
+    pub payload_signature: Vec<u8>,
 }
