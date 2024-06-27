@@ -16,12 +16,6 @@ describe("solana-gateway", () => {
     // Generate a new keypair for the gateway state account
     const gatewayState = anchor.web3.Keypair.generate();
 
-    // Determine the rent-exempt balance for the new account
-    const lamports = await provider.connection.getMinimumBalanceForRentExemption(
-      8 + 8 + 8 + 9000
-    );
-
-
     // Call the initialize method on the program
     try {
       //@ts-ignore
@@ -141,7 +135,22 @@ describe("solana-gateway", () => {
         .signers([provider?.wallet.payer])
         .rpc();
 
+        const tx3 = await program.methods.send(
+          payloadHash,
+          provider.publicKey,
+          routing_contract,
+          executionInfo,
+        )
+        .accounts({
+          gatewayState: gatewayState.publicKey,
+          user: provider.publicKey,
+          systemProgram: anchor.web3.SystemProgram.programId,
+        })
+        .signers([provider?.wallet.payer])
+        .rpc();
+
       console.log("Your transaction signature", tx2);
+      console.log("Your transaction signature", tx3);
       console.log("Gateway send");
     } catch (err) {
       console.error("Error initializing gateway state:", err);

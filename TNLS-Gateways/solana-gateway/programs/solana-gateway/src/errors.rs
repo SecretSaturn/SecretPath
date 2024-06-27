@@ -6,8 +6,14 @@ pub enum TaskError {
     TaskAlreadyCompleted,
     #[msg("Invalid payload hash")]
     InvalidPayloadHash,
+    #[msg("Invalid payload hash size (must be 32 bytes long)")]
+    InvalidPayloadHashSize,
     #[msg("Invalid packet hash")]
     InvalidPacketHash,
+    #[msg("Invalid Public key")]
+    InvalidPublicKey,
+    #[msg("Secp256k1 recovery failed")]
+    Secp256k1RecoverFailure,
     #[msg("Invalid packet signature")]
     InvalidPacketSignature,
     #[msg("Task not found")]

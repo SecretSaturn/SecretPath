@@ -1,44 +1,51 @@
 import json
-
 from solana.rpc.api import Client
 from solders.keypair import Keypair
 from solders.pubkey import Pubkey
-from anchorpy import Program, Context, Idl
-from threading import Lock, Timer
+from threading import Lock
+from solana.transaction import Transaction
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from logging import getLogger, basicConfig, INFO, StreamHandler
-from borsh_construct import CStruct, U64, String, Vec, U8, U32
+from borsh_construct import CStruct, U64, String, Vec, U8, U32, Bytes
+from solders.system_program import ID as SYS_PROGRAM_ID
+from solders.instruction import Instruction, AccountMeta
+from solana.rpc.commitment import Confirmed, Finalized
 from typing import List
+from solana.rpc.types import TxOpts
 import base64
 
-from base_interface import BaseChainInterface, BaseContractInterface, Task
+from base_interface import Task
 
 class LogNewTask:
 
     layout = CStruct(
         "task_id" / U64,
         "source_network" / String,
-        "user_address" / Vec(U8),
+        "user_address" / Bytes,
         "routing_info" / String,
-        "payload_hash" / Vec(U8),
-        "user_key" / Vec(U8),
-        "user_pubkey" / Vec(U8),
+        "payload_hash" / U8[32],
+        "user_key" / Bytes,
+        "user_pubkey" / Bytes,
         "routing_code_hash" / String,
         "task_destination_network" / String,
         "handle" / String,
-        "nonce" / Vec(U8),
+        "nonce" / Bytes,
         "callback_gas_limit" / U32,
-        "payload" / Vec(U8),
-        "payload_signature" / Vec(U8)
+        "payload" / Bytes,
+        "payload_signature" / Bytes
     )
 
 # Base class for interaction with Solana
 class SolanaInterface:
     def __init__(self, private_key="", provider=None, contract_address="", chain_id="", address ="", api_endpoint="", timeout=1, sync_interval=30):
         # Connect to Solana network
-        self.client = Client(api_endpoint, timeout)
+        if provider is None:
+            provider = Client(api_endpoint, timeout)
+
+        self.provider = provider
         self.private_key = private_key
         self.account = Keypair.from_base58_string(private_key)
+        self.address = Pubkey.from_string(address)
         self.sync_interval = sync_interval
         self.lock = Lock()
         self.executor = ThreadPoolExecutor(max_workers=1)
@@ -51,31 +58,23 @@ class SolanaInterface:
         )
         self.logger = getLogger()
 
-        # Schedule synchronization task
-        self.schedule_sync()
-
-    def schedule_sync(self):
-        """Schedule synchronization of any necessary tasks."""
-        try:
-            self.executor.submit(self.sync_nonce)
-        except Exception as e:
-            self.logger.error(f"Error during Solana sync: {e}")
-        finally:
-            # Re-run the sync at specified intervals
-            self.timer = Timer(self.sync_interval, self.schedule_sync)
-            self.timer.start()
-
-    def sync_nonce(self):
-        """Sync any necessary data or nonce value."""
-        # Solana does not use nonce like Ethereum, but you can sync any necessary data
-        self.logger.info("Solana synchronization task running.")
-
     def sign_and_send_transaction(self, txn):
         """
-        Sign and send a transaction to the Solana network.
+        Sign and send a transaction to the Solana network synchronously.
         """
-        signed_txn = txn.sign(self.account)
-        tx_response = self.client.send_raw_transaction(signed_txn.serialize())
+        # Create the transaction
+        transaction = Transaction()
+        transaction.add(txn)
+
+        # Sign the transaction
+        transaction.sign(self.account)
+
+        # Send the transaction
+        response = self.provider.send_transaction(transaction, self.account,
+                                                  opts=TxOpts(skip_confirmation=False, preflight_commitment=Confirmed))
+
+        # Confirm the transaction
+        tx_response = self.provider.confirm_transaction(response.value, commitment=Confirmed)
         return tx_response
 
     def get_last_block(self):
@@ -83,7 +82,7 @@ class SolanaInterface:
         Gets the most recent block number on the Solana network.
         """
         try:
-            return self.client.get_slot(commitment="finalized").value
+            return self.provider.get_slot(commitment=Finalized).value
         except Exception as e:
             self.logger.error(f"Error fetching the most recent block: {e}")
             return None
@@ -94,8 +93,8 @@ class SolanaInterface:
         """
         filtered_transactions = []
         try:
-            response = self.client.get_signatures_for_address(account = contract_interface.address, limit=100,
-                                                              commitment="confirmed")
+            response = self.provider.get_signatures_for_address(account=contract_interface.address, limit=100,
+                                                                commitment=Confirmed)
             if response.value:
                 # Filter transactions by slot height
                 filtered_transactions = [tx.signature for tx in response.value if tx.slot == height]
@@ -127,7 +126,7 @@ class SolanaInterface:
         Process a transaction and return its receipt.
         """
         try:
-            response = self.client.get_transaction(signature, commitment="confirmed")
+            response = self.provider.get_transaction(signature, commitment=Confirmed)
             if response.value:
                 self.logger.info(f"Transaction found: {signature}")
                 log_messages = response.value.transaction.meta.log_messages
@@ -146,13 +145,10 @@ class SolanaInterface:
 
 # Base class for interaction with Solana contracts (programs)
 class SolanaContract:
-    def __init__(self, interface, program_id, program_account, idl):
+    def __init__(self, interface, program_id, program_account):
         self.interface = interface
         self.program_id = Pubkey.from_string(program_id)
         # Load your program's IDL (you should have the IDL file available)
-        idl_path = "/Users/alexanderhertlein/Desktop/SecretPath/TNLS-Gateways/solana-gateway/target/idl/solana_gateway.json"
-        with open(idl_path, "r") as f:
-            self.idl = Program(Idl.from_json(json.load(f)), self.program_id, interface)
         self.address = Pubkey.from_string(program_account)
         self.lock = Lock()
         self.logger = getLogger()
@@ -162,36 +158,59 @@ class SolanaContract:
         """
         Build a transaction and call a specific function with given instructions.
         """
-        print(args)
+
+        layout = CStruct(
+            "task_id" / U64,
+            "source_network" / String,
+            "post_execution_info" / CStruct(
+                "payload_hash" / U8[32],
+                "packet_hash" / U8[32],
+                "callback_address" / Bytes,
+                "callback_selector" / Bytes,
+                "callback_gas_limit" / Bytes,
+                "packet_signature" / U8[65],
+                "result" / Bytes,
+                ),
+        )
+
         with self.lock:
             """
                     Create a transaction with the given instructions and signers.
                     """
             # Create context
+            keys: list[AccountMeta] = [
+                AccountMeta(pubkey=self.address, is_signer=False, is_writable=True),
+                AccountMeta(pubkey=self.interface.address, is_signer=True, is_writable=True),
+                AccountMeta(pubkey=SYS_PROGRAM_ID, is_signer=False, is_writable=False),
+            ]
 
-            ctx = Context(
-                accounts={
-                    "gateway_state": self.address,
-                    "payer": self.interface.provider.wallet.public_key,
-                    "system_program": SYS_PROGRAM_ID,
-                },
-                signers=[self.interface.provider.wallet.payer]
+            # if remaining_accounts is not None:
+            #    keys += remaining_accounts
+
+            # The Identifier of the post execution function
+            identifier = b"4.C\xc2\x99\xc5E\xa8"
+
+            if len(args) == 1:
+                args = json.loads(args[0])
+            print(args)
+            encoded_args = layout.build(
+                {
+                    "task_id": args[0],
+                    "source_network": args[1],
+                    "post_execution_info": {
+                        "payload_hash": bytes.fromhex(args[2][0][2:]),
+                        "packet_hash": bytes.fromhex(args[2][1][2:]),
+                        "callback_address": bytes.fromhex(args[2][2][2:]),
+                        "callback_selector": bytes.fromhex(args[2][3][2:]),
+                        "callback_gas_limit": bytes.fromhex(args[2][4][2:]),
+                        "packet_signature": bytes.fromhex(args[2][5][2:]),
+                        "result": bytes.fromhex(args[2][6][2:]),
+                    },
+                }
             )
+            data = identifier + encoded_args
+            tx = Instruction(self.program_id, data, keys)
 
-            tx = self.program.rpc["post_execution"](
-            ctx,
-            task_id,
-            source_network,
-            {
-                "payload_hash": post_execution_info.payload_hash,
-                "packet_hash": post_execution_info.packet_hash,
-                "callback_address": post_execution_info.callback_address,
-                "callback_selector": post_execution_info.callback_selector,
-                "callback_gas_limit": post_execution_info.callback_gas_limit,
-                "packet_signature": post_execution_info.packet_signature,
-                "result": post_execution_info.result,
-            }
-        )
             submitted_txn = self.interface.sign_and_send_transaction(tx)
         return submitted_txn
 

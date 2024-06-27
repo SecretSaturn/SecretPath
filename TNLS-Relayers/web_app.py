@@ -58,7 +58,6 @@ def generate_solana_config(config_dict, provider=None):
     api_endpoint = config_dict["api_endpoint"]
     program_id = config_dict['program_id']
     program_account = config_dict['program_account']
-    idl = config_dict['idl']
     chain_id = config_dict['chain_id']
     timeout = config_dict['timeout']
 
@@ -69,7 +68,7 @@ def generate_solana_config(config_dict, provider=None):
                                         provider=provider, chain_id=chain_id, api_endpoint=api_endpoint,
                                         timeout=timeout)
     initialized_contract = SolanaContract(interface=initialized_chain, program_id=program_id
-                                          , program_account=program_account, idl=idl)
+                                          , program_account=program_account)
 
     solana_tuple = (initialized_chain, initialized_contract, event_name, function_name)
     return solana_tuple
@@ -96,16 +95,11 @@ def generate_scrt_config(config_dict, provider=None):
         contract_schema = f.read()
     event_name = 'wasm'
     function_name = list(json.loads(contract_schema).keys())[0]
-    initialized_chain = None
 
-    if provider is None:
-        initialized_chain = SCRTInterface(private_key = priv_key, address = address, provider = None,
-                                          api_url = api_endpoint, chain_id = chain_id, feegrant_address = feegrant_address)
-    else:
-        initialized_chain = SCRTInterface(private_key=priv_key, address = address, provider = provider, chain_id = chain_id,  feegrant_address = feegrant_address)
-
+    initialized_chain = SCRTInterface(private_key=priv_key, address=address, provider=provider, chain_id=chain_id,
+                                      feegrant_address=feegrant_address, api_url = api_endpoint)
     initialized_contract = SCRTContract(interface=initialized_chain, address=contract_address,
-                                        abi=contract_schema, code_hash = code_hash)
+                                        abi=contract_schema, code_hash=code_hash)
     scrt_tuple = (initialized_chain, initialized_contract, event_name, function_name)
     return scrt_tuple
 

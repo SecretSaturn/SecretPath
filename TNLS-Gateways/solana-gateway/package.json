@@ -1,13 +1,15 @@
 {
   "scripts": {
     "lint:fix": "prettier */*.js \"*/**/*{.js,.ts}\" -w",
-    "lint": "prettier */*.js \"*/**/*{.js,.ts}\" --check"
+    "lint": "prettier */*.js \"*/**/*{.js,.ts}\" --check",
+    "run": "node-ts tests/solana-test.ts"
   },
   "dependencies": {
     "@blake.regalia/belt": "^0.37.0",
     "@coral-xyz/anchor": "^0.30.0",
     "@solana/web3.js": "^1.93.0",
-    "ethers": "^6.13.1"
+    "ethers": "^6.13.1",
+    "node-ts": "^6.0.1"
   },
   "devDependencies": {
     "@types/bn.js": "^5.1.0",
