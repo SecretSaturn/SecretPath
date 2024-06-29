@@ -7,7 +7,9 @@ use secret_toolkit::{
     crypto::{sha_256, ContractPrng},
     utils::{pad_handle_result, pad_query_result, HandleCallback},
 };
-
+use base64::{engine::general_purpose, Engine};
+use hex::ToHex;
+use sha3::{Digest, Keccak256};
 use crate::{
     msg::{
         ExecuteMsg, InputResponse, InstantiateMsg, PostExecutionMsg, PreExecutionMsg,
@@ -16,9 +18,6 @@ use crate::{
     state::{KeyPair, State, Task, TaskInfo, ResultInfo, CONFIG, CREATOR, MY_ADDRESS, TASK_MAP, RESULT_MAP},
     PrivContractHandleMsg,
 };
-
-use hex::ToHex;
-use sha3::{Digest, Keccak256};
 
 /// pad handle responses and log attributes to blocks of 256 bytes to prevent leaking info based on
 /// response size
@@ -188,7 +187,9 @@ fn pre_execution(deps: DepsMut, _env: Env, msg: PreExecutionMsg) -> StdResult<Re
 
     // Attempt to decrypt the payload
     let decrypted_payload_result = msg.decrypt_payload(config.encryption_keys.sk);
+
     let mut unsafe_payload = false;
+
     let payload = match decrypted_payload_result {
         Ok(decrypted_payload) => {
             // If decryption is successful, attempt to verify
@@ -222,30 +223,33 @@ fn pre_execution(deps: DepsMut, _env: Env, msg: PreExecutionMsg) -> StdResult<Re
         return Err(StdError::generic_err("callback gas limit mismatch"));
     }
 
-    // check if the payload matches the payload hash
     let mut hasher = Keccak256::new();
 
-    let prefix = "\x19Ethereum Signed Message:\n32".as_bytes();
+    // check if the payload matches the payload hash for Solana
     hasher.update(msg.payload.as_slice());
-    let payload_hash_tmp = hasher.finalize_reset();
-    hasher.update([prefix, &payload_hash_tmp].concat());
-    let payload_hash_tmp = hasher.finalize();
+    let payload_hash_tmp_solana = hasher.finalize_reset();
 
-    if msg.payload_hash.as_slice() != payload_hash_tmp.as_slice() {
+    // check if the payload matches the payload hash for Ethereum
+    hasher.update(msg.payload.as_slice());
+    let payload_hash_tmp_eth = hasher.finalize_reset();
+    hasher.update(["\x19Ethereum Signed Message:\n32".as_bytes(), &payload_hash_tmp_eth].concat());
+    let payload_hash_tmp_eth = hasher.finalize();
+
+    if msg.payload_hash.as_slice() != payload_hash_tmp_eth.as_slice() && msg.payload_hash.as_slice() != payload_hash_tmp_solana.as_slice() {
         return Err(StdError::generic_err("Hashed Payload does not match payload hash"));
     }
 
     let new_task = Task {
         network: msg.source_network.clone(),
         task_id: msg.task_id.clone()
-    }.clone();
+    };
 
     // check if the task wasn't executed before already
     let map_contains_task = TASK_MAP.contains(deps.storage, &new_task);
 
-    if map_contains_task {
+    /* if map_contains_task {
         return Err(StdError::generic_err("Task already exists, not executing again"));
-    }
+    } */
 
     let input_values = payload.data;
 
@@ -277,9 +281,7 @@ fn pre_execution(deps: DepsMut, _env: Env, msg: PreExecutionMsg) -> StdResult<Re
     // map task to task info
     TASK_MAP.insert(deps.storage, &new_task, &task_info)?;
 
-    // load this gateway's signing key
-    let mut signing_key_bytes = [0u8; 32];
-    signing_key_bytes.copy_from_slice(config.signing_keys.sk.as_slice());
+    let signing_key_bytes = <[u8; 32]>::try_from(config.signing_keys.sk.as_slice()).unwrap();
 
     // used in production to create signature
     #[cfg(target_arch = "wasm32")]
@@ -331,7 +333,7 @@ fn post_execution(deps: DepsMut, env: Env, msg: PostExecutionMsg) -> StdResult<R
         return Err(StdError::generic_err("input hash does not match task"));
     }
 
-    let result = match base64::decode(msg.result) {
+    let result = match general_purpose::STANDARD.decode(msg.result) {
         Ok(bytes) => bytes,
         Err(_) => {return Err(StdError::generic_err("could not decode base64 result string"));}
     };
@@ -351,15 +353,12 @@ fn post_execution(deps: DepsMut, env: Env, msg: PostExecutionMsg) -> StdResult<R
         result.as_slice(),                       // result
         task_info.callback_address.as_slice(),   // callback address
         task_info.callback_selector.as_slice(),  // callback selector
-    ]
-    .concat();
+    ].concat();
     hasher.update(&data);
     let packet_hash = hasher.finalize();
 
     // load this gateway's signing key
-    let private_key = CONFIG.load(deps.storage)?.signing_keys.sk;
-    let mut signing_key_bytes = [0u8; 32];
-    signing_key_bytes.copy_from_slice(private_key.as_slice());
+    let signing_key_bytes = <[u8; 32]>::try_from(CONFIG.load(deps.storage)?.signing_keys.sk.as_slice()).unwrap();
 
     // used in production to create signature
     // NOTE: api.secp256k1_sign() will perform an additional sha_256 hash operation on the given data

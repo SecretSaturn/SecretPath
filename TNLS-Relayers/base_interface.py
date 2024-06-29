@@ -8,6 +8,7 @@ from pathlib import Path
 with open(f'{Path(__file__).parent.absolute()}/../config.yml') as f:
     data = safe_load(f)
 eth_chains = [info['chain_id'] for key, info in data.items() if info['type'] == 'evm']
+solana_chains = [info['chain_id'] for key, info in data.items() if info['type'] == 'solana']
 scrt_chains = [info['chain_id'] for key, info in data.items() if info['type'] == 'secret']
 
 eth_task_keys_to_msg = {
@@ -21,7 +22,7 @@ eth_task_keys_to_msg = {
 
 task_keys_to_msg = {}
 task_keys_in_order = {}
-for chain in eth_chains:
+for chain in eth_chains + solana_chains:
     task_keys_to_msg[chain] = eth_task_keys_to_msg
     task_keys_in_order[chain] = ['_taskId', '_sourceNetwork', '_info']
 
@@ -92,7 +93,7 @@ class Task:
 
     def __init__(self, task_dict):
         task_dict = dict(task_dict)
-        if 'task_id' in task_dict: 
+        if 'task_id' in task_dict:
             task_dict['task_id'] = str(task_dict['task_id'])
         if 'task_destination_network' in task_dict:
             self.task_destination_network = task_dict['task_destination_network']
