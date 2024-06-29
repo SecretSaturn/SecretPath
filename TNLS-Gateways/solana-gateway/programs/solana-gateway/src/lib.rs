@@ -1,48 +1,74 @@
 use anchor_lang::{
-        prelude::*,
-        system_program::{transfer, Transfer},
-        solana_program::{
-            sysvar::{rent::Rent, Sysvar},
-            program::invoke,
-            instruction::Instruction,
-            secp256k1_recover::{secp256k1_recover, Secp256k1Pubkey}
-        }
+    prelude::*,
+    solana_program::{
+        instruction::Instruction,
+        program::invoke,
+        secp256k1_recover::{secp256k1_recover, Secp256k1Pubkey},
+        sysvar::{rent::Rent, Sysvar},
+    },
+    system_program::{transfer, Transfer},
 };
+use base64::{engine::general_purpose::STANDARD, Engine};
 use sha3::{Digest, Keccak256};
-use base64::{
-    engine::general_purpose::STANDARD,
-    Engine
-};
 
 pub mod errors;
-use crate::errors::{TaskError, GatewayError};
+use crate::errors::{GatewayError, TaskError};
 
 declare_id!("Fz1E7g4ebTVDH4EXijcRbBcgxntivQJfTGePEwZyie9B");
 
 // Constants
+
 const TASK_DESTINATION_NETWORK: &str = "pulsar-3";
 const CHAIN_ID: &str = "SolanaDevNet";
-const SECRET_GATEWAY_PUBKEY: &str = "BA0ZL+MMrYJeD5BUe2FHU+BnSExvij0s3GQaMnoX3+yEKwA46OHrYoLq6uYR0HeVPrJHDtEKC2t7dWpqUCC2iBg=";
+const SECRET_GATEWAY_PUBKEY: &str =
+    "BA0ZL+MMrYJeD5BUe2FHU+BnSExvij0s3GQaMnoX3+yEKwA46OHrYoLq6uYR0HeVPrJHDtEKC2t7dWpqUCC2iBg=";
+
+const SEED: &[u8] = b"gateway_state";
 
 #[program]
 mod solana_gateway {
     use super::*;
-
-    pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
+    
+    pub fn initialize(ctx: Context<Initialize>, bump: u8) -> Result<()> {
         let gateway_state = &mut ctx.accounts.gateway_state;
+
+        // Check if the gateway_state has already been initialized
+
+        require!(
+            gateway_state.owner == Pubkey::default(),
+            GatewayError::PDAAlreadyInitialized
+        );
+
         gateway_state.owner = *ctx.accounts.owner.key;
         gateway_state.task_id = 0;
         gateway_state.tasks = Vec::new();
         gateway_state.max_tasks = 10;
+        gateway_state.bump = bump;
 
         Ok(())
     }
 
-    pub fn increase_task_id(ctx: Context<IncreaseTaskId>, new_task_id: u64) -> Result<()> {
+    pub fn increase_task_id(
+        ctx: Context<IncreaseTaskId>,
+        new_task_id: u64,
+        bump: u8,
+    ) -> Result<()> {
         let gateway_state = &mut ctx.accounts.gateway_state;
-        if new_task_id <= gateway_state.task_id {
-            return Err(GatewayError::TaskIdTooLow.into());
-        }
+
+        // Verify that the gateway_state is a PDA with the correct seeds and bump
+        let expected_gateway_state =
+            Pubkey::create_program_address(&[SEED.as_ref(), &[bump]], ctx.program_id).unwrap();
+
+        require!(
+            gateway_state.key() == expected_gateway_state,
+            GatewayError::InvalidGatewayState
+        );
+
+        require!(
+            new_task_id > gateway_state.task_id,
+            GatewayError::TaskIdTooLow
+        );
+
         gateway_state.task_id = new_task_id;
         Ok(())
     }
@@ -53,64 +79,81 @@ mod solana_gateway {
         user_address: Pubkey,
         routing_info: String,
         execution_info: ExecutionInfo,
+        bump: u8,
     ) -> Result<SendResponse> {
         let gateway_state = &mut ctx.accounts.gateway_state;
 
-        // Fetch the current lamports per signature cost for the singature 
+        // Verify that the gateway_state is a PDA with the correct seeds and bump
+        let expected_gateway_state =
+            Pubkey::create_program_address(&[SEED.as_ref(), &[bump]], ctx.program_id).unwrap();
+
+        require!(
+            gateway_state.key() == expected_gateway_state,
+            GatewayError::InvalidGatewayState
+        );
+
+        // Fetch the current lamports per signature cost for the singature
         let lamports_per_signature = 10;
 
         // //Calculate the rent for extra storage
         let lamports_per_byte_year = Rent::get().unwrap().lamports_per_byte_year;
-        
+
         // // Estimate the cost based on the callback gas limit
-        let estimated_price = execution_info.callback_gas_limit as u64 * lamports_per_signature 
-         + std::mem::size_of::<Task>()*2*lamports_per_byte_year;
-                
+        let estimated_price = execution_info.callback_gas_limit as u64 * lamports_per_signature
+            + (std::mem::size_of::<Task>() as u64 * 2 * lamports_per_byte_year);
+
         let user_lamports = ctx.accounts.user.lamports();
 
-        if user_lamports >= estimated_price {
-            let cpi_accounts = Transfer {
-                from: ctx.accounts.user.to_account_info(),
-                to: gateway_state.to_account_info(),
-            };
-    
-            let cpi_context = CpiContext::new(ctx.accounts.system_program.to_account_info(), cpi_accounts);
-    
-            transfer(cpi_context, estimated_price)?;
-        } else {
-            return Err(TaskError::InsufficientFunds.into());
-        }
-        
+        require!(
+            user_lamports >= estimated_price,
+            TaskError::InsufficientFunds
+        );
+
+        let cpi_accounts = Transfer {
+            from: ctx.accounts.user.to_account_info(),
+            to: gateway_state.to_account_info(),
+        };
+
+        let cpi_context =
+            CpiContext::new(ctx.accounts.system_program.to_account_info(), cpi_accounts);
+
+        transfer(cpi_context, estimated_price)?;
+
         //Hash the payload
         let generated_payload_hash = solana_program::keccak::hash(&execution_info.payload).to_bytes();
 
-        // Payload hash verification 
-        require!(generated_payload_hash.as_slice() == payload_hash, TaskError::InvalidPayloadHash); 
+        // Payload hash verification
+        require!(
+            generated_payload_hash.as_slice() == payload_hash,
+            TaskError::InvalidPayloadHash
+        );
 
         // Persist the task
         let task = Task {
             payload_hash: payload_hash,
             task_id: gateway_state.task_id,
-            completed: false
+            completed: false,
         };
 
         // Calculate the array index
         let index = (gateway_state.task_id % gateway_state.max_tasks) as usize;
 
-         // Reallocate account space if necessary
+        // Reallocate account space if necessary
         if index >= gateway_state.tasks.len() {
-             if gateway_state.tasks.len() >= gateway_state.max_tasks as usize {
-                 let new_max_tasks = gateway_state.max_tasks + 10;
-                 let new_space = 8 + 8 + 8 + (std::mem::size_of::<Task>() as u64 * new_max_tasks);
-                 gateway_state.to_account_info().realloc(new_space, false)?;
-                 gateway_state.max_tasks = new_max_tasks;
-             }
- 
-             // If the array isn't filled up yet, just push it to the end 
-             gateway_state.tasks.push(task);
-         } else {
-             // If a task already exists, it will be overwritten as expected from the max.
-             gateway_state.tasks[index] = task;
+            if gateway_state.tasks.len() >= gateway_state.max_tasks as usize {
+                let new_max_tasks = gateway_state.max_tasks + 10;
+                let new_space = 8 + 8 + 8 + (std::mem::size_of::<Task>() as u64 * new_max_tasks);
+                gateway_state
+                    .to_account_info()
+                    .realloc(new_space.try_into().unwrap(), false)?;
+                gateway_state.max_tasks = new_max_tasks;
+            }
+
+            // If the array isn't filled up yet, just push it to the end
+            gateway_state.tasks.push(task);
+        } else {
+            // If a task already exists, it will be overwritten as expected from the max.
+            gateway_state.tasks[index] = task;
         }
 
         let task_id = gateway_state.task_id;
@@ -131,12 +174,17 @@ mod solana_gateway {
             payload: execution_info.payload,
             payload_signature: execution_info.payload_signature,
         };
-            
-        msg!(&format!("LogNewTask:{}", STANDARD.encode(&log_new_task.try_to_vec().unwrap())));
+
+        msg!(&format!(
+            "LogNewTask:{}",
+            STANDARD.encode(&log_new_task.try_to_vec().unwrap())
+        ));
 
         gateway_state.task_id += 1;
 
-        Ok(SendResponse { request_id: task_id })
+        Ok(SendResponse {
+            request_id: task_id,
+        })
     }
 
     pub fn post_execution(
@@ -144,13 +192,23 @@ mod solana_gateway {
         task_id: u64,
         source_network: String,
         post_execution_info: PostExecutionInfo,
+        bump: u8,
     ) -> Result<()> {
         let gateway_state = &mut ctx.accounts.gateway_state;
-        
+
+        // Verify that the gateway_state is a PDA with the correct seeds and bump
+        let expected_gateway_state =
+            Pubkey::create_program_address(&[SEED.as_ref(), &[bump]], ctx.program_id).unwrap();
+
+        require!(
+            gateway_state.key() == expected_gateway_state,
+            GatewayError::InvalidGatewayState
+        );
+
         let index = (task_id % gateway_state.max_tasks) as usize;
-        
+
         require!(index <= gateway_state.tasks.len(), TaskError::InvalidIndex);
-        
+
         let task = &gateway_state.tasks[index];
 
         require!(task_id == task.task_id, TaskError::TaskIdAlreadyPruned);
@@ -173,7 +231,8 @@ mod solana_gateway {
             post_execution_info.result.as_slice(),
             post_execution_info.callback_address.as_slice(),
             post_execution_info.callback_selector.as_slice(),
-        ].concat();
+        ]
+        .concat();
 
         let mut hasher = Keccak256::new();
         hasher.update(&data);
@@ -187,9 +246,10 @@ mod solana_gateway {
             TaskError::InvalidPacketHash
         );
 
-
         // Decode the base64 public key
-        let pubkey_bytes = STANDARD.decode(SECRET_GATEWAY_PUBKEY).map_err(|_| TaskError::InvalidPublicKey)?;
+        let pubkey_bytes = STANDARD
+            .decode(SECRET_GATEWAY_PUBKEY)
+            .map_err(|_| TaskError::InvalidPublicKey)?;
         let expected_pubkey = Secp256k1Pubkey::new(&pubkey_bytes[1..]);
 
         // Extract the recovery ID and signature from the packet signature
@@ -201,8 +261,11 @@ mod solana_gateway {
         };
 
         // Perform the signature recovery
-        let recovered_pubkey = secp256k1_recover(&post_execution_info.packet_hash, 
-            recovery_id, &post_execution_info.packet_signature[..64])
+        let recovered_pubkey = secp256k1_recover(
+            &post_execution_info.packet_hash,
+            recovery_id,
+            &post_execution_info.packet_signature[..64],
+        )
         .map_err(|_| TaskError::Secp256k1RecoverFailure)?;
 
         // Base64 encode the public keys
@@ -212,7 +275,6 @@ mod solana_gateway {
         // Log the base64 encoded public keys
         msg!("Recovered Public Key: {}", recovered_pubkey_base64);
         msg!("Expected Public Key: {}", expected_pubkey_base64);
-
 
         // // Verify that the recovered public key matches the expected public key
         require!(
@@ -229,19 +291,19 @@ mod solana_gateway {
             result: post_execution_info.result,
         };
 
+        let borsh_data = callback_data.try_to_vec().unwrap();
+
         // Concatenate the identifier with the serialized data
         let mut data = Vec::with_capacity(identifier.len() + borsh_data.len());
         data.extend_from_slice(identifier);
         data.extend_from_slice(&borsh_data);
-
-        let borsh_data = callback_data.try_to_vec().unwrap();
 
         // // Convert the String to a Pubkey
         // let callback_address_pubkey = Pubkey::try_from_slice(&post_execution_info.callback_address.as_slice())
         // .expect("Invalid Pubkey for callback address");
         // let callback_selector_pubkey = Pubkey::try_from_slice(&post_execution_info.callback_selector.as_slice())
         // .expect("Invalid Pubkey for callback selector");
-       
+
         // // Execute the callback
         // let callback_result = invoke(
         //     &Instruction {
@@ -254,10 +316,13 @@ mod solana_gateway {
 
         let task_completed = TaskCompleted {
             task_id,
-            callback_successful: true //callback_result.is_ok()
+            callback_successful: true, //callback_result.is_ok()
         };
-            
-        msg!(&format!("TaskCompleted:{}", STANDARD.encode(&task_completed.try_to_vec().unwrap())));
+
+        msg!(&format!(
+            "TaskCompleted:{}",
+            STANDARD.encode(&task_completed.try_to_vec().unwrap())
+        ));
 
         Ok(())
     }
@@ -265,7 +330,13 @@ mod solana_gateway {
 
 #[derive(Accounts)]
 pub struct Initialize<'info> {
-    #[account(init, payer = owner, space = 10240)]
+    #[account(
+        init,
+        payer = owner,
+        space = 8 + 1024,
+        seeds = [SEED],
+        bump
+    )]
     pub gateway_state: Account<'info, GatewayState>,
     #[account(mut)]
     pub owner: Signer<'info>,
@@ -274,14 +345,14 @@ pub struct Initialize<'info> {
 
 #[derive(Accounts)]
 pub struct IncreaseTaskId<'info> {
-    #[account(mut, has_one = owner)]
+    #[account(mut, seeds = [SEED], bump)]
     pub gateway_state: Account<'info, GatewayState>,
     pub owner: Signer<'info>,
 }
 
 #[derive(Accounts)]
 pub struct Send<'info> {
-    #[account(mut)]
+    #[account(mut, seeds = [SEED], bump)]
     pub gateway_state: Account<'info, GatewayState>,
     #[account(mut)]
     pub user: Signer<'info>,
@@ -290,7 +361,7 @@ pub struct Send<'info> {
 
 #[derive(Accounts)]
 pub struct PostExecution<'info> {
-    #[account(mut)]
+    #[account(mut, seeds = [SEED], bump)]
     pub gateway_state: Account<'info, GatewayState>,
     #[account(mut)]
     pub user: Signer<'info>,
@@ -302,7 +373,8 @@ pub struct GatewayState {
     pub owner: Pubkey,
     pub task_id: u64,
     pub tasks: Vec<Task>,
-    pub max_tasks: u64, 
+    pub max_tasks: u64,
+    pub bump: u8,
 }
 
 #[derive(Debug, Clone, AnchorSerialize, AnchorDeserialize)]

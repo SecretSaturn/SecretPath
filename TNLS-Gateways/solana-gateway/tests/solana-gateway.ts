@@ -13,24 +13,32 @@ describe("solana-gateway", () => {
 
 
   it("Is initialized!", async () => {
-    // Generate a new keypair for the gateway state account
-    const gatewayState = anchor.web3.Keypair.generate();
 
     // Call the initialize method on the program
     try {
-      //@ts-ignore
+
+      // Derive the PDA
+      const [pda, bump] = web3.PublicKey.findProgramAddressSync(
+        [Buffer.from("gateway_state")],
+        program.programId
+      );
+       // Extract the signer from the provider
+      const signer = {
+        publicKey: provider.wallet.publicKey,
+        secretKey: provider.wallet.secretKey,
+      };
       const tx = await program.methods
-        .initialize()
+        .initialize(
+          bump
+        )
         .accounts({
-          gatewayState: gatewayState.publicKey,
+          gatewayState: pda,
           owner: provider.publicKey,
-          systemProgram: anchor.web3.SystemProgram.programId,
         })
-        .signers([gatewayState])
+        .signers([signer])
         .rpc();
 
         console.log("Your transaction signature", tx);
-        console.log("Gateway state initialized:", gatewayState.publicKey.toString());
       
       const task_destination_network = "pulsar-3"
       const routing_contract = "secret1rcpxtvaf2ccs7tgml7d25xr5n8suvdxr6w9nen" //the contract you want to call in secret
@@ -84,7 +92,7 @@ describe("solana-gateway", () => {
         //build a Json of the payload
         const payloadJson = JSON.stringify(payload);
         const plaintext = Buffer.from(payloadJson);
-
+          
         //generate a nonce for ChaCha20-Poly1305 encryption 
         //DO NOT skip this, stream cipher encryptions are only secure with a random nonce!
         const nonce = crypto.getRandomValues(new Uint8Array(12));
@@ -121,14 +129,21 @@ describe("solana-gateway", () => {
           payloadSignature: Buffer.from("AA="), // Replace with actual payload signature, as a Buffer
       };
 
+        // Derive the PDA
+        const [pda2, bump2] = web3.PublicKey.findProgramAddressSync(
+          [Buffer.from("gateway_state")],
+          program.programId
+        );
+
         const tx2 = await program.methods.send(
           payloadHash,
           provider.publicKey,
           routing_contract,
           executionInfo,
+          bump2
         )
         .accounts({
-          gatewayState: gatewayState.publicKey,
+          gatewayState: pda2,
           user: provider.publicKey,
           systemProgram: anchor.web3.SystemProgram.programId,
         })

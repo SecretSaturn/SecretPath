@@ -12,7 +12,8 @@ solana_gateway = "5sVmrdZyK8vt7xwyyE8vXJCZDtkaGDA2jJCcgDPNUiaL"
 url = "https://api.apr.dev"
 
 [provider]
-cluster = "https://api.devnet.solana.com"
+#cluster = "https://api.devnet.solana.com"
+cluster = "https://rpc.ankr.com/solana_devnet"
 wallet = "~/.config/solana/id.json"
 
 [scripts]

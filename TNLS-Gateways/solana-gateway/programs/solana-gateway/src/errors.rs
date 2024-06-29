@@ -30,4 +30,10 @@ pub enum TaskError {
 pub enum GatewayError {
     #[msg("The new task_id must be greater than the current task_id")]
     TaskIdTooLow,
+    #[msg("Gateway state is not a PDA")]
+    InvalidGatewayState,
+    #[msg("PDA is already initialized")]
+    PDAAlreadyInitialized,
+    #[msg("Only owner can call this function!")]
+    NotOwner
 }
