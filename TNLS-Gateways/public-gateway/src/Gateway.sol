@@ -823,6 +823,17 @@ contract Gateway is Initializable, OwnableUpgradeable {
 	    taskId = _taskId + 1;
     }
 
+    struct Payload {
+                bytes data; 
+                string routing_info; 
+                string routing_code_hash;
+                address user_address;
+                bytes user_key;
+                address callback_address;
+                bytes4 callback_selector; 
+                uint32 callback_gas_limit;
+    }
+
     /// @notice Requests random words for VRF
     /// @param _numWords The number of random words requested
     /// @param _callbackGasLimit The gas limit for the callback
@@ -849,7 +860,7 @@ contract Gateway is Initializable, OwnableUpgradeable {
         }
 
         //construct the payload that is sent into the Secret Gateway
-        bytes memory payload = bytes.concat(
+        /* bytes memory payload = bytes.concat(
             '{"data":"{\\"numWords\\":',
             uint256toBytesString(_numWords),
             VRF_info,
@@ -857,12 +868,25 @@ contract Gateway is Initializable, OwnableUpgradeable {
             '","callback_selector":"OLpGFA==","callback_gas_limit":', // 0x38ba4614 hex value already converted into base64, callback_selector of the fullfillRandomWords function
             uint256toBytesString(_callbackGasLimit),
             '}' 
-        );
-
-        //generate the payload hash using the ethereum hash format for messages
-        bytes32 payloadHash = ethSignedPayloadHash(payload);
+        ); */
 
         bytes memory emptyBytes = hex"0000";
+
+        Payload memory payloadStruct = Payload({
+                data: abi.encodePacked('{\\"numWords\\":',uint256toBytesString(_numWords),'}"'),
+                routing_info: VRF_routing_info, 
+                routing_code_hash: VRF_routing_code_hash,
+                user_address: 0x0000000000000000000000000000000000000000,
+                user_key: emptyBytes,
+                callback_address: msg.sender,
+                callback_selector: 0x38ba4614,
+                callback_gas_limit: _callbackGasLimit
+        });
+        
+        bytes memory payload = abi.encode(payloadStruct);
+         
+        //generate the payload hash using the ethereum hash format for messages
+        bytes32 payloadHash = ethSignedPayloadHash(payload);
 
         // ExecutionInfo struct
         ExecutionInfo memory executionInfo = ExecutionInfo({
