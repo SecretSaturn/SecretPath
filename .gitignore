@@ -31,3 +31,4 @@ TNLS-Gateways/public-gateway/lib/*
 TNLS-Samples/RNG/contract.wasm.gz
 /TNLS-Gateways/solana-gateway/node_modules
 /venv
+/secret-deploy/node_modules
