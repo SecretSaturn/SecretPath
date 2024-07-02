@@ -26,7 +26,6 @@ def generate_eth_config(config_dict, provider=None):
 
     """
     priv_key = bytes.fromhex(os.environ['ethereum-private-key'])
-    address = config_dict['wallet_address']
     contract_address = config_dict['contract_address']
     contract_schema = config_dict['contract_schema']
     chain_id = config_dict['chain_id']
@@ -36,7 +35,7 @@ def generate_eth_config(config_dict, provider=None):
     event_name = 'logNewTask'
     function_name = 'postExecution'
 
-    initialized_chain = EthInterface(private_key=priv_key, address=address, provider=provider, chain_id=chain_id, api_endpoint=api_endpoint, timeout=timeout)
+    initialized_chain = EthInterface(private_key=priv_key, provider=provider, chain_id=chain_id, api_endpoint=api_endpoint, timeout=timeout)
     initialized_contract = EthContract(interface=initialized_chain, address=contract_address,
                                        abi=contract_schema)
     eth_tuple = (initialized_chain, initialized_contract, event_name, function_name)

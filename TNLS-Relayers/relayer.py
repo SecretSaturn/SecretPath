@@ -79,7 +79,6 @@ class Relayer:
                 prev_height = curr_height - 1
 
             def fetch_transactions(block_num):
-                block_num = 18497271
                 transactions = chain_interface.get_transactions(contract_interface, height=block_num)
                 tasks_tmp = []
                 for transaction in transactions:
