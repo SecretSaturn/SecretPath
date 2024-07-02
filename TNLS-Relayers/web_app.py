@@ -76,7 +76,6 @@ def generate_scrt_config(config_dict, provider=None):
 
     """
     priv_key = bytes.fromhex(os.environ['secret-private-key'])
-    address = config_dict['wallet_address']
     contract_address = config_dict['contract_address']
     api_endpoint = config_dict['api_endpoint']
     chain_id = config_dict['chain_id']
@@ -89,10 +88,10 @@ def generate_scrt_config(config_dict, provider=None):
     initialized_chain = None
 
     if provider is None:
-        initialized_chain = SCRTInterface(private_key = priv_key, address = address, provider = None,
+        initialized_chain = SCRTInterface(private_key = priv_key, provider = None,
                                           api_url = api_endpoint, chain_id = chain_id, feegrant_address = feegrant_address)
     else:
-        initialized_chain = SCRTInterface(private_key=priv_key, address = address, provider = provider, chain_id = chain_id,  feegrant_address = feegrant_address)
+        initialized_chain = SCRTInterface(private_key=priv_key, provider = provider, chain_id = chain_id,  feegrant_address = feegrant_address)
 
     initialized_contract = SCRTContract(interface=initialized_chain, address=contract_address,
                                         abi=contract_schema, code_hash = code_hash)
