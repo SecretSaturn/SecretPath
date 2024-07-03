@@ -342,10 +342,9 @@
   type: "solana"
   chain_id: "SolanaDevNet"
   api_endpoint: https://api.devnet.solana.com
-  program_id: "Fz1E7g4ebTVDH4EXijcRbBcgxntivQJfTGePEwZyie9B"
-  program_account: "C9mV7vSo4QnBHnHhXq8F1f9xkaa6UabRMMmk8T2YQbHA"
+  program_id: "5LWZAN7ZFE3Rmg4MdjqNTRkSbMxthyG8ouSa3cfn3R6V"
+  program_account: "5mf563g8JSeTE1mMY4GSqbynjayToKSh7x5WLoQ9RDEQ"
   timeout: 2
-  wallet_address: "7H8WSVeDrBvkk7yoj11cG5gxVACaX3m5kUEMChrFiuen"
 
 "1802203764": #Kakarot Sepolia
   active: false

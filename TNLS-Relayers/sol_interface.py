@@ -37,7 +37,7 @@ class LogNewTask:
 
 # Base class for interaction with Solana
 class SolanaInterface:
-    def __init__(self, private_key="", provider=None, contract_address="", chain_id="", address ="", api_endpoint="", timeout=1, sync_interval=30):
+    def __init__(self, private_key="", provider=None, contract_address="", chain_id="", api_endpoint="", timeout=1, sync_interval=30):
         # Connect to Solana network
         if provider is None:
             provider = Client(api_endpoint, timeout)
@@ -45,7 +45,7 @@ class SolanaInterface:
         self.provider = provider
         self.private_key = private_key
         self.account = Keypair.from_base58_string(private_key)
-        self.address = Pubkey.from_string(address)
+        self.address = self.account.pubkey()
         self.sync_interval = sync_interval
         self.lock = Lock()
         self.executor = ThreadPoolExecutor(max_workers=1)
@@ -93,7 +93,7 @@ class SolanaInterface:
         """
         filtered_transactions = []
         try:
-            response = self.provider.get_signatures_for_address(account=contract_interface.address, limit=100,
+            response = self.provider.get_signatures_for_address(account=contract_interface.address, limit=10,
                                                                 commitment=Confirmed)
             if response.value:
                 # Filter transactions by slot height

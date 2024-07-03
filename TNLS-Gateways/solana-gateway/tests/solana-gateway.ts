@@ -22,12 +22,18 @@ describe("solana-gateway", () => {
         [Buffer.from("gateway_state")],
         program.programId
       );
-       // Extract the signer from the provider
-      const signer = {
-        publicKey: provider.wallet.publicKey,
-        secretKey: provider.wallet.secretKey,
-      };
-      const tx = await program.methods
+      
+      // Extract the signer from the provider
+
+      const gatewayState = await program.account.gatewayState.fetch(pda);
+
+      // Check if the PDA is already initialized
+      if (gatewayState.owner.toString() !== web3.PublicKey.default.toString()) {
+        console.log("PDA is already initialized.");
+      }
+      else {
+        console.log("Init PDA");
+        const tx = await program.methods
         .initialize(
           bump
         )
@@ -35,10 +41,10 @@ describe("solana-gateway", () => {
           gatewayState: pda,
           owner: provider.publicKey,
         })
-        .signers([signer])
+        .signers([provider?.wallet.payer])
         .rpc();
-
         console.log("Your transaction signature", tx);
+      }
       
       const task_destination_network = "pulsar-3"
       const routing_contract = "secret1rcpxtvaf2ccs7tgml7d25xr5n8suvdxr6w9nen" //the contract you want to call in secret
@@ -155,9 +161,10 @@ describe("solana-gateway", () => {
           provider.publicKey,
           routing_contract,
           executionInfo,
+          bump2
         )
         .accounts({
-          gatewayState: gatewayState.publicKey,
+          gatewayState: pda2,
           user: provider.publicKey,
           systemProgram: anchor.web3.SystemProgram.programId,
         })

@@ -14,7 +14,7 @@ use sha3::{Digest, Keccak256};
 pub mod errors;
 use crate::errors::{GatewayError, TaskError};
 
-declare_id!("Fz1E7g4ebTVDH4EXijcRbBcgxntivQJfTGePEwZyie9B");
+declare_id!("5LWZAN7ZFE3Rmg4MdjqNTRkSbMxthyG8ouSa3cfn3R6V");
 
 // Constants
 
@@ -293,10 +293,10 @@ mod solana_gateway {
 
         let borsh_data = callback_data.try_to_vec().unwrap();
 
-        // Concatenate the identifier with the serialized data
-        let mut data = Vec::with_capacity(identifier.len() + borsh_data.len());
-        data.extend_from_slice(identifier);
-        data.extend_from_slice(&borsh_data);
+        // // Concatenate the identifier with the serialized data
+        // let mut data = Vec::with_capacity(identifier.len() + borsh_data.len());
+        // data.extend_from_slice(identifier);
+        // data.extend_from_slice(&borsh_data);
 
         // // Convert the String to a Pubkey
         // let callback_address_pubkey = Pubkey::try_from_slice(&post_execution_info.callback_address.as_slice())

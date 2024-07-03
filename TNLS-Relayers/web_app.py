@@ -54,7 +54,6 @@ def generate_solana_config(config_dict, provider=None):
     """
 
     priv_key = os.environ['solana-private-key']
-    wallet_address = config_dict["wallet_address"]
     api_endpoint = config_dict["api_endpoint"]
     program_id = config_dict['program_id']
     program_account = config_dict['program_account']
@@ -64,9 +63,8 @@ def generate_solana_config(config_dict, provider=None):
     event_name = 'logNewTask'
     function_name = 'postExecution'
 
-    initialized_chain = SolanaInterface(private_key=priv_key, address=wallet_address,
-                                        provider=provider, chain_id=chain_id, api_endpoint=api_endpoint,
-                                        timeout=timeout)
+    initialized_chain = SolanaInterface(private_key=priv_key, provider=provider, chain_id=chain_id,
+                                        api_endpoint=api_endpoint, timeout=timeout)
     initialized_contract = SolanaContract(interface=initialized_chain, program_id=program_id
                                           , program_account=program_account)
 
