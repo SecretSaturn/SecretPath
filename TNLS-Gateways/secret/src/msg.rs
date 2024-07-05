@@ -30,6 +30,12 @@ pub enum ExecuteMsg {
     RotateGatewayKeys {},
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum MigrateMsg {
+    Migrate {},
+}
+
 #[derive(Serialize, Deserialize, Clone, PartialEq, JsonSchema, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum ResponseStatus {
@@ -101,7 +107,7 @@ impl PreExecutionMsg {
             Ok(true) => Ok(()),
             Ok(false) | Err(_) => {
                 deps.api.ed25519_verify(
-                    general_purpose::STANDARD.encode(self.payload_hash.as_slice()).as_bytes(),
+                    &general_purpose::STANDARD.encode(self.payload_hash.as_slice()).as_bytes(),
                     self.payload_signature.as_slice(),
                     self.user_pubkey.as_slice(),
                 )

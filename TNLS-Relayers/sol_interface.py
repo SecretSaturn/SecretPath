@@ -82,7 +82,7 @@ class SolanaInterface:
         Gets the most recent block number on the Solana network.
         """
         try:
-            return self.provider.get_slot(commitment=Finalized).value
+            return self.provider.get_slot(commitment=Confirmed).value
         except Exception as e:
             self.logger.error(f"Error fetching the most recent block: {e}")
             return None
@@ -93,7 +93,7 @@ class SolanaInterface:
         """
         filtered_transactions = []
         try:
-            response = self.provider.get_signatures_for_address(account=contract_interface.address, limit=10,
+            response = self.provider.get_signatures_for_address(account=contract_interface.address, limit=1,
                                                                 commitment=Confirmed)
             if response.value:
                 # Filter transactions by slot height
@@ -145,11 +145,12 @@ class SolanaInterface:
 
 # Base class for interaction with Solana contracts (programs)
 class SolanaContract:
-    def __init__(self, interface, program_id, program_account):
+    def __init__(self, interface, program_id):
         self.interface = interface
         self.program_id = Pubkey.from_string(program_id)
-        # Load your program's IDL (you should have the IDL file available)
-        self.address = Pubkey.from_string(program_account)
+        pda, bump = Pubkey.find_program_address([b'gateway_state'], self.program_id)
+        self.bump = bump
+        self.address = pda
         self.lock = Lock()
         self.logger = getLogger()
         self.logger.info("Initialized Solana contract with program ID: %s", program_id)
@@ -171,6 +172,7 @@ class SolanaContract:
                 "packet_signature" / U8[65],
                 "result" / Bytes,
                 ),
+            "bump" / U8,
         )
 
         with self.lock:
@@ -188,7 +190,7 @@ class SolanaContract:
             #    keys += remaining_accounts
 
             # The Identifier of the post execution function
-            identifier = b"4.C\xc2\x99\xc5E\xa8"
+            identifier = bytes([52,46,67,194,153,197,69,168])
 
             if len(args) == 1:
                 args = json.loads(args[0])
@@ -206,6 +208,7 @@ class SolanaContract:
                         "packet_signature": bytes.fromhex(args[2][5][2:]),
                         "result": bytes.fromhex(args[2][6][2:]),
                     },
+                    "bump": self.bump
                 }
             )
             data = identifier + encoded_args
@@ -235,7 +238,7 @@ class SolanaContract:
                             'routing_code_hash': event_data.routing_code_hash,
                             'payload': base64.b64encode(bytes(event_data.payload)).decode('ASCII'),
                             'payload_hash': base64.b64encode(bytes(event_data.payload_hash)).decode('ASCII'),
-                            'payload_signature': base64.b64encode(bytes(event_data.payload_signature[:-1])).decode('ASCII'),
+                            'payload_signature': base64.b64encode(bytes(event_data.payload_signature)).decode('ASCII'),
                             'user_key': base64.b64encode(bytes(event_data.user_key)).decode('ASCII'),
                             'user_pubkey': base64.b64encode(bytes(event_data.user_pubkey)).decode('ASCII'),
                             'handle': event_data.handle,

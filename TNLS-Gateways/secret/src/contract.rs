@@ -13,7 +13,7 @@ use sha3::{Digest, Keccak256};
 use crate::{
     msg::{
         ExecuteMsg, InputResponse, InstantiateMsg, PostExecutionMsg, PreExecutionMsg,
-        PublicKeyResponse, QueryMsg, ResponseStatus::Success, SecretMsg,
+        PublicKeyResponse, QueryMsg, ResponseStatus::Success, SecretMsg, MigrateMsg
     },
     state::{KeyPair, State, Task, TaskInfo, ResultInfo, CONFIG, CREATOR, MY_ADDRESS, TASK_MAP, RESULT_MAP},
     PrivContractHandleMsg,
@@ -72,6 +72,7 @@ pub fn instantiate(
 }
 
 #[cfg(feature = "contract")]
+
 ///////////////////////////////////// Handle //////////////////////////////////////
 /// Returns HandleResult
 ///
@@ -80,6 +81,7 @@ pub fn instantiate(
 /// * `deps` - mutable reference to Extern containing all the contract's external dependencies
 /// * `env` - Env of contract's environment
 /// * `msg` - HandleMsg passed in with the execute message
+/// 
 #[entry_point]
 pub fn execute(
     deps: DepsMut,
@@ -95,6 +97,16 @@ pub fn execute(
         ExecuteMsg::RotateGatewayKeys {} => rotate_gateway_keys(deps, env, info),
     }
 }
+
+#[entry_point]
+pub fn migrate(_deps: DepsMut, _env: Env, msg: MigrateMsg) -> StdResult<Response> {
+    match msg {
+        MigrateMsg::Migrate {} => {
+            Ok(Response::default())
+        }
+    }
+}
+
 
 fn rotate_gateway_keys(deps: DepsMut, env: Env, info: MessageInfo) -> StdResult<Response> {
     // load config
@@ -185,6 +197,22 @@ fn pre_execution(deps: DepsMut, _env: Env, msg: PreExecutionMsg) -> StdResult<Re
     // load config
     let config = CONFIG.load(deps.storage)?;
 
+    let mut hasher = Keccak256::new();
+
+    // check if the payload matches the payload hash for Solana
+    hasher.update(msg.payload.as_slice());
+    let payload_hash_tmp_solana = hasher.finalize_reset();
+
+    // check if the payload matches the payload hash for Ethereum
+    hasher.update(msg.payload.as_slice());
+    let payload_hash_tmp_eth = hasher.finalize_reset();
+    hasher.update(["\x19Ethereum Signed Message:\n32".as_bytes(), &payload_hash_tmp_eth].concat());
+    let payload_hash_tmp_eth = hasher.finalize();
+
+    if msg.payload_hash.as_slice() != payload_hash_tmp_eth.as_slice() && msg.payload_hash.as_slice() != payload_hash_tmp_solana.as_slice() {
+        return Err(StdError::generic_err("Hashed Payload does not match payload hash"));
+    }
+
     // Attempt to decrypt the payload
     let decrypted_payload_result = msg.decrypt_payload(config.encryption_keys.sk);
 
@@ -195,15 +223,17 @@ fn pre_execution(deps: DepsMut, _env: Env, msg: PreExecutionMsg) -> StdResult<Re
             // If decryption is successful, attempt to verify
             match msg.verify(&deps) {
                 Ok(_) => decrypted_payload, // Both decryption and verification succeeded
-                Err(_) => {
+                Err(err) => {
                     unsafe_payload = true;
+                    //return Err(StdError::generic_err(format!("Verification failed: {}", err)));
                     // Continue with the decrypted payload if only verification fails
                     decrypted_payload
                 }
             }
         },
-        Err(_) => {
+        Err(err) => {
             unsafe_payload = true;
+            //return Err(StdError::generic_err(format!("Decryption failed: {}", err)));
             // If decryption fails, continue with the original, encrypted payload
             // We are not verifying the payload in this case as it's already deemed unsafe
             from_binary(&Binary::from(msg.payload.as_slice()))?
@@ -223,22 +253,6 @@ fn pre_execution(deps: DepsMut, _env: Env, msg: PreExecutionMsg) -> StdResult<Re
         return Err(StdError::generic_err("callback gas limit mismatch"));
     }
 
-    let mut hasher = Keccak256::new();
-
-    // check if the payload matches the payload hash for Solana
-    hasher.update(msg.payload.as_slice());
-    let payload_hash_tmp_solana = hasher.finalize_reset();
-
-    // check if the payload matches the payload hash for Ethereum
-    hasher.update(msg.payload.as_slice());
-    let payload_hash_tmp_eth = hasher.finalize_reset();
-    hasher.update(["\x19Ethereum Signed Message:\n32".as_bytes(), &payload_hash_tmp_eth].concat());
-    let payload_hash_tmp_eth = hasher.finalize();
-
-    if msg.payload_hash.as_slice() != payload_hash_tmp_eth.as_slice() && msg.payload_hash.as_slice() != payload_hash_tmp_solana.as_slice() {
-        return Err(StdError::generic_err("Hashed Payload does not match payload hash"));
-    }
-
     let new_task = Task {
         network: msg.source_network.clone(),
         task_id: msg.task_id.clone()
@@ -247,9 +261,9 @@ fn pre_execution(deps: DepsMut, _env: Env, msg: PreExecutionMsg) -> StdResult<Re
     // check if the task wasn't executed before already
     let map_contains_task = TASK_MAP.contains(deps.storage, &new_task);
 
-    /* if map_contains_task {
+    if map_contains_task {
         return Err(StdError::generic_err("Task already exists, not executing again"));
-    } */
+    }
 
     let input_values = payload.data;
 

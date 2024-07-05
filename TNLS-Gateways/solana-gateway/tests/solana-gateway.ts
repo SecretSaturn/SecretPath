@@ -142,7 +142,6 @@ describe("solana-gateway", () => {
         );
 
         const tx2 = await program.methods.send(
-          payloadHash,
           provider.publicKey,
           routing_contract,
           executionInfo,
@@ -157,7 +156,6 @@ describe("solana-gateway", () => {
         .rpc();
 
         const tx3 = await program.methods.send(
-          payloadHash,
           provider.publicKey,
           routing_contract,
           executionInfo,

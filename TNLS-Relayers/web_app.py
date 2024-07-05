@@ -56,7 +56,6 @@ def generate_solana_config(config_dict, provider=None):
     priv_key = os.environ['solana-private-key']
     api_endpoint = config_dict["api_endpoint"]
     program_id = config_dict['program_id']
-    program_account = config_dict['program_account']
     chain_id = config_dict['chain_id']
     timeout = config_dict['timeout']
 
@@ -65,8 +64,7 @@ def generate_solana_config(config_dict, provider=None):
 
     initialized_chain = SolanaInterface(private_key=priv_key, provider=provider, chain_id=chain_id,
                                         api_endpoint=api_endpoint, timeout=timeout)
-    initialized_contract = SolanaContract(interface=initialized_chain, program_id=program_id
-                                          , program_account=program_account)
+    initialized_contract = SolanaContract(interface=initialized_chain, program_id=program_id)
 
     solana_tuple = (initialized_chain, initialized_contract, event_name, function_name)
     return solana_tuple

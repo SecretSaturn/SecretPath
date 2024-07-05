@@ -10,6 +10,7 @@ use anchor_lang::{
 };
 use base64::{engine::general_purpose::STANDARD, Engine};
 use sha3::{Digest, Keccak256};
+use hex::decode;
 
 pub mod errors;
 use crate::errors::{GatewayError, TaskError};
@@ -21,7 +22,7 @@ declare_id!("5LWZAN7ZFE3Rmg4MdjqNTRkSbMxthyG8ouSa3cfn3R6V");
 const TASK_DESTINATION_NETWORK: &str = "pulsar-3";
 const CHAIN_ID: &str = "SolanaDevNet";
 const SECRET_GATEWAY_PUBKEY: &str =
-    "BA0ZL+MMrYJeD5BUe2FHU+BnSExvij0s3GQaMnoX3+yEKwA46OHrYoLq6uYR0HeVPrJHDtEKC2t7dWpqUCC2iBg=";
+    "0x047a267c6be1157040bd19b893a1fd96266e683da46f00b4ab3a959662aa31c191f2a8a9b17636a0a3e53072b6f102b80452a66ccd7e344fdc8a393124da979bd9";
 
 const SEED: &[u8] = b"gateway_state";
 
@@ -75,7 +76,6 @@ mod solana_gateway {
 
     pub fn send(
         ctx: Context<Send>,
-        payload_hash: [u8; 32],
         user_address: Pubkey,
         routing_info: String,
         execution_info: ExecutionInfo,
@@ -122,15 +122,9 @@ mod solana_gateway {
         //Hash the payload
         let generated_payload_hash = solana_program::keccak::hash(&execution_info.payload).to_bytes();
 
-        // Payload hash verification
-        require!(
-            generated_payload_hash.as_slice() == payload_hash,
-            TaskError::InvalidPayloadHash
-        );
-
         // Persist the task
         let task = Task {
-            payload_hash: payload_hash,
+            payload_hash: generated_payload_hash,
             task_id: gateway_state.task_id,
             completed: false,
         };
@@ -163,7 +157,7 @@ mod solana_gateway {
             source_network: CHAIN_ID.to_string(),
             user_address: user_address.to_bytes().to_vec(),
             routing_info: routing_info,
-            payload_hash: payload_hash,
+            payload_hash: generated_payload_hash,
             user_key: execution_info.user_key,
             user_pubkey: execution_info.user_pubkey,
             routing_code_hash: execution_info.routing_code_hash,
@@ -214,7 +208,7 @@ mod solana_gateway {
         require!(task_id == task.task_id, TaskError::TaskIdAlreadyPruned);
 
         // Check if the task is already completed
-        //require!(!task.completed, TaskError::TaskAlreadyCompleted);
+        require!(!task.completed, TaskError::TaskAlreadyCompleted);
 
         // Check if the payload hashes match
         require!(
@@ -247,9 +241,10 @@ mod solana_gateway {
         );
 
         // Decode the base64 public key
-        let pubkey_bytes = STANDARD
-            .decode(SECRET_GATEWAY_PUBKEY)
-            .map_err(|_| TaskError::InvalidPublicKey)?;
+        let pubkey_hex = &SECRET_GATEWAY_PUBKEY[2..];
+
+        // Convert the hex string to bytes
+        let pubkey_bytes = decode(pubkey_hex).map_err(|_| TaskError::InvalidPublicKey)?;
         let expected_pubkey = Secp256k1Pubkey::new(&pubkey_bytes[1..]);
 
         // Extract the recovery ID and signature from the packet signature
@@ -267,14 +262,6 @@ mod solana_gateway {
             &post_execution_info.packet_signature[..64],
         )
         .map_err(|_| TaskError::Secp256k1RecoverFailure)?;
-
-        // Base64 encode the public keys
-        let recovered_pubkey_base64 = STANDARD.encode(recovered_pubkey.to_bytes());
-        let expected_pubkey_base64 = STANDARD.encode(expected_pubkey.to_bytes());
-
-        // Log the base64 encoded public keys
-        msg!("Recovered Public Key: {}", recovered_pubkey_base64);
-        msg!("Expected Public Key: {}", expected_pubkey_base64);
 
         // // Verify that the recovered public key matches the expected public key
         require!(
