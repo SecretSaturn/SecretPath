@@ -21,7 +21,7 @@ class SCRTInterface(BaseChainInterface):
     NOTE: the below default private key is for testing only, and does not correspond to any real account/wallet
     """
 
-    def __init__(self, private_key="", address=None, api_url="", chain_id="", provider=None, feegrant_address=None, sync_interval=30, **kwargs):
+    def __init__(self, private_key="", api_url="", chain_id="", provider=None, feegrant_address=None, sync_interval=30, **kwargs):
         if isinstance(private_key, str):
             self.private_key = RawKey.from_hex(private_key)
         else:
@@ -30,9 +30,8 @@ class SCRTInterface(BaseChainInterface):
             self.provider = LCDClient(url=api_url, chain_id=chain_id, **kwargs)
         else:
             self.provider = provider
-        self.address = address
         self.feegrant_address = feegrant_address
-        assert self.address == str(self.private_key.acc_address), f"Address {self.address} and private key {self.private_key.acc_address} mismatch"
+        self.address = str(self.private_key.acc_address)
         self.wallet = self.provider.wallet(self.private_key)
         self.logger = getLogger()
 

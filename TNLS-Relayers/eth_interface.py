@@ -6,7 +6,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Lock, Timer
 from time import sleep
 
-from web3 import Web3, middleware
+from web3 import Web3, middleware, auto
 from web3.datastructures import AttributeDict
 from web3.middleware import geth_poa_middleware
 
@@ -18,7 +18,7 @@ class EthInterface(BaseChainInterface):
     Implementaion of BaseChainInterface for eth.
     """
 
-    def __init__(self, private_key="", address="", provider=None, contract_address="", chain_id="", api_endpoint="", timeout=1, sync_interval=30, **_kwargs):
+    def __init__(self, private_key="", provider=None, contract_address="", chain_id="", api_endpoint="", timeout=1, sync_interval=30, **_kwargs):
         if provider is None:
             # If no provider, set a default with middleware for various blockchain scenarios
             provider = Web3(Web3.HTTPProvider(api_endpoint, request_kwargs={'timeout': timeout}))
@@ -29,11 +29,11 @@ class EthInterface(BaseChainInterface):
 
         self.private_key = private_key
         self.provider = provider
-        self.address = address
+        self.address = auto.w3.eth.account.privateKeyToAccount(private_key).address
         self.contract_address = contract_address
         self.chain_id = chain_id
         self.nonce = self.provider.eth.get_transaction_count(self.address, 'pending')
-
+        
         # Set up logging
         basicConfig(
             level=INFO,

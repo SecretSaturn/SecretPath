@@ -35,3 +35,4 @@ TNLS-Samples/RNG/contract.wasm.gz
 /secret-deploy/node_modules
 secret-deploy/secret_gateway.log
 secret-deploy/secret_sample.log
+/secret-deploy/node_modules
