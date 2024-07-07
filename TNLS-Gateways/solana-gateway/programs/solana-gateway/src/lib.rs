@@ -210,18 +210,13 @@ mod solana_gateway {
         // Check if the task is already completed
         require!(!task.completed, TaskError::TaskAlreadyCompleted);
 
-        // Check if the payload hashes match
-        require!(
-            task.payload_hash == post_execution_info.payload_hash,
-            TaskError::InvalidPayloadHash
-        );
-
-        // Concatenate packet data elements
+        // Concatenate packet data elements, 
+        // use saved in contract payload_hash to verify that the payload hash wasn't manipulated
         let data = [
             source_network.as_bytes(),
             CHAIN_ID.as_bytes(),
             task_id.to_string().as_bytes(),
-            post_execution_info.payload_hash.as_slice(),
+            task.payload_hash.as_slice(),
             post_execution_info.result.as_slice(),
             post_execution_info.callback_address.as_slice(),
             post_execution_info.callback_selector.as_slice(),
@@ -386,7 +381,6 @@ pub struct ExecutionInfo {
 
 #[derive(Debug, Clone, AnchorSerialize, AnchorDeserialize)]
 pub struct PostExecutionInfo {
-    pub payload_hash: [u8; 32],
     pub packet_hash: [u8; 32],
     pub callback_address: Vec<u8>,
     pub callback_selector: Vec<u8>,

@@ -16,8 +16,8 @@ import base64
 
 from base_interface import Task
 
-class LogNewTask:
 
+class LogNewTask:
     layout = CStruct(
         "task_id" / U64,
         "source_network" / String,
@@ -33,6 +33,23 @@ class LogNewTask:
         "callback_gas_limit" / U32,
         "payload" / Bytes,
         "payload_signature" / Bytes
+    )
+
+
+class PostExecution:
+
+    layout = CStruct(
+        "task_id" / U64,
+        "source_network" / String,
+        "post_execution_info" / CStruct(
+            "packet_hash" / U8[32],
+            "callback_address" / Bytes,
+            "callback_selector" / Bytes,
+            "callback_gas_limit" / Bytes,
+            "packet_signature" / U8[65],
+            "result" / Bytes,
+        ),
+        "bump" / U8,
     )
 
 # Base class for interaction with Solana
@@ -160,21 +177,6 @@ class SolanaContract:
         Build a transaction and call a specific function with given instructions.
         """
 
-        layout = CStruct(
-            "task_id" / U64,
-            "source_network" / String,
-            "post_execution_info" / CStruct(
-                "payload_hash" / U8[32],
-                "packet_hash" / U8[32],
-                "callback_address" / Bytes,
-                "callback_selector" / Bytes,
-                "callback_gas_limit" / Bytes,
-                "packet_signature" / U8[65],
-                "result" / Bytes,
-                ),
-            "bump" / U8,
-        )
-
         with self.lock:
             """
                     Create a transaction with the given instructions and signers.
@@ -195,12 +197,11 @@ class SolanaContract:
             if len(args) == 1:
                 args = json.loads(args[0])
             print(args)
-            encoded_args = layout.build(
+            encoded_args = PostExecution.layout.build(
                 {
                     "task_id": args[0],
                     "source_network": args[1],
                     "post_execution_info": {
-                        "payload_hash": bytes.fromhex(args[2][0][2:]),
                         "packet_hash": bytes.fromhex(args[2][1][2:]),
                         "callback_address": bytes.fromhex(args[2][2][2:]),
                         "callback_selector": bytes.fromhex(args[2][3][2:]),
