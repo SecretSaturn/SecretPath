@@ -29,7 +29,7 @@ class EthInterface(BaseChainInterface):
 
         self.private_key = private_key
         self.provider = provider
-        self.address = auto.w3.eth.account.privateKeyToAccount(private_key).address
+        self.address = auto.w3.eth.account.from_key(private_key).address
         self.contract_address = contract_address
         self.chain_id = chain_id
         self.nonce = self.provider.eth.get_transaction_count(self.address, 'pending')
