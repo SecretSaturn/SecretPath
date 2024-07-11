@@ -1,6 +1,5 @@
 import fs from "fs";
 import { Wallet, SecretNetworkClient } from "secretjs";
-import { computeAddress } from "ethers/lib/utils";
 import 'dotenv/config'
 
 var mnemonic = process.env.MNEMONIC!;

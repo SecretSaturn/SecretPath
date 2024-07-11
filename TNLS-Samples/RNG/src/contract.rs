@@ -1,21 +1,21 @@
 use cosmwasm_std::{
     entry_point, to_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdError,
-    StdResult,to_vec, ContractResult, SystemResult
+    StdResult, to_vec, ContractResult, SystemResult
 };
-use serde::{Deserialize, Serialize};
 use anybuf::Anybuf;
 use secret_toolkit::{
     crypto::{sha_256},
     utils::{pad_handle_result, pad_query_result, HandleCallback},
 };
 use crate::{
-    msg::{ExecuteMsg, GatewayMsg, InstantiateMsg, QueryMsg, QueryResponse, MigrateMsg},
+    msg::{ExecuteMsg, GatewayMsg, InstantiateMsg, QueryMsg, MigrateMsg},
     state::{State, Input, CONFIG},
 };
 use tnls::{
     msg::{PostExecutionMsg, PrivContractHandleMsg},
     state::Task
 };
+use base64::{engine::general_purpose, Engine};
 
 /// pad handle responses and log attributes to blocks of 256 bytes to prevent leaking info based on
 /// response size
@@ -127,18 +127,9 @@ fn try_random(
         random_numbers.extend_from_slice(hashed_number.as_slice()); 
     }
     
-    let result = base64::encode(random_numbers);
+    let result = general_purpose::STANDARD.encode(random_numbers);
 
-    // let request = QueryByContractAddressRequest {
-    //     contract_address: config.gateway_address.to_string()
-    // };
-
-    // let code_hash_query = cosmwasm_std::QueryRequest::Stargate {
-    //     path: "/secret.compute.v1beta1.Query/CodeHashByContractAddress".into(),
-    //     data: Binary(request.as_bytes()),
-    // };
-
-    // let code_hash_result = deps.querier.query(&code_hash_query)?;
+    let gateway_code_hash = get_contract_code_hash(deps, config.gateway_address.to_string())?;
 
     let callback_msg = GatewayMsg::Output {
         outputs: PostExecutionMsg {
@@ -148,7 +139,7 @@ fn try_random(
         },
     }
     .to_cosmos_msg(
-        config.gateway_hash,
+        gateway_code_hash,
         config.gateway_address.to_string(),
         None,
     )?;
@@ -158,19 +149,11 @@ fn try_random(
         .add_attribute("status", "provided RNG complete"))
 }
 
-#[entry_point]
-pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
-    let response = match msg {
-        QueryMsg::Query {} => try_query(deps)
-    };
-    pad_query_result(response, BLOCK_SIZE)
-}
-
-fn try_query(deps: Deps) -> StdResult<Binary> {
+fn get_contract_code_hash(deps: DepsMut, contract_address: String) -> StdResult<String> {
     let code_hash_query: cosmwasm_std::QueryRequest<cosmwasm_std::Empty> = cosmwasm_std::QueryRequest::Stargate {
         path: "/secret.compute.v1beta1.Query/CodeHashByContractAddress".into(),
         data: Binary(Anybuf::new()
-        .append_string(1, "secret1fxs74g8tltrngq3utldtxu9yys5tje8dzdvghr")
+        .append_string(1, contract_address)
         .into_vec())
     };
 
@@ -190,17 +173,26 @@ fn try_query(deps: Deps) -> StdResult<Binary> {
         SystemResult::Ok(ContractResult::Ok(value)) => Ok(value)
     }?;
 
-   // Remove the "\n@" if it exists at the start of the code_hash
-   let mut code_hash_str = String::from_utf8(code_hash.to_vec()).map_err(|err| {
-    StdError::generic_err(format!("Invalid UTF-8 sequence: {}", err))
+    // Remove the "\n@" if it exists at the start of the code_hash
+    let mut code_hash_str = String::from_utf8(code_hash.to_vec()).map_err(|err| {
+        StdError::generic_err(format!("Invalid UTF-8 sequence: {}", err))
     })?;
 
     if code_hash_str.starts_with("\n@") {
         code_hash_str = code_hash_str.trim_start_matches("\n@").to_string();
     }
 
-    to_binary(&QueryResponse { message: code_hash_str })
+    Ok(code_hash_str)
 }
+
+#[entry_point]
+pub fn query(_deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
+    let response = match msg {
+        QueryMsg::Query {} => to_binary("")
+    };
+    pad_query_result(response, BLOCK_SIZE)
+}
+
 
 #[cfg(test)]
 mod tests {

@@ -30,11 +30,6 @@ pub enum QueryMsg {
     Query {}
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-pub struct QueryResponse {
-    pub message: String,
-}
-
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum GatewayMsg {
