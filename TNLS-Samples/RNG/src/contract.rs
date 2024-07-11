@@ -1,13 +1,15 @@
 use cosmwasm_std::{
     entry_point, to_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdError,
-    StdResult,
+    StdResult,to_vec, ContractResult, SystemResult
 };
+use serde::{Deserialize, Serialize};
+use anybuf::Anybuf;
 use secret_toolkit::{
     crypto::{sha_256},
     utils::{pad_handle_result, pad_query_result, HandleCallback},
 };
 use crate::{
-    msg::{ExecuteMsg, GatewayMsg, InstantiateMsg, QueryMsg, QueryResponse},
+    msg::{ExecuteMsg, GatewayMsg, InstantiateMsg, QueryMsg, QueryResponse, MigrateMsg},
     state::{State, Input, CONFIG},
 };
 use tnls::{
@@ -46,30 +48,47 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
 }
 
 #[entry_point]
-pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
-    let response = match msg {
-        QueryMsg::Query {} => try_query(deps)
-    };
-    pad_query_result(response, BLOCK_SIZE)
+pub fn migrate(_deps: DepsMut, _env: Env, msg: MigrateMsg) -> StdResult<Response> {
+    match msg {
+        MigrateMsg::Migrate {} => {
+            Ok(Response::default())
+        }
+    }
 }
+
 
 // acts like a gateway message handle filter
 fn try_handle(
     deps: DepsMut,
     env: Env,
-    _info: MessageInfo,
+    info: MessageInfo,
     msg: PrivContractHandleMsg,
 ) -> StdResult<Response> {
-    // verify signature with stored gateway public key
-    let gateway_key = CONFIG.load(deps.storage)?.gateway_key;
-    deps.api
-        .secp256k1_verify(
-            msg.input_hash.as_slice(),
-            msg.signature.as_slice(),
-            gateway_key.as_slice(),
-        )
-        .map_err(|err| StdError::generic_err(err.to_string()))?;
+   // verify signature with stored gateway public key
+    
+   let config = CONFIG.load(deps.storage)?;
 
+   if info.sender != config.gateway_address {
+       return Err(StdError::generic_err("Only SecretPath Gateway can call this function"));
+   }
+
+   deps.api.secp256k1_verify(
+           msg.input_hash.as_slice(),
+           msg.signature.as_slice(),
+           config.gateway_key.as_slice(),
+       )
+       .map_err(|err| StdError::generic_err(err.to_string()))?;
+
+   // combine input values and task to create verification hash, once with the unsafe_payload flag = true and once = falsecargo 
+   let input_hash_safe = sha_256(&[msg.input_values.as_bytes(), msg.task.task_id.as_bytes(),&[0u8]].concat());
+   let input_hash_unsafe = sha_256(&[msg.input_values.as_bytes(), msg.task.task_id.as_bytes(),&[1u8]].concat());
+
+   if msg.input_hash.as_slice() != input_hash_safe.as_slice() {
+       if msg.input_hash.as_slice() == input_hash_unsafe.as_slice() {
+           return Err(StdError::generic_err("Payload was marked as unsafe, not executing"));
+       }
+       return Err(StdError::generic_err("Safe input hash does not match provided input hash"));
+   }
     // determine which function to call based on the included handle
     let handle = msg.handle.as_str();
     match handle {
@@ -110,6 +129,17 @@ fn try_random(
     
     let result = base64::encode(random_numbers);
 
+    // let request = QueryByContractAddressRequest {
+    //     contract_address: config.gateway_address.to_string()
+    // };
+
+    // let code_hash_query = cosmwasm_std::QueryRequest::Stargate {
+    //     path: "/secret.compute.v1beta1.Query/CodeHashByContractAddress".into(),
+    //     data: Binary(request.as_bytes()),
+    // };
+
+    // let code_hash_result = deps.querier.query(&code_hash_query)?;
+
     let callback_msg = GatewayMsg::Output {
         outputs: PostExecutionMsg {
             result,
@@ -128,9 +158,48 @@ fn try_random(
         .add_attribute("status", "provided RNG complete"))
 }
 
-fn try_query(_deps: Deps) -> StdResult<Binary> {
-    let message = "placeholder".to_string();
-    to_binary(&QueryResponse { message })
+#[entry_point]
+pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
+    let response = match msg {
+        QueryMsg::Query {} => try_query(deps)
+    };
+    pad_query_result(response, BLOCK_SIZE)
+}
+
+fn try_query(deps: Deps) -> StdResult<Binary> {
+    let code_hash_query: cosmwasm_std::QueryRequest<cosmwasm_std::Empty> = cosmwasm_std::QueryRequest::Stargate {
+        path: "/secret.compute.v1beta1.Query/CodeHashByContractAddress".into(),
+        data: Binary(Anybuf::new()
+        .append_string(1, "secret1fxs74g8tltrngq3utldtxu9yys5tje8dzdvghr")
+        .into_vec())
+    };
+
+    let raw = to_vec(&code_hash_query).map_err(|serialize_err| {
+        StdError::generic_err(format!("Serializing QueryRequest: {}", serialize_err))
+    })?;
+
+    let code_hash = match deps.querier.raw_query(&raw) {
+        SystemResult::Err(system_err) => Err(StdError::generic_err(format!(
+            "Querier system error: {}",
+            system_err
+        ))),
+        SystemResult::Ok(ContractResult::Err(contract_err)) => Err(StdError::generic_err(format!(
+            "Querier contract error: {}",
+            contract_err
+        ))),
+        SystemResult::Ok(ContractResult::Ok(value)) => Ok(value)
+    }?;
+
+   // Remove the "\n@" if it exists at the start of the code_hash
+   let mut code_hash_str = String::from_utf8(code_hash.to_vec()).map_err(|err| {
+    StdError::generic_err(format!("Invalid UTF-8 sequence: {}", err))
+    })?;
+
+    if code_hash_str.starts_with("\n@") {
+        code_hash_str = code_hash_str.trim_start_matches("\n@").to_string();
+    }
+
+    to_binary(&QueryResponse { message: code_hash_str })
 }
 
 #[cfg(test)]

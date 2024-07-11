@@ -223,7 +223,7 @@ fn pre_execution(deps: DepsMut, _env: Env, msg: PreExecutionMsg) -> StdResult<Re
             // If decryption is successful, attempt to verify
             match msg.verify(&deps) {
                 Ok(_) => decrypted_payload, // Both decryption and verification succeeded
-                Err(err) => {
+                Err(_err) => {
                     unsafe_payload = true;
                     //return Err(StdError::generic_err(format!("Verification failed: {}", err)));
                     // Continue with the decrypted payload if only verification fails
@@ -231,7 +231,7 @@ fn pre_execution(deps: DepsMut, _env: Env, msg: PreExecutionMsg) -> StdResult<Re
                 }
             }
         },
-        Err(err) => {
+        Err(_err) => {
             unsafe_payload = true;
             //return Err(StdError::generic_err(format!("Decryption failed: {}", err)));
             // If decryption fails, continue with the original, encrypted payload
