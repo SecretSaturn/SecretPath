@@ -11,7 +11,7 @@ use crate::{
     msg::{ExecuteMsg, GatewayMsg, InstantiateMsg, QueryMsg, MigrateMsg},
     state::{State, Input, CONFIG},
 };
-use tnls::{
+use secret_path::{
     msg::{PostExecutionMsg, PrivContractHandleMsg},
     state::Task
 };

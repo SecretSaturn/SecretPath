@@ -89,13 +89,12 @@ pub fn execute(
     info: MessageInfo,
     msg: ExecuteMsg,
 ) -> StdResult<Response> {
-    match msg {
-        ExecuteMsg::Input { inputs } => {
-            pad_handle_result(pre_execution(deps, env, inputs), BLOCK_SIZE)
-        },
+    let response = match msg {
+        ExecuteMsg::Input { inputs } => pre_execution(deps, env, inputs),
         ExecuteMsg::Output { outputs } => post_execution(deps, env, outputs),
         ExecuteMsg::RotateGatewayKeys {} => rotate_gateway_keys(deps, env, info),
-    }
+    };
+    pad_handle_result(response, BLOCK_SIZE)
 }
 
 #[entry_point]
