@@ -24,6 +24,8 @@ pub enum TaskError {
     InvalidIndex,
     #[msg("Task Id already pruned")]
     TaskIdAlreadyPruned,
+    #[msg("CallbackAddressesInvalid")]
+    CallbackAddressesInvalid
 }
 
 #[error_code]

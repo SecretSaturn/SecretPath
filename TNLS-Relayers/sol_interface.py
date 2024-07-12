@@ -188,11 +188,23 @@ class SolanaContract:
                 AccountMeta(pubkey=SYS_PROGRAM_ID, is_signer=False, is_writable=False),
             ]
 
-            # if remaining_accounts is not None:
-            #    keys += remaining_accounts
+            callback_address_bytes = bytes.fromhex(args[2][2][2:])
+
+            # Ensure the byte data length is a multiple of 32
+            if len(callback_address_bytes) % 32 != 0:
+                raise ValueError("callback_address_bytes length is not a multiple of 32")
+
+            # Step 1-3: Process the addresses
+            callback_addresses: List[AccountMeta] = [
+                AccountMeta(pubkey=Pubkey(callback_address_bytes[i:i + 32]), is_signer=False, is_writable=True)
+                for i in range(0, len(callback_address_bytes), 32)
+            ]
+
+            if callback_addresses is not None:
+                keys += callback_addresses
 
             # The Identifier of the post execution function
-            identifier = bytes([52,46,67,194,153,197,69,168])
+            identifier = bytes([52, 46, 67, 194, 153, 197, 69, 168])
 
             if len(args) == 1:
                 args = json.loads(args[0])

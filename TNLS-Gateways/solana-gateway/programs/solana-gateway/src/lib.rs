@@ -2,7 +2,7 @@ use anchor_lang::{
     prelude::*,
     solana_program::{
         instruction::Instruction,
-        program::invoke,
+        program::invoke_signed,
         secp256k1_recover::{secp256k1_recover, Secp256k1Pubkey},
         sysvar::{rent::Rent, Sysvar},
     },
@@ -268,33 +268,46 @@ mod solana_gateway {
         gateway_state.tasks[index].completed = true;
 
         let callback_data = CallbackData {
-            callback_selector: post_execution_info.callback_selector,
             task_id: task_id,
             result: post_execution_info.result,
         };
 
         let borsh_data = callback_data.try_to_vec().unwrap();
 
-        // // Concatenate the identifier with the serialized data
-        // let mut data = Vec::with_capacity(identifier.len() + borsh_data.len());
-        // data.extend_from_slice(identifier);
-        // data.extend_from_slice(&borsh_data);
+        // Extract and concatenate the program ID and function identifier
+        let program_id_bytes = &post_execution_info.callback_selector[0..32];
+        let function_identifier = &post_execution_info.callback_selector[32..40];
 
-        // // Convert the String to a Pubkey
-        // let callback_address_pubkey = Pubkey::try_from_slice(&post_execution_info.callback_address.as_slice())
-        // .expect("Invalid Pubkey for callback address");
-        // let callback_selector_pubkey = Pubkey::try_from_slice(&post_execution_info.callback_selector.as_slice())
-        // .expect("Invalid Pubkey for callback selector");
+        // Concatenate the function identifier with the rest of the data
+        let mut callback_data = Vec::with_capacity(function_identifier.len() + borsh_data.len());
+        callback_data.extend_from_slice(function_identifier);
+        callback_data.extend_from_slice(&borsh_data);
 
-        // // Execute the callback
-        // let callback_result = invoke(
-        //     &Instruction {
-        //         program_id: callback_selector_pubkey,
-        //         accounts: vec![AccountMeta::new(callback_address_pubkey, false)],
-        //         data: borsh_data,
-        //     },
-        //     &[],
-        // );
+        // Concatenate all addresses that will be accessed
+        let callback_address_bytes = &post_execution_info.callback_address;
+
+        require!(
+            callback_address_bytes.len() % 32 == 0,
+            TaskError::CallbackAddressesInvalid
+        );
+
+        let callback_addresses: Vec<AccountMeta> = callback_address_bytes
+            .chunks(32) // Assuming each address is 32 bytes
+            .map(|address| {
+                AccountMeta::new(Pubkey::new(address), false)
+            })
+            .collect();
+
+        // Execute the callback with signed seeds
+        let callback_result = invoke_signed(
+            &Instruction {
+                program_id: Pubkey::new(program_id_bytes),
+                accounts: callback_addresses,
+                data: callback_data,
+            },
+            &[],
+            &[&[SEED.as_ref(), &[bump]]],
+        );
 
         let task_completed = TaskCompleted {
             task_id,
@@ -308,6 +321,20 @@ mod solana_gateway {
 
         Ok(())
     }
+
+    pub fn callback_test (
+        ctx: Context<CallbackTest>,
+        task_id: u64,
+        result: String,
+    ) -> Result<()> {
+        
+    }
+}
+#[derive(Accounts)]
+pub struct CallbackTest<'info> {
+    #[account(mut)]
+    pub user: Signer<'info>,
+    pub system_program: Program<'info, System>,
 }
 
 #[derive(Accounts)]
@@ -391,7 +418,6 @@ pub struct PostExecutionInfo {
 
 #[derive(Debug, Clone, AnchorSerialize, AnchorDeserialize)]
 pub struct CallbackData {
-    callback_selector: Vec<u8>,
     task_id: u64,
     result: Vec<u8>,
 }
