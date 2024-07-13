@@ -83,10 +83,7 @@ fn try_handle(
    let input_hash_safe = sha_256(&[msg.input_values.as_bytes(), msg.task.task_id.as_bytes(),&[0u8]].concat());
    let input_hash_unsafe = sha_256(&[msg.input_values.as_bytes(), msg.task.task_id.as_bytes(),&[1u8]].concat());
 
-   if msg.input_hash.as_slice() != input_hash_safe.as_slice() {
-       if msg.input_hash.as_slice() == input_hash_unsafe.as_slice() {
-           return Err(StdError::generic_err("Payload was marked as unsafe, not executing"));
-       }
+   if msg.input_hash.as_slice() != input_hash_safe.as_slice() || msg.input_hash.as_slice() != input_hash_unsafe.as_slice(){
        return Err(StdError::generic_err("Safe input hash does not match provided input hash"));
    }
     // determine which function to call based on the included handle

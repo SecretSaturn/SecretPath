@@ -24,8 +24,14 @@ pub enum TaskError {
     InvalidIndex,
     #[msg("Task Id already pruned")]
     TaskIdAlreadyPruned,
-    #[msg("CallbackAddressesInvalid")]
-    CallbackAddressesInvalid
+    #[msg("Callback Addresses are invalid")]
+    InvalidCallbackAddresses,
+    #[msg("Borsh Data Serialization failed")]
+    BorshDataSerializationFailed,
+    #[msg("Invalid Callback Selector")]
+    InvalidCallbackSelector,
+    #[msg("MissingRequiredSignature")]
+    MissingRequiredSignature
 }
 
 #[error_code]

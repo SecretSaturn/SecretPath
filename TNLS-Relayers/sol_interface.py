@@ -108,13 +108,16 @@ class SolanaInterface:
         """
         Get transactions for a given address.
         """
+        jump = 10
+        if height % jump != 0:
+            return []
         filtered_transactions = []
         try:
-            response = self.provider.get_signatures_for_address(account=contract_interface.address, limit=1,
+            response = self.provider.get_signatures_for_address(account=contract_interface.address, limit=10,
                                                                 commitment=Confirmed)
             if response.value:
                 # Filter transactions by slot height
-                filtered_transactions = [tx.signature for tx in response.value if tx.slot == height]
+                filtered_transactions = [tx.signature for tx in response.value if tx.slot >= height-jump]
             else:
                 return []
         except Exception as e:
@@ -182,33 +185,32 @@ class SolanaContract:
                     Create a transaction with the given instructions and signers.
                     """
             # Create context
-            keys: list[AccountMeta] = [
+            accounts: list[AccountMeta] = [
                 AccountMeta(pubkey=self.address, is_signer=False, is_writable=True),
                 AccountMeta(pubkey=self.interface.address, is_signer=True, is_writable=True),
                 AccountMeta(pubkey=SYS_PROGRAM_ID, is_signer=False, is_writable=False),
             ]
 
-            callback_address_bytes = bytes.fromhex(args[2][2][2:])
+            if len(args) == 1:
+                args = json.loads(args[0])
 
-            # Ensure the byte data length is a multiple of 32
+            # Ensure the callback_address_bytes length is a multiple of 32
+            callback_address_bytes = bytes.fromhex(args[2][2][2:])
             if len(callback_address_bytes) % 32 != 0:
                 raise ValueError("callback_address_bytes length is not a multiple of 32")
 
-            # Step 1-3: Process the addresses
             callback_addresses: List[AccountMeta] = [
                 AccountMeta(pubkey=Pubkey(callback_address_bytes[i:i + 32]), is_signer=False, is_writable=True)
                 for i in range(0, len(callback_address_bytes), 32)
             ]
 
+            print(callback_addresses)
             if callback_addresses is not None:
-                keys += callback_addresses
+                accounts += callback_addresses
 
             # The Identifier of the post execution function
             identifier = bytes([52, 46, 67, 194, 153, 197, 69, 168])
 
-            if len(args) == 1:
-                args = json.loads(args[0])
-            print(args)
             encoded_args = PostExecution.layout.build(
                 {
                     "task_id": args[0],
@@ -225,7 +227,7 @@ class SolanaContract:
                 }
             )
             data = identifier + encoded_args
-            tx = Instruction(self.program_id, data, keys)
+            tx = Instruction(program_id=self.program_id, data=data, accounts=accounts)
 
             submitted_txn = self.interface.sign_and_send_transaction(tx)
         return submitted_txn

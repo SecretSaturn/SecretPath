@@ -9,8 +9,8 @@ use anchor_lang::{
     system_program::{transfer, Transfer},
 };
 use base64::{engine::general_purpose::STANDARD, Engine};
-use sha3::{Digest, Keccak256};
 use hex::decode;
+use sha3::{Digest, Keccak256};
 
 pub mod errors;
 use crate::errors::{GatewayError, TaskError};
@@ -22,14 +22,14 @@ declare_id!("5LWZAN7ZFE3Rmg4MdjqNTRkSbMxthyG8ouSa3cfn3R6V");
 const TASK_DESTINATION_NETWORK: &str = "pulsar-3";
 const CHAIN_ID: &str = "SolanaDevNet";
 const SECRET_GATEWAY_PUBKEY: &str =
-    "0x047a267c6be1157040bd19b893a1fd96266e683da46f00b4ab3a959662aa31c191f2a8a9b17636a0a3e53072b6f102b80452a66ccd7e344fdc8a393124da979bd9";
+    "0x04f0c3e600c7f7b3c483debe8f98a839c2d93230d8f857b3c298dc8763c208afcd62dcb34c9306302bf790d8c669674a57defa44c6a95b183d94f2e645526ffe5e";
 
 const SEED: &[u8] = b"gateway_state";
 
 #[program]
 mod solana_gateway {
     use super::*;
-    
+
     pub fn initialize(ctx: Context<Initialize>, bump: u8) -> Result<()> {
         let gateway_state = &mut ctx.accounts.gateway_state;
 
@@ -120,7 +120,8 @@ mod solana_gateway {
         transfer(cpi_context, estimated_price)?;
 
         //Hash the payload
-        let generated_payload_hash = solana_program::keccak::hash(&execution_info.payload).to_bytes();
+        let generated_payload_hash =
+            solana_program::keccak::hash(&execution_info.payload).to_bytes();
 
         // Persist the task
         let task = Task {
@@ -210,7 +211,7 @@ mod solana_gateway {
         // Check if the task is already completed
         require!(!task.completed, TaskError::TaskAlreadyCompleted);
 
-        // Concatenate packet data elements, 
+        // Concatenate packet data elements,
         // use saved in contract payload_hash to verify that the payload hash wasn't manipulated
         let data = [
             source_network.as_bytes(),
@@ -269,10 +270,18 @@ mod solana_gateway {
 
         let callback_data = CallbackData {
             task_id: task_id,
-            result: post_execution_info.result,
+            result: post_execution_info.result.clone(),
         };
 
-        let borsh_data = callback_data.try_to_vec().unwrap();
+        let borsh_data = callback_data
+            .try_to_vec()
+            .map_err(|_| TaskError::BorshDataSerializationFailed)?;
+
+        // Verify that the recovered public key matches the expected public key
+        require!(
+            post_execution_info.callback_selector.len() == 40,
+            TaskError::InvalidCallbackSelector
+        );
 
         // Extract and concatenate the program ID and function identifier
         let program_id_bytes = &post_execution_info.callback_selector[0..32];
@@ -284,34 +293,57 @@ mod solana_gateway {
         callback_data.extend_from_slice(&borsh_data);
 
         // Concatenate all addresses that will be accessed
-        let callback_address_bytes = &post_execution_info.callback_address;
+        let callback_address_bytes = post_execution_info.callback_address.clone();
 
         require!(
             callback_address_bytes.len() % 32 == 0,
-            TaskError::CallbackAddressesInvalid
+            TaskError::InvalidCallbackAddresses
         );
 
-        let callback_addresses: Vec<AccountMeta> = callback_address_bytes
-            .chunks(32) // Assuming each address is 32 bytes
-            .map(|address| {
-                AccountMeta::new(Pubkey::new(address), false)
-            })
+        for chunk in callback_address_bytes.chunks(32) {
+            let pubkey = Pubkey::try_from(chunk).expect("Invalid callback pubkey");
+            if ctx.remaining_accounts.iter().find(|account| account.key == &pubkey).is_none() {
+                return Err(TaskError::MissingRequiredSignature.into());
+            }
+        }
+
+        // Map callback_address_bytes to AccountInfo
+        let callback_addresses: Vec<AccountInfo> = callback_address_bytes
+        .chunks(32)
+        .map(|address| {
+            let pubkey = Pubkey::try_from(address).expect("Invalid callback pubkey");
+            ctx.remaining_accounts
+                .iter()
+                .find(|account| account.key == &pubkey)
+                .expect("Callback account not found")
+                .clone() 
+        })
+        .collect();
+
+        let system_program = ctx.accounts.system_program.to_account_info();
+
+        // Collect the callback addresses into a vector
+        let mut callback_account_metas: Vec<AccountMeta> = callback_addresses.iter()
+            .map(|account| AccountMeta::new(*account.key, account.is_signer))
             .collect();
+
+        // Add the system_program account to the vector
+        callback_account_metas.push(AccountMeta::new_readonly(*system_program.key, false));
 
         // Execute the callback with signed seeds
         let callback_result = invoke_signed(
             &Instruction {
-                program_id: Pubkey::new(program_id_bytes),
-                accounts: callback_addresses,
+                program_id: Pubkey::try_from(program_id_bytes).expect("Invalid Pubkey"),
+                accounts: callback_account_metas,
                 data: callback_data,
             },
-            &[],
+            &callback_addresses,
             &[&[SEED.as_ref(), &[bump]]],
         );
 
         let task_completed = TaskCompleted {
             task_id,
-            callback_successful: true, //callback_result.is_ok()
+            callback_successful: callback_result.is_ok(),
         };
 
         msg!(&format!(
@@ -322,18 +354,16 @@ mod solana_gateway {
         Ok(())
     }
 
-    pub fn callback_test (
-        ctx: Context<CallbackTest>,
-        task_id: u64,
-        result: String,
-    ) -> Result<()> {
-        
+    pub fn callback_test(ctx: Context<CallbackTest>, task_id: u64, result: String) -> Result<()> {
+        msg!("Callback invoked with task_id: {} and result: {}", task_id, result);
+        Ok(())
     }
 }
+
 #[derive(Accounts)]
 pub struct CallbackTest<'info> {
     #[account(mut)]
-    pub user: Signer<'info>,
+    pub secretpath_gateway: Signer<'info>,
     pub system_program: Program<'info, System>,
 }
 
