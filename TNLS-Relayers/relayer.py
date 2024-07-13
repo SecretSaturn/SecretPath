@@ -85,7 +85,7 @@ class Relayer:
                     tasks_tmp.extend(contract_interface.parse_event_from_txn(evt_name, transaction))
                 return block_num, tasks_tmp
 
-            with ThreadPoolExecutor(max_workers = 30) as executor2:
+            with ThreadPoolExecutor(max_workers = 1) as executor2:
                 futures2 = [executor2.submit(fetch_transactions, block_num) for block_num in range(prev_height + 1, curr_height + 1)]
                 for future in futures2:
                     block_num, tasks = future.result()
@@ -95,10 +95,9 @@ class Relayer:
                         self.task_ids_to_statuses[task_id] = 'Received from {}'.format(name)
                     self.task_list.extend(tasks)
 
-
         with ThreadPoolExecutor(max_workers = 200) as executor:
             # Filter out secret chains if needed
-            futures = [executor.submit(process_chain, chain) for chain in chains_to_poll]
+            [executor.submit(process_chain, chain) for chain in chains_to_poll]
 
 
     def route_transaction(self, task: Task):
@@ -107,7 +106,7 @@ class Relayer:
         Args:
             task: the Task to be routed
         """
-        self.logger.info('Routing task {}',vars(task))
+        self.logger.info('Routing task {}', vars(task))
         if task.task_destination_network is None:
             self.logger.warning(f'Task {task} has no destination network, not routing')
             self.task_ids_to_statuses[task.task_data['task_id']] = 'Failed to route'

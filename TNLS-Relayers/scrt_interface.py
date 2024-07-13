@@ -39,7 +39,7 @@ class SCRTInterface(BaseChainInterface):
         self.account_number = None
         self.sequence = None
 
-        self.timer = None;
+        self.timer = None
 
         self.sequence_lock = Lock()
 

@@ -7,18 +7,17 @@ use secret_toolkit::{
     crypto::{sha_256, ContractPrng},
     utils::{pad_handle_result, pad_query_result, HandleCallback},
 };
-
+use base64::{engine::general_purpose, Engine};
+use hex::ToHex;
+use sha3::{Digest, Keccak256};
 use crate::{
     msg::{
         ExecuteMsg, InputResponse, InstantiateMsg, PostExecutionMsg, PreExecutionMsg,
-        PublicKeyResponse, QueryMsg, ResponseStatus::Success, SecretMsg,
+        PublicKeyResponse, QueryMsg, ResponseStatus::Success, SecretMsg, MigrateMsg
     },
     state::{KeyPair, State, Task, TaskInfo, ResultInfo, CONFIG, CREATOR, MY_ADDRESS, TASK_MAP, RESULT_MAP},
     PrivContractHandleMsg,
 };
-
-use hex::ToHex;
-use sha3::{Digest, Keccak256};
 
 /// pad handle responses and log attributes to blocks of 256 bytes to prevent leaking info based on
 /// response size
@@ -73,6 +72,7 @@ pub fn instantiate(
 }
 
 #[cfg(feature = "contract")]
+
 ///////////////////////////////////// Handle //////////////////////////////////////
 /// Returns HandleResult
 ///
@@ -81,6 +81,7 @@ pub fn instantiate(
 /// * `deps` - mutable reference to Extern containing all the contract's external dependencies
 /// * `env` - Env of contract's environment
 /// * `msg` - HandleMsg passed in with the execute message
+/// 
 #[entry_point]
 pub fn execute(
     deps: DepsMut,
@@ -88,14 +89,23 @@ pub fn execute(
     info: MessageInfo,
     msg: ExecuteMsg,
 ) -> StdResult<Response> {
-    match msg {
-        ExecuteMsg::Input { inputs } => {
-            pad_handle_result(pre_execution(deps, env, inputs), BLOCK_SIZE)
-        },
+    let response = match msg {
+        ExecuteMsg::Input { inputs } => pre_execution(deps, env, inputs),
         ExecuteMsg::Output { outputs } => post_execution(deps, env, outputs),
         ExecuteMsg::RotateGatewayKeys {} => rotate_gateway_keys(deps, env, info),
+    };
+    pad_handle_result(response, BLOCK_SIZE)
+}
+
+#[entry_point]
+pub fn migrate(_deps: DepsMut, _env: Env, msg: MigrateMsg) -> StdResult<Response> {
+    match msg {
+        MigrateMsg::Migrate {} => {
+            Ok(Response::default())
+        }
     }
 }
+
 
 fn rotate_gateway_keys(deps: DepsMut, env: Env, info: MessageInfo) -> StdResult<Response> {
     // load config
@@ -186,23 +196,43 @@ fn pre_execution(deps: DepsMut, _env: Env, msg: PreExecutionMsg) -> StdResult<Re
     // load config
     let config = CONFIG.load(deps.storage)?;
 
+    let mut hasher = Keccak256::new();
+
+    // check if the payload matches the payload hash for Solana
+    hasher.update(msg.payload.as_slice());
+    let payload_hash_tmp_solana = hasher.finalize_reset();
+
+    // check if the payload matches the payload hash for Ethereum
+    hasher.update(msg.payload.as_slice());
+    let payload_hash_tmp_eth = hasher.finalize_reset();
+    hasher.update(["\x19Ethereum Signed Message:\n32".as_bytes(), &payload_hash_tmp_eth].concat());
+    let payload_hash_tmp_eth = hasher.finalize();
+
+    if msg.payload_hash.as_slice() != payload_hash_tmp_eth.as_slice() && msg.payload_hash.as_slice() != payload_hash_tmp_solana.as_slice() {
+        return Err(StdError::generic_err("Hashed Payload does not match payload hash"));
+    }
+
     // Attempt to decrypt the payload
     let decrypted_payload_result = msg.decrypt_payload(config.encryption_keys.sk);
+
     let mut unsafe_payload = false;
+
     let payload = match decrypted_payload_result {
         Ok(decrypted_payload) => {
             // If decryption is successful, attempt to verify
             match msg.verify(&deps) {
                 Ok(_) => decrypted_payload, // Both decryption and verification succeeded
-                Err(_) => {
+                Err(_err) => {
                     unsafe_payload = true;
+                    //return Err(StdError::generic_err(format!("Verification failed: {}", err)));
                     // Continue with the decrypted payload if only verification fails
                     decrypted_payload
                 }
             }
         },
-        Err(_) => {
+        Err(_err) => {
             unsafe_payload = true;
+            //return Err(StdError::generic_err(format!("Decryption failed: {}", err)));
             // If decryption fails, continue with the original, encrypted payload
             // We are not verifying the payload in this case as it's already deemed unsafe
             from_binary(&Binary::from(msg.payload.as_slice()))?
@@ -222,23 +252,10 @@ fn pre_execution(deps: DepsMut, _env: Env, msg: PreExecutionMsg) -> StdResult<Re
         return Err(StdError::generic_err("callback gas limit mismatch"));
     }
 
-    // check if the payload matches the payload hash
-    let mut hasher = Keccak256::new();
-
-    let prefix = "\x19Ethereum Signed Message:\n32".as_bytes();
-    hasher.update(msg.payload.as_slice());
-    let payload_hash_tmp = hasher.finalize_reset();
-    hasher.update([prefix, &payload_hash_tmp].concat());
-    let payload_hash_tmp = hasher.finalize();
-
-    if msg.payload_hash.as_slice() != payload_hash_tmp.as_slice() {
-        return Err(StdError::generic_err("Hashed Payload does not match payload hash"));
-    }
-
     let new_task = Task {
         network: msg.source_network.clone(),
         task_id: msg.task_id.clone()
-    }.clone();
+    };
 
     // check if the task wasn't executed before already
     let map_contains_task = TASK_MAP.contains(deps.storage, &new_task);
@@ -277,9 +294,7 @@ fn pre_execution(deps: DepsMut, _env: Env, msg: PreExecutionMsg) -> StdResult<Re
     // map task to task info
     TASK_MAP.insert(deps.storage, &new_task, &task_info)?;
 
-    // load this gateway's signing key
-    let mut signing_key_bytes = [0u8; 32];
-    signing_key_bytes.copy_from_slice(config.signing_keys.sk.as_slice());
+    let signing_key_bytes = <[u8; 32]>::try_from(config.signing_keys.sk.as_slice()).unwrap();
 
     // used in production to create signature
     #[cfg(target_arch = "wasm32")]
@@ -331,7 +346,7 @@ fn post_execution(deps: DepsMut, env: Env, msg: PostExecutionMsg) -> StdResult<R
         return Err(StdError::generic_err("input hash does not match task"));
     }
 
-    let result = match base64::decode(msg.result) {
+    let result = match general_purpose::STANDARD.decode(msg.result) {
         Ok(bytes) => bytes,
         Err(_) => {return Err(StdError::generic_err("could not decode base64 result string"));}
     };
@@ -351,15 +366,12 @@ fn post_execution(deps: DepsMut, env: Env, msg: PostExecutionMsg) -> StdResult<R
         result.as_slice(),                       // result
         task_info.callback_address.as_slice(),   // callback address
         task_info.callback_selector.as_slice(),  // callback selector
-    ]
-    .concat();
+    ].concat();
     hasher.update(&data);
     let packet_hash = hasher.finalize();
 
     // load this gateway's signing key
-    let private_key = CONFIG.load(deps.storage)?.signing_keys.sk;
-    let mut signing_key_bytes = [0u8; 32];
-    signing_key_bytes.copy_from_slice(private_key.as_slice());
+    let signing_key_bytes = <[u8; 32]>::try_from(CONFIG.load(deps.storage)?.signing_keys.sk.as_slice()).unwrap();
 
     // used in production to create signature
     // NOTE: api.secp256k1_sign() will perform an additional sha_256 hash operation on the given data
