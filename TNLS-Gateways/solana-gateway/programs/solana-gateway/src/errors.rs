@@ -45,3 +45,9 @@ pub enum GatewayError {
     #[msg("Only owner can call this function!")]
     NotOwner
 }
+
+#[error_code]
+pub enum ProgramError {
+    #[msg("The signer is not the Secretpath Gateway program")]
+    InvalidSecretPathGateway
+}

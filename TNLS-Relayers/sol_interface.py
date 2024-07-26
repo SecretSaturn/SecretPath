@@ -1,15 +1,16 @@
 import json
 from solana.rpc.api import Client
+from solders.compute_budget import set_compute_unit_limit
 from solders.keypair import Keypair
 from solders.pubkey import Pubkey
 from threading import Lock
 from solana.transaction import Transaction
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from logging import getLogger, basicConfig, INFO, StreamHandler
-from borsh_construct import CStruct, U64, String, Vec, U8, U32, Bytes
+from borsh_construct import CStruct, U64, String, U8, U32, Bytes
 from solders.system_program import ID as SYS_PROGRAM_ID
 from solders.instruction import Instruction, AccountMeta
-from solana.rpc.commitment import Confirmed, Finalized
+from solana.rpc.commitment import Confirmed
 from typing import List
 from solana.rpc.types import TxOpts
 import base64
@@ -48,8 +49,7 @@ class PostExecution:
             "callback_gas_limit" / Bytes,
             "packet_signature" / U8[65],
             "result" / Bytes,
-        ),
-        "bump" / U8,
+        )
     )
 
 # Base class for interaction with Solana
@@ -79,15 +79,12 @@ class SolanaInterface:
         """
         Sign and send a transaction to the Solana network synchronously.
         """
-        # Create the transaction
-        transaction = Transaction()
-        transaction.add(txn)
 
         # Sign the transaction
-        transaction.sign(self.account)
+        txn.sign(self.account)
 
         # Send the transaction
-        response = self.provider.send_transaction(transaction, self.account,
+        response = self.provider.send_transaction(txn, self.account,
                                                   opts=TxOpts(skip_confirmation=False, preflight_commitment=Confirmed))
 
         # Confirm the transaction
@@ -108,9 +105,11 @@ class SolanaInterface:
         """
         Get transactions for a given address.
         """
+        #jump = 0
         jump = 10
         if height % jump != 0:
             return []
+
         filtered_transactions = []
         try:
             response = self.provider.get_signatures_for_address(account=contract_interface.address, limit=10,
@@ -184,13 +183,15 @@ class SolanaContract:
             """
                     Create a transaction with the given instructions and signers.
                     """
-            # Create context
+
+            # Create AccountMetas
             accounts: list[AccountMeta] = [
                 AccountMeta(pubkey=self.address, is_signer=False, is_writable=True),
                 AccountMeta(pubkey=self.interface.address, is_signer=True, is_writable=True),
                 AccountMeta(pubkey=SYS_PROGRAM_ID, is_signer=False, is_writable=False),
             ]
 
+            # Parse the JSON
             if len(args) == 1:
                 args = json.loads(args[0])
 
@@ -199,14 +200,23 @@ class SolanaContract:
             if len(callback_address_bytes) % 32 != 0:
                 raise ValueError("callback_address_bytes length is not a multiple of 32")
 
-            callback_addresses: List[AccountMeta] = [
+            callback_accounts: List[AccountMeta] = [
                 AccountMeta(pubkey=Pubkey(callback_address_bytes[i:i + 32]), is_signer=False, is_writable=True)
                 for i in range(0, len(callback_address_bytes), 32)
             ]
+            # Add the callback_accounts to the accounts
+            if callback_accounts is not None:
+                accounts += callback_accounts
 
-            print(callback_addresses)
-            if callback_addresses is not None:
-                accounts += callback_addresses
+            # Extract the program_id from the callback_selector
+            callback_selector_bytes = bytes.fromhex(args[2][3][2:])
+            if len(callback_selector_bytes) < 32:
+                raise ValueError("callback_selector does not contain enough bytes for a program_id")
+            program_id_bytes = callback_selector_bytes[:32]
+            program_id_pubkey = Pubkey(program_id_bytes)
+
+            # Add the extracted program_id as an AccountMeta
+            accounts.append(AccountMeta(pubkey=program_id_pubkey, is_signer=False, is_writable=False))
 
             # The Identifier of the post execution function
             identifier = bytes([52, 46, 67, 194, 153, 197, 69, 168])
@@ -222,14 +232,20 @@ class SolanaContract:
                         "callback_gas_limit": bytes.fromhex(args[2][4][2:]),
                         "packet_signature": bytes.fromhex(args[2][5][2:]),
                         "result": bytes.fromhex(args[2][6][2:]),
-                    },
-                    "bump": self.bump
+                    }
                 }
             )
+
             data = identifier + encoded_args
             tx = Instruction(program_id=self.program_id, data=data, accounts=accounts)
+            callback_gas_limit = int.from_bytes(bytes.fromhex(args[2][4][2:]), byteorder='big')
+            compute_budget_ix = set_compute_unit_limit(callback_gas_limit)
 
-            submitted_txn = self.interface.sign_and_send_transaction(tx)
+            # Create the transaction
+            transaction = Transaction(fee_payer=self.interface.address)
+            transaction.add(compute_budget_ix, tx)
+
+            submitted_txn = self.interface.sign_and_send_transaction(transaction)
         return submitted_txn
 
     def parse_event_from_txn(self, event_name, txn) -> List[Task]:
