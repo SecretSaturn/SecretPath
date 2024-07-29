@@ -446,5 +446,5 @@
   chain_id: "pulsar-3"
   api_endpoint: "https://lcd.testnet.secretsaturn.net"
   contract_address: "secret1drjkzeg2x0yyt927zpggnx289aj7ptcq4w6gw3"
-  code_hash: "74647c0493d6623b84ae2bfddbedb6a806be4edddfd4a705318585850dbd9b2e"
+  code_hash: "dfa2af6f3c1dae11343169466fd936db8cefd5cf4955afd73d778597ec2390a6"
   feegrant_address: "secret1gutgtpw0caqfsp8ja0r5yecv8jxz2y8vhpnck8"

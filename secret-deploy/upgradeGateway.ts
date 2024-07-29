@@ -66,7 +66,7 @@ const upgradeGateway = async (
   console.log("Gateway contract code id: ", codeId);
   console.log(`Gateway contract code hash: ${contractCodeHash}`);
 
-  const contractAddress = "secret1vrxpv6a44v3uk6kyxl0q6j8yjjzwltm2g975nh"
+  const contractAddress = "secret1drjkzeg2x0yyt927zpggnx289aj7ptcq4w6gw3"
   const contract = await client.tx.compute.migrateContract(
     {
       sender: client.address,

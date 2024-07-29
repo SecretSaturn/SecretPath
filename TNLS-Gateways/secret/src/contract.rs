@@ -254,7 +254,7 @@ fn pre_execution(deps: DepsMut, _env: Env, msg: PreExecutionMsg) -> StdResult<Re
 
     let new_task = Task {
         network: msg.source_network.clone(),
-        task_id: msg.task_id.clone()
+        task_id: msg.task_id
     };
 
     // check if the task wasn't executed before already
@@ -285,8 +285,8 @@ fn pre_execution(deps: DepsMut, _env: Env, msg: PreExecutionMsg) -> StdResult<Re
         input_hash, // storing the input_values hashed together with task
         source_network: msg.source_network,
         user_address: payload.user_address.clone(),
-        user_key: payload.user_key.clone(),
-        callback_address: payload.callback_address.clone(),
+        user_key: payload.user_key,
+        callback_address: payload.callback_address,
         callback_selector: payload.callback_selector,
         callback_gas_limit: payload.callback_gas_limit
     };
@@ -357,16 +357,27 @@ fn post_execution(deps: DepsMut, env: Env, msg: PostExecutionMsg) -> StdResult<R
     // "hasher" is used to perform multiple Keccak256 hashes
     let mut hasher = Keccak256::new();
 
-    // create hash of entire packet (used to verify the message wasn't modified in transit)
-    let data = [
-        env.block.chain_id.as_bytes(),           // source network
-        routing_info.as_bytes(),                 // task_destination_network
-        msg.task.task_id.as_bytes(),             // task ID
-        task_info.payload_hash.as_slice(),       // original payload message
-        result.as_slice(),                       // result
-        task_info.callback_address.as_slice(),   // callback address
-        task_info.callback_selector.as_slice(),  // callback selector
-    ].concat();
+    // Calculate the total length of the concatenated data
+    let total_length = env.block.chain_id.as_bytes().len()
+        + routing_info.as_bytes().len()
+        + msg.task.task_id.as_bytes().len()
+        + task_info.payload_hash.len()
+        + result.len()
+        + task_info.callback_address.len()
+        + task_info.callback_selector.len();
+
+    // Create a vector with the calculated total length
+    let mut data = Vec::with_capacity(total_length);
+
+    // Extend the vector with slices from the individual data components
+    data.extend_from_slice(env.block.chain_id.as_bytes());    // source network
+    data.extend_from_slice(routing_info.as_bytes());          // task_destination_network
+    data.extend_from_slice(msg.task.task_id.as_bytes());      // task ID
+    data.extend_from_slice(&task_info.payload_hash);// original payload message
+    data.extend_from_slice(&result);                // result
+    data.extend_from_slice(&task_info.callback_address); // callback address
+    data.extend_from_slice(&task_info.callback_selector); // callback selector
+
     hasher.update(&data);
     let packet_hash = hasher.finalize();
 

@@ -3,14 +3,13 @@ use anchor_lang::{
     solana_program::{
         instruction::Instruction,
         program::invoke_signed,
-        secp256k1_recover::{secp256k1_recover, Secp256k1Pubkey},
-        sysvar::{rent::Rent, Sysvar},
+        secp256k1_recover::secp256k1_recover,
+        sysvar::{rent::Rent, Sysvar}
     },
     system_program::{transfer, Transfer},
 };
 use base64::{engine::general_purpose::STANDARD, Engine};
 use hex::decode;
-use sha3::{Digest, Keccak256};
 use std::str::FromStr;
 
 pub mod errors;
@@ -32,43 +31,18 @@ mod solana_gateway {
     use super::*;
 
     pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
-        let gateway_state = &mut ctx.accounts.gateway_state;
 
-        // Verify that the gateway_state is a PDA with the correct seeds and bump
-        let (expected_gateway_state, _bump_seed) =
-            Pubkey::find_program_address(&[SEED.as_ref()], ctx.program_id);
-
-        require!(
-            gateway_state.key() == expected_gateway_state,
-            GatewayError::InvalidGatewayState
-        );
-
-        // Check if the gateway_state has already been initialized
-
-        require!(
-            gateway_state.owner == Pubkey::default(),
-            GatewayError::PDAAlreadyInitialized
-        );
-
-        gateway_state.owner = *ctx.accounts.owner.key;
-        gateway_state.task_id = 0;
-        gateway_state.tasks = Vec::new();
-        gateway_state.max_tasks = 10;
+        ctx.accounts.gateway_state.owner = *ctx.accounts.owner.key;
+        ctx.accounts.gateway_state.task_id = 0;
+        ctx.accounts.gateway_state.tasks = Vec::new();
+        ctx.accounts.gateway_state.max_tasks = 10;
+        ctx.accounts.gateway_state.bump = ctx.bumps.gateway_state;
 
         Ok(())
     }
 
     pub fn increase_task_id(ctx: Context<IncreaseTaskId>, new_task_id: u64) -> Result<()> {
         let gateway_state = &mut ctx.accounts.gateway_state;
-
-        // Verify that the gateway_state is a PDA with the correct seeds and bump
-        let (expected_gateway_state, _bump_seed) =
-            Pubkey::find_program_address(&[SEED.as_ref()], ctx.program_id);
-
-        require!(
-            gateway_state.key() == expected_gateway_state,
-            GatewayError::InvalidGatewayState
-        );
 
         require!(
             new_task_id > gateway_state.task_id,
@@ -86,15 +60,6 @@ mod solana_gateway {
         execution_info: ExecutionInfo,
     ) -> Result<SendResponse> {
         let gateway_state = &mut ctx.accounts.gateway_state;
-
-        // Verify that the gateway_state is a PDA with the correct seeds and bump
-        let (expected_gateway_state, _bump_seed) =
-            Pubkey::find_program_address(&[SEED.as_ref()], ctx.program_id);
-
-        require!(
-            gateway_state.key() == expected_gateway_state,
-            GatewayError::InvalidGatewayState
-        );
 
         // Fetch the current lamports per signature cost for the singature
         let lamports_per_signature = 10;
@@ -125,7 +90,7 @@ mod solana_gateway {
 
         //Hash the payload
         let generated_payload_hash =
-            solana_program::keccak::hash(&execution_info.payload).to_bytes();
+            solana_program::keccak::hashv(&[&execution_info.payload]).to_bytes();
 
         // Persist the task
         let task = Task {
@@ -179,7 +144,7 @@ mod solana_gateway {
             STANDARD.encode(&log_new_task.try_to_vec().unwrap())
         ));
 
-        gateway_state.task_id += 1;
+        ctx.accounts.gateway_state.task_id += 1;
 
         Ok(SendResponse {
             request_id: task_id,
@@ -194,15 +159,6 @@ mod solana_gateway {
     ) -> Result<()> {
         let gateway_state = &mut ctx.accounts.gateway_state;
 
-        // Verify that the gateway_state is a PDA with the correct seeds and bump
-        let (expected_gateway_state, bump_seed) =
-            Pubkey::find_program_address(&[SEED.as_ref()], ctx.program_id);
-
-        require!(
-            gateway_state.key() == expected_gateway_state,
-            GatewayError::InvalidGatewayState
-        );
-
         let index = (task_id % gateway_state.max_tasks) as usize;
 
         require!(index <= gateway_state.tasks.len(), TaskError::InvalidIndex);
@@ -216,35 +172,28 @@ mod solana_gateway {
 
         // Concatenate packet data elements,
         // use saved in contract payload_hash to verify that the payload hash wasn't manipulated
-        let data = [
-            source_network.as_bytes(),
-            CHAIN_ID.as_bytes(),
-            task_id.to_string().as_bytes(),
-            task.payload_hash.as_slice(),
-            post_execution_info.result.as_slice(),
-            post_execution_info.callback_address.as_slice(),
-            post_execution_info.callback_selector.as_slice(),
-        ]
-        .concat();
 
-        let mut hasher = Keccak256::new();
-        hasher.update(&data);
-        let keccak_hash = hasher.finalize_reset();
+        let mut data = Vec::new();
+        data.extend_from_slice(source_network.as_bytes());
+        data.extend_from_slice(CHAIN_ID.as_bytes());
+        data.extend_from_slice(task_id.to_string().as_bytes());
+        data.extend_from_slice(task.payload_hash.as_slice());
+        data.extend_from_slice(post_execution_info.result.as_slice());
+        data.extend_from_slice(post_execution_info.callback_address.as_slice());
+        data.extend_from_slice(post_execution_info.callback_selector.as_slice());
 
-        let packet_hash = solana_program::hash::hash(&keccak_hash);
+        let packet_hash =
+            solana_program::hash::hashv(&[&solana_program::keccak::hashv(&[&data]).to_bytes()]);
 
         // Packet hash verification
         require!(
-            packet_hash.to_bytes().as_slice() == post_execution_info.packet_hash,
+            packet_hash.to_bytes() == post_execution_info.packet_hash,
             TaskError::InvalidPacketHash
         );
 
-        // Decode the base64 public key
-        let pubkey_hex = &SECRET_GATEWAY_PUBKEY[2..];
-
-        // Convert the hex string to bytes
-        let pubkey_bytes = decode(pubkey_hex).map_err(|_| TaskError::InvalidPublicKey)?;
-        let expected_pubkey = Secp256k1Pubkey::new(&pubkey_bytes[1..]);
+        // Decode the hex secret gateway public key
+        let expected_pubkey_bytes =
+            &decode(&SECRET_GATEWAY_PUBKEY[2..]).map_err(|_| TaskError::InvalidPublicKey)?[1..];
 
         // Extract the recovery ID and signature from the packet signature
         // RecoveryID here might me 27, 28 due to the ethereum bug
@@ -264,7 +213,7 @@ mod solana_gateway {
 
         // // Verify that the recovered public key matches the expected public key
         require!(
-            recovered_pubkey == expected_pubkey,
+            recovered_pubkey.to_bytes() == expected_pubkey_bytes,
             TaskError::InvalidPacketSignature
         );
 
@@ -273,7 +222,7 @@ mod solana_gateway {
 
         let callback_data = CallbackData {
             task_id: task_id,
-            result: post_execution_info.result.clone(),
+            result: post_execution_info.result,
         };
 
         let borsh_data = callback_data
@@ -296,57 +245,50 @@ mod solana_gateway {
         callback_data.extend_from_slice(&borsh_data);
 
         // Concatenate all addresses that will be accessed
-        let callback_address_bytes = post_execution_info.callback_address.clone();
-
         require!(
-            callback_address_bytes.len() % 32 == 0,
+            post_execution_info.callback_address.len() % 32 == 0,
             TaskError::InvalidCallbackAddresses
         );
 
         let mut callback_account_metas = Vec::new();
-        let mut callback_addresses = Vec::new();
+        let mut callback_account_infos = Vec::new();
 
         // Add the PDA as the signer
         // Modify the AccountInfo to set is_writable to false for gateway_state
-        let mut gateway_state_account_info = ctx.accounts.gateway_state.to_account_info();
+        let mut gateway_state_account_info = ctx.accounts.gateway_state.to_account_info().clone();
         gateway_state_account_info.is_writable = false;
         gateway_state_account_info.is_signer = true;
-        callback_account_metas.push(AccountMeta::new_readonly(expected_gateway_state, true));
-        callback_addresses.push(gateway_state_account_info);
+
+        callback_account_metas.push(AccountMeta::new_readonly(
+            gateway_state_account_info.key(),
+            true,
+        ));
+        callback_account_infos.push(gateway_state_account_info);
 
         // Add the system_program account
         callback_account_metas.push(AccountMeta::new_readonly(
-            *ctx.accounts.system_program.key,
+            ctx.accounts.system_program.key(),
             false,
         ));
-        callback_addresses.push(ctx.accounts.system_program.to_account_info());
+        callback_account_infos.push(ctx.accounts.system_program.to_account_info());
 
         let mut found_addresses = std::collections::HashSet::new();
-
-        for chunk in callback_address_bytes.chunks(32) {
+        let mut remaining_accounts_iter = ctx.remaining_accounts.iter();
+        
+        for chunk in post_execution_info.callback_address.chunks(32) {
             match Pubkey::try_from(chunk) {
                 Ok(pubkey) => {
-                    if pubkey == expected_gateway_state {
+                    if pubkey != ctx.accounts.gateway_state.key() && pubkey != *ctx.program_id {
                         continue;
                     }
 
-                    if ctx
-                        .remaining_accounts
-                        .iter()
-                        .any(|account| account.key == &pubkey)
+                    if let Some(account) =
+                        remaining_accounts_iter.find(|account| account.key == &pubkey)
                     {
                         if found_addresses.insert(pubkey) {
-                            if let Some(account) = ctx
-                                .remaining_accounts
-                                .iter()
-                                .find(|account| account.key == &pubkey)
-                            {
-                                callback_account_metas
-                                    .push(AccountMeta::new(*account.key, account.is_signer));
-                                callback_addresses.push(account.clone());
-                            } else {
-                                return Err(TaskError::InvalidCallbackAddresses.into());
-                            }
+                            callback_account_infos.push(account.clone());
+                            callback_account_metas
+                                .push(AccountMeta::new(*account.key, account.is_signer));
                         }
                     } else {
                         return Err(TaskError::MissingRequiredSignature.into());
@@ -363,8 +305,8 @@ mod solana_gateway {
                 accounts: callback_account_metas,
                 data: callback_data,
             },
-            &callback_addresses,
-            &[&[SEED.as_ref(), &[bump_seed]]],
+            &callback_account_infos,
+            &[&[SEED.as_ref(), &[ctx.accounts.gateway_state.bump]]],
         );
 
         // Emit Message that the task was completed and if it returned Ok
@@ -425,7 +367,7 @@ pub struct Initialize<'info> {
 
 #[derive(Accounts)]
 pub struct IncreaseTaskId<'info> {
-    #[account(mut, seeds = [SEED], bump)]
+    #[account(mut, seeds = [SEED], bump = gateway_state.bump)]
     pub gateway_state: Account<'info, GatewayState>,
     #[account(mut, signer)]
     pub owner: Signer<'info>,
@@ -433,7 +375,7 @@ pub struct IncreaseTaskId<'info> {
 
 #[derive(Accounts)]
 pub struct Send<'info> {
-    #[account(mut, seeds = [SEED], bump)]
+    #[account(mut, seeds = [SEED], bump = gateway_state.bump)]
     pub gateway_state: Account<'info, GatewayState>,
     #[account(mut, signer)]
     pub user: Signer<'info>,
@@ -442,7 +384,7 @@ pub struct Send<'info> {
 
 #[derive(Accounts)]
 pub struct PostExecution<'info> {
-    #[account(mut, seeds = [SEED], bump)]
+    #[account(mut, seeds = [SEED], bump = gateway_state.bump)]
     pub gateway_state: Account<'info, GatewayState>,
     #[account(mut, signer)]
     pub signer: Signer<'info>,
@@ -455,6 +397,7 @@ pub struct GatewayState {
     pub task_id: u64,
     pub tasks: Vec<Task>,
     pub max_tasks: u64,
+    pub bump: u8,
 }
 
 #[derive(Debug, Clone, AnchorSerialize, AnchorDeserialize)]

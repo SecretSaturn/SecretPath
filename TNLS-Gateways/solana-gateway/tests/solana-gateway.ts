@@ -35,7 +35,6 @@ describe("solana-gateway", () => {
         console.log("Init PDA");
         const tx = await program.methods
         .initialize(
-          bump
         )
         .accounts({
           gatewayState: pda,
