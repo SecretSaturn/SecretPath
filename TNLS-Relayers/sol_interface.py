@@ -200,10 +200,14 @@ class SolanaContract:
             if len(callback_address_bytes) % 32 != 0:
                 raise ValueError("callback_address_bytes length is not a multiple of 32")
 
-            callback_accounts: List[AccountMeta] = [
-                AccountMeta(pubkey=Pubkey(callback_address_bytes[i:i + 32]), is_signer=False, is_writable=True)
-                for i in range(0, len(callback_address_bytes), 32)
-            ]
+            # Check and create callback_accounts
+            callback_accounts: List[AccountMeta] = []
+            for i in range(0, len(callback_address_bytes), 32):
+                pubkey = Pubkey(callback_address_bytes[i:i + 32])
+                if pubkey == self.interface.address or pubkey == self.address:
+                    continue
+                callback_accounts.append(AccountMeta(pubkey=pubkey, is_signer=False, is_writable=True))
+
             # Add the callback_accounts to the accounts
             if callback_accounts is not None:
                 accounts += callback_accounts

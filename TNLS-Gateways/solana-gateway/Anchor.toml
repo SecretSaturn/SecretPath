@@ -1,9 +1,9 @@
 [toolchain]
-    anchor_version = "0.30.0"
+anchor_version = "0.30.1"
     
 [features]
 resolution = true
-skip-lint = false
+skip-lint = true
 
 [programs.localnet]
 solana_gateway = "5sVmrdZyK8vt7xwyyE8vXJCZDtkaGDA2jJCcgDPNUiaL"
@@ -13,7 +13,6 @@ url = "https://api.apr.dev"
 
 [provider]
 cluster = "https://api.devnet.solana.com"
-#cluster = "https://rpc.ankr.com/solana_devnet"
 wallet = "~/.config/solana/id.json"
 
 [scripts]

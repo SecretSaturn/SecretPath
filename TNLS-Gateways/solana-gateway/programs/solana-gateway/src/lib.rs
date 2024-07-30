@@ -10,12 +10,27 @@ use anchor_lang::{
 };
 use base64::{engine::general_purpose::STANDARD, Engine};
 use hex::decode;
-use std::str::FromStr;
+use solana_security_txt::security_txt;
 
 pub mod errors;
 use crate::errors::{GatewayError, ProgramError, TaskError};
 
 declare_id!("5LWZAN7ZFE3Rmg4MdjqNTRkSbMxthyG8ouSa3cfn3R6V");
+
+#[cfg(not(feature = "no-entrypoint"))]
+security_txt! {
+    // Required fields
+    name: "SecretPath",
+    project_url: "http://example.com",
+    contacts: "email:example@example.com,link:https://example.com/security,discord:example#1234",
+    policy: "https://github.com/solana-labs/solana/blob/master/SECURITY.md",
+
+    // Optional Fields
+    preferred_languages: "en",
+    encryption: "",
+    auditors: "None",
+    acknowledgements: ""
+}
 
 // Constants
 
@@ -25,17 +40,19 @@ const SECRET_GATEWAY_PUBKEY: &str =
     "0x04f0c3e600c7f7b3c483debe8f98a839c2d93230d8f857b3c298dc8763c208afcd62dcb34c9306302bf790d8c669674a57defa44c6a95b183d94f2e645526ffe5e";
 
 const SEED: &[u8] = b"gateway_state";
+const LAMPORTS_PER_COMPUTE_UNIT: f64 = 0.1;
 
 #[program]
 mod solana_gateway {
     use super::*;
 
     pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
-
         ctx.accounts.gateway_state.owner = *ctx.accounts.owner.key;
         ctx.accounts.gateway_state.task_id = 0;
         ctx.accounts.gateway_state.tasks = Vec::new();
-        ctx.accounts.gateway_state.max_tasks = 10;
+
+        //Amount of max tasks before the tasks indexes wrap around = effectively pruning them
+        ctx.accounts.gateway_state.max_tasks = 1000;
         ctx.accounts.gateway_state.bump = ctx.bumps.gateway_state;
 
         Ok(())
@@ -53,6 +70,22 @@ mod solana_gateway {
         Ok(())
     }
 
+    pub fn payout_balance(ctx: Context<PayoutBalance>, new_task_id: u64) -> Result<()> {
+        let gateway_state = &mut ctx.accounts.gateway_state;
+
+        let cpi_accounts = Transfer {
+            from: gateway_state.to_account_info(),
+            to: ctx.accounts.owner.to_account_info(),
+        };
+
+        let cpi_context =
+            CpiContext::new(ctx.accounts.system_program.to_account_info(), cpi_accounts);
+
+        transfer(cpi_context, ctx.accounts.gateway_state.lamports())?;
+
+        Ok(())
+    }
+
     pub fn send(
         ctx: Context<Send>,
         user_address: Pubkey,
@@ -61,20 +94,23 @@ mod solana_gateway {
     ) -> Result<SendResponse> {
         let gateway_state = &mut ctx.accounts.gateway_state;
 
-        // Fetch the current lamports per signature cost for the singature
-        let lamports_per_signature = 10;
+        // Use the current lamports per signature value of = 5000
+        let lamports_per_signature = 5000;
 
-        // //Calculate the rent for extra storage
-        let lamports_per_byte_year = Rent::get().unwrap().lamports_per_byte_year;
+        // Estimate the cost based on the callback gas limit based on Rent
+        let rent_data = Rent::get().unwrap();
+        // Current cost on using CU = 0
 
-        // // Estimate the cost based on the callback gas limit
-        let estimated_price = execution_info.callback_gas_limit as u64 * lamports_per_signature
-            + (std::mem::size_of::<Task>() as u64 * 2 * lamports_per_byte_year);
+        // std::mem::size_of::<Task>() = 48
 
-        let user_lamports = ctx.accounts.user.lamports();
+        let estimated_price = (execution_info.callback_gas_limit as f64 * LAMPORTS_PER_COMPUTE_UNIT)
+            as u64
+            + lamports_per_signature
+            + (48.0 * rent_data.exemption_threshold) as u64 * rent_data.lamports_per_byte_year;
 
+        // Check if user = signer has enough lamports to pay for storage rent
         require!(
-            user_lamports >= estimated_price,
+            ctx.accounts.user.lamports() >= estimated_price,
             TaskError::InsufficientFunds
         );
 
@@ -103,15 +139,11 @@ mod solana_gateway {
         let index = (gateway_state.task_id % gateway_state.max_tasks) as usize;
 
         // Reallocate account space if necessary
+        // std::mem::size_of::<Task>() = 48
+
         if index >= gateway_state.tasks.len() {
-            if gateway_state.tasks.len() >= gateway_state.max_tasks as usize {
-                let new_max_tasks = gateway_state.max_tasks + 10;
-                let new_space = 8 + 8 + 8 + (std::mem::size_of::<Task>() as u64 * new_max_tasks);
-                gateway_state
-                    .to_account_info()
-                    .realloc(new_space.try_into().unwrap(), false)?;
-                gateway_state.max_tasks = new_max_tasks;
-            }
+            let new_space = gateway_state.to_account_info().data_len().clone() + 48 as usize;
+            gateway_state.to_account_info().realloc(new_space, false)?;
 
             // If the array isn't filled up yet, just push it to the end
             gateway_state.tasks.push(task);
@@ -274,11 +306,11 @@ mod solana_gateway {
 
         let mut found_addresses = std::collections::HashSet::new();
         let mut remaining_accounts_iter = ctx.remaining_accounts.iter();
-        
+
         for chunk in post_execution_info.callback_address.chunks(32) {
             match Pubkey::try_from(chunk) {
                 Ok(pubkey) => {
-                    if pubkey != ctx.accounts.gateway_state.key() && pubkey != *ctx.program_id {
+                    if pubkey == ctx.accounts.gateway_state.key() || pubkey == *ctx.program_id {
                         continue;
                     }
 
@@ -322,8 +354,7 @@ mod solana_gateway {
     pub fn callback_test(ctx: Context<CallbackTest>, task_id: u64, result: Vec<u8>) -> Result<()> {
         // Check if the callback is really coming from the secretpath_gateway and that it was signed by it
         const SECRET_PATH_ADDRESS: &str = "5mf563g8JSeTE1mMY4GSqbynjayToKSh7x5WLoQ9RDEQ";
-        let secretpath_address_pubkey =
-            Pubkey::from_str(SECRET_PATH_ADDRESS).expect("Invalid public key format");
+        let secretpath_address_pubkey = pubkey!(SECRET_PATH_ADDRESS);
 
         // Inline check for signature and address
         if !ctx.accounts.secretpath_gateway.is_signer
@@ -357,6 +388,7 @@ pub struct Initialize<'info> {
         payer = owner,
         space = 8 + 1024,
         seeds = [SEED],
+        has_one = owner,
         bump
     )]
     pub gateway_state: Account<'info, GatewayState>,
@@ -367,10 +399,19 @@ pub struct Initialize<'info> {
 
 #[derive(Accounts)]
 pub struct IncreaseTaskId<'info> {
-    #[account(mut, seeds = [SEED], bump = gateway_state.bump)]
+    #[account(mut, seeds = [SEED], bump = gateway_state.bump, has_one = owner)]
     pub gateway_state: Account<'info, GatewayState>,
     #[account(mut, signer)]
     pub owner: Signer<'info>,
+}
+
+#[derive(Accounts)]
+pub struct PayoutBalance<'info> {
+    #[account(mut, seeds = [SEED], bump = gateway_state.bump, has_one = owner)]
+    pub gateway_state: Account<'info, GatewayState>,
+    #[account(mut, signer)]
+    pub owner: Signer<'info>,
+    pub system_program: Program<'info, System>,
 }
 
 #[derive(Accounts)]
