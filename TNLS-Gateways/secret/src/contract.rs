@@ -629,6 +629,9 @@ mod tests {
             routing_code_hash: routing_code_hash.clone(),
             user_address: user_address.clone(),
             user_key: user_key.clone(),
+            callback_address: todo!(),
+            callback_selector: todo!(),
+            callback_gas_limit: 300_000u32,
         };
         let serialized_payload = to_binary(&payload).unwrap();
 
@@ -656,6 +659,9 @@ mod tests {
             routing_code_hash: routing_code_hash.clone(),
             user_address: wrong_user_address.clone(),
             user_key: wrong_user_key.clone(),
+            callback_address: todo!(),
+            callback_selector: todo!(),
+            callback_gas_limit: 300_000u32,
         };
         let wrong_serialized_payload = to_binary(&wrong_payload).unwrap();
 
@@ -666,18 +672,19 @@ mod tests {
 
         // test payload user_key does not match given user_key
         let pre_execution_msg = PreExecutionMsg {
-            task_id: 1,
-            handle: "test".to_string(),
+            task_id: "1".to_string(),
+            source_network: "ethereum".to_string(),
             routing_info: routing_info.clone(),
             routing_code_hash: routing_code_hash.clone(),
+            payload: Binary(wrong_encrypted_payload.clone()),
+            payload_hash: Binary(payload_hash.to_vec()),
+            payload_signature: Binary(payload_signature.serialize_compact().to_vec()),
             user_address: user_address.clone(),
             user_key: user_key.clone(),
             user_pubkey: user_pubkey.clone(),
-            payload: Binary(wrong_encrypted_payload.clone()),
+            handle: "test".to_string(),
             nonce: Binary(b"unique nonce".to_vec()),
-            payload_hash: Binary(payload_hash.to_vec()),
-            payload_signature: Binary(payload_signature.serialize_compact().to_vec()),
-            source_network: "ethereum".to_string(),
+            callback_gas_limit: 300_000u32,
         };
         let handle_msg = ExecuteMsg::Input {
             inputs: pre_execution_msg,
@@ -693,7 +700,7 @@ mod tests {
 
         // test internal routing info does not match
         let pre_execution_msg = PreExecutionMsg {
-            task_id: 1u64,
+            task_id: "1".to_string(),
             source_network: "ethereum".to_string(),
             routing_info: wrong_routing_info.clone(),
             routing_code_hash: routing_code_hash.clone(),
@@ -705,6 +712,7 @@ mod tests {
             user_pubkey: user_pubkey.clone(),
             handle: "test".to_string(),
             nonce: Binary(b"unique nonce".to_vec()),
+            callback_gas_limit: 300_000u32,
         };
         let handle_msg = ExecuteMsg::Input {
             inputs: pre_execution_msg,
@@ -714,18 +722,19 @@ mod tests {
 
         // test proper input handle
         let pre_execution_msg = PreExecutionMsg {
-            task_id: 1u64,
-            handle: "test".to_string(),
+            task_id: "1".to_string(),
+            source_network: "ethereum".to_string(),
             routing_info,
             routing_code_hash,
+            payload: Binary(encrypted_payload),
+            payload_hash: Binary(payload_hash.to_vec()),
+            payload_signature: Binary(payload_signature.serialize_compact().to_vec()),
             user_address,
             user_key,
             user_pubkey,
-            payload: Binary(encrypted_payload),
+            handle: "test".to_string(),
             nonce: Binary(b"unique nonce".to_vec()),
-            payload_hash: Binary(payload_hash.to_vec()),
-            payload_signature: Binary(payload_signature.serialize_compact().to_vec()),
-            source_network: "ethereum".to_string(),
+            callback_gas_limit: 300_000u32,
         };
         let handle_msg = ExecuteMsg::Input {
             inputs: pre_execution_msg,
@@ -779,6 +788,9 @@ mod tests {
             routing_code_hash: routing_code_hash.clone(),
             user_address: user_address.clone(),
             user_key: user_key.clone(),
+            callback_address: todo!(),
+            callback_selector: todo!(),
+            callback_gas_limit: 300_000u32,
         };
         let serialized_payload = to_binary(&payload).unwrap();
 
@@ -798,7 +810,7 @@ mod tests {
 
         // execute input handle
         let pre_execution_msg = PreExecutionMsg {
-            task_id: 1u64,
+            task_id: "1".to_string(),
             source_network: "ethereum".to_string(),
             routing_info,
             routing_code_hash,
@@ -810,6 +822,7 @@ mod tests {
             user_pubkey: user_pubkey.clone(),
             handle: "test".to_string(),
             nonce: Binary(b"unique nonce".to_vec()),
+            callback_gas_limit: 300_000u32,
         };
         let handle_msg = ExecuteMsg::Input {
             inputs: pre_execution_msg.clone(),
@@ -819,7 +832,7 @@ mod tests {
         // test incorrect input_hash
         let wrong_post_execution_msg = PostExecutionMsg {
             result: "{\"answer\": 42}".to_string(),
-            task_id: 1u64,
+            task: Task { network: "ethereum".to_string(), task_id: "1".to_string() },
             input_hash: Binary(sha_256("wrong data".as_bytes()).to_vec()),
         };
         let handle_msg = ExecuteMsg::Output {
@@ -834,7 +847,7 @@ mod tests {
         // test output handle
         let post_execution_msg = PostExecutionMsg {
             result: "{\"answer\": 42}".to_string(),
-            task_id: 1,
+            task: Task { network: "ethereum".to_string(), task_id: "1".to_string() },
             input_hash: Binary(
                 sha_256(&[data.as_bytes(), 1u64.to_le_bytes().as_ref()].concat()).to_vec(),
             ),
