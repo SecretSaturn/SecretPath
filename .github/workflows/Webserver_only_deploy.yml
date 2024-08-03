@@ -1,13 +1,13 @@
 name: Deployment-Webserver
 
 on:
-  push:
-    branches:
-      - nonexistent-branch
+  workflow_dispatch:
+  # push:
+  #   branches:
+  #     - nonexistent-branch
 
 jobs:
   Deploy-webserver-to-main:
-
     runs-on: ubuntu-latest
 
     steps:

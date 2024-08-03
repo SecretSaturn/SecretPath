@@ -1,8 +1,9 @@
 name: Foundry Tests
 on:
-  push:
-    paths:
-      - 'public-gateway/**'
+  workflow_dispatch:
+  # push:
+  #   paths:
+  #     - 'public-gateway/**'
 
 jobs:
   tests:

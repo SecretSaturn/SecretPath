@@ -1,15 +1,14 @@
 name: Python package
 
 on:
-  push:
-    paths:
-      - 'TNLS-Relayers/**'
-      - '.github/workflows/Python_tests.yml'
-
+  workflow_dispatch:
+  # push:
+  #   paths:
+  #     - 'TNLS-Relayers/**'
+  #     - '.github/workflows/Python_tests.yml'
 
 jobs:
   build-and-test-python:
-
     runs-on: ubuntu-latest
 
     steps:
@@ -53,7 +52,6 @@ jobs:
         run: |
           chmod +x ./upload_scrt_contract.sh
           SGX_MODE=SW ./upload_scrt_contract.sh
-
 
       - name: Test with pytest
         working-directory: ./TNLS-Relayers

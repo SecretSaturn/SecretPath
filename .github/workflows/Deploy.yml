@@ -1,15 +1,15 @@
 name: Deployment
 
 on:
-  push:
-    branches:
-      - main
-    paths-ignore:
-      - 'README.md'
+  workflow_dispatch:
+  # push:
+  #   branches:
+  #     - main
+  #   paths-ignore:
+  #     - 'README.md'
 
 jobs:
   Deploy-to-main:
-
     runs-on: ubuntu-latest
 
     steps:
@@ -91,7 +91,7 @@ jobs:
           ETH_PRIVATE_KEY: ${{secrets.ETH_PRIVATE_KEY}}
           ETHERSCAN_KEY: ${{secrets.ETHERSCAN_KEY}}
           SECRET_GATEWAY_ETH_ADDRESS: ${{env.SECRET_GATEWAY_ETH_ADDRESS}}
-        run: | 
+        run: |
           forge script script/DeployScript.s.sol:DeployScript --rpc-url "$INFURA_API_URL" --private-key "$ETH_PRIVATE_KEY" --etherscan-api-key "$ETHERSCAN_KEY" --broadcast --verify --retries 10 -vvvv
           echo "ETH_GATEWAY_ADDRESS=$(jq -r '.transactions[1].contractAddress' /home/runner/work/TNLS/TNLS/public-gateway/broadcast/DeployScript.s.sol/5/run-latest.json)" >> $GITHUB_ENV
           echo "ETH_CLIENT_ADDRESS=$(jq -r '.transactions[2].contractAddress' /home/runner/work/TNLS/TNLS/public-gateway/broadcast/DeployScript.s.sol/5/run-latest.json)" >> $GITHUB_ENV
