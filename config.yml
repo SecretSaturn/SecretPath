@@ -368,7 +368,7 @@
   type: "solana"
   chain_id: "SolanaDevNet"
   api_endpoint: https://api.devnet.solana.com
-  program_id: "5LWZAN7ZFE3Rmg4MdjqNTRkSbMxthyG8ouSa3cfn3R6V"
+  program_id: "DKDX8XbTnCgEk8o1RNnCUokiCmadG1Ch5HLxaz7CnhcD"
   timeout: 2
 
 "1802203764": #Kakarot Sepolia

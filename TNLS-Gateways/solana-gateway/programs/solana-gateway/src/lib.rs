@@ -1,33 +1,34 @@
 use anchor_lang::{
     prelude::*,
-    solana_program::{
-        instruction::Instruction,
-        program::invoke_signed,
-        secp256k1_recover::secp256k1_recover,
-        sysvar::{rent::Rent, Sysvar}
-    },
-    system_program::{transfer, Transfer},
+    system_program
 };
 use base64::{engine::general_purpose::STANDARD, Engine};
 use hex::decode;
+use solana_program::{
+    instruction::Instruction,
+    program::invoke_signed,
+    secp256k1_recover::secp256k1_recover
+};
 use solana_security_txt::security_txt;
+use std::{
+    cell::RefMut, str::FromStr
+};
 
 pub mod errors;
 use crate::errors::{GatewayError, ProgramError, TaskError};
 
-declare_id!("5LWZAN7ZFE3Rmg4MdjqNTRkSbMxthyG8ouSa3cfn3R6V");
+declare_id!("DKDX8XbTnCgEk8o1RNnCUokiCmadG1Ch5HLxaz7CnhcD");
 
 #[cfg(not(feature = "no-entrypoint"))]
 security_txt! {
     // Required fields
     name: "SecretPath",
-    project_url: "http://example.com",
-    contacts: "email:example@example.com,link:https://example.com/security,discord:example#1234",
-    policy: "https://github.com/solana-labs/solana/blob/master/SECURITY.md",
+    project_url: "https://github.com/SecretSaturn/SecretPath",
+    contacts: "XXX",
+    policy: "tbd",
 
     // Optional Fields
     preferred_languages: "en",
-    encryption: "",
     auditors: "None",
     acknowledgements: ""
 }
@@ -38,25 +39,33 @@ const TASK_DESTINATION_NETWORK: &str = "pulsar-3";
 const CHAIN_ID: &str = "SolanaDevNet";
 const SECRET_GATEWAY_PUBKEY: &str =
     "0x04f0c3e600c7f7b3c483debe8f98a839c2d93230d8f857b3c298dc8763c208afcd62dcb34c9306302bf790d8c669674a57defa44c6a95b183d94f2e645526ffe5e";
-
-const SEED: &[u8] = b"gateway_state";
+const GATEWAY_SEED: &[u8] = b"gateway_state";
+const TASK_SEED: &[u8] = b"task_state";
 const LAMPORTS_PER_COMPUTE_UNIT: f64 = 0.1;
+
+const MAX_TASKS: u64 = 8900;
 
 #[program]
 mod solana_gateway {
     use super::*;
 
     pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
-        ctx.accounts.gateway_state.owner = *ctx.accounts.owner.key;
-        ctx.accounts.gateway_state.task_id = 0;
-        ctx.accounts.gateway_state.tasks = Vec::new();
+        let gateway_state = &mut ctx.accounts.gateway_state;
 
-        //Amount of max tasks before the tasks indexes wrap around = effectively pruning them
-        ctx.accounts.gateway_state.max_tasks = 1000;
-        ctx.accounts.gateway_state.bump = ctx.bumps.gateway_state;
+        gateway_state.owner = *ctx.accounts.owner.key;
+
+        gateway_state.task_id = 0;
+        
+        //Save the bump
+        gateway_state.bump = ctx.bumps.gateway_state;
 
         Ok(())
     }
+
+    pub fn increase_task_state(ctx: Context<IncreaseTaskState>, _len: u64) -> Result<()> {
+        Ok(())
+    }
+
 
     pub fn increase_task_id(ctx: Context<IncreaseTaskId>, new_task_id: u64) -> Result<()> {
         let gateway_state = &mut ctx.accounts.gateway_state;
@@ -70,10 +79,10 @@ mod solana_gateway {
         Ok(())
     }
 
-    pub fn payout_balance(ctx: Context<PayoutBalance>, new_task_id: u64) -> Result<()> {
+    pub fn payout_balance(ctx: Context<PayoutBalance>) -> Result<()> {
         let gateway_state = &mut ctx.accounts.gateway_state;
 
-        let cpi_accounts = Transfer {
+        let cpi_accounts = system_program::Transfer {
             from: gateway_state.to_account_info(),
             to: ctx.accounts.owner.to_account_info(),
         };
@@ -81,7 +90,10 @@ mod solana_gateway {
         let cpi_context =
             CpiContext::new(ctx.accounts.system_program.to_account_info(), cpi_accounts);
 
-        transfer(cpi_context, ctx.accounts.gateway_state.lamports())?;
+        system_program::transfer(
+            cpi_context,
+            ctx.accounts.gateway_state.to_account_info().lamports(),
+        )?;
 
         Ok(())
     }
@@ -97,16 +109,11 @@ mod solana_gateway {
         // Use the current lamports per signature value of = 5000
         let lamports_per_signature = 5000;
 
-        // Estimate the cost based on the callback gas limit based on Rent
-        let rent_data = Rent::get().unwrap();
         // Current cost on using CU = 0
-
-        // std::mem::size_of::<Task>() = 48
 
         let estimated_price = (execution_info.callback_gas_limit as f64 * LAMPORTS_PER_COMPUTE_UNIT)
             as u64
-            + lamports_per_signature
-            + (48.0 * rent_data.exemption_threshold) as u64 * rent_data.lamports_per_byte_year;
+            + lamports_per_signature;
 
         // Check if user = signer has enough lamports to pay for storage rent
         require!(
@@ -114,7 +121,7 @@ mod solana_gateway {
             TaskError::InsufficientFunds
         );
 
-        let cpi_accounts = Transfer {
+        let cpi_accounts = system_program::Transfer {
             from: ctx.accounts.user.to_account_info(),
             to: gateway_state.to_account_info(),
         };
@@ -122,7 +129,7 @@ mod solana_gateway {
         let cpi_context =
             CpiContext::new(ctx.accounts.system_program.to_account_info(), cpi_accounts);
 
-        transfer(cpi_context, estimated_price)?;
+        system_program::transfer(cpi_context, estimated_price)?;
 
         //Hash the payload
         let generated_payload_hash =
@@ -131,26 +138,15 @@ mod solana_gateway {
         // Persist the task
         let task = Task {
             payload_hash: generated_payload_hash,
-            task_id: gateway_state.task_id,
             completed: false,
-        };
+        }; 
 
         // Calculate the array index
-        let index = (gateway_state.task_id % gateway_state.max_tasks) as usize;
+        let index = (gateway_state.task_id % MAX_TASKS) as usize;
 
-        // Reallocate account space if necessary
-        // std::mem::size_of::<Task>() = 48
-
-        if index >= gateway_state.tasks.len() {
-            let new_space = gateway_state.to_account_info().data_len().clone() + 48 as usize;
-            gateway_state.to_account_info().realloc(new_space, false)?;
-
-            // If the array isn't filled up yet, just push it to the end
-            gateway_state.tasks.push(task);
-        } else {
-            // If a task already exists, it will be overwritten as expected from the max.
-            gateway_state.tasks[index] = task;
-        }
+        let task_state = &mut ctx.accounts.task_state.load_mut()?;
+        
+        write_task_to_task_state(task_state, task, index)?;
 
         let task_id = gateway_state.task_id;
 
@@ -191,13 +187,14 @@ mod solana_gateway {
     ) -> Result<()> {
         let gateway_state = &mut ctx.accounts.gateway_state;
 
-        let index = (task_id % gateway_state.max_tasks) as usize;
+        // Check if the task_id for the callback is still available
+        require!(MAX_TASKS + task_id > gateway_state.task_id, TaskError::TaskIdAlreadyPruned);
 
-        require!(index <= gateway_state.tasks.len(), TaskError::InvalidIndex);
-
-        let task = &gateway_state.tasks[index];
-
-        require!(task_id == task.task_id, TaskError::TaskIdAlreadyPruned);
+        let index = (task_id % MAX_TASKS) as usize;
+        
+        let task_state = &mut ctx.accounts.task_state.load_mut()?;
+        
+        let mut task = get_task_from_task_state(task_state, index)?;
 
         // Check if the task is already completed
         require!(!task.completed, TaskError::TaskAlreadyCompleted);
@@ -250,7 +247,9 @@ mod solana_gateway {
         );
 
         // Mark the task as completed
-        gateway_state.tasks[index].completed = true;
+        task.completed = true;
+
+        write_task_to_task_state(task_state, task, index)?;
 
         let callback_data = CallbackData {
             task_id: task_id,
@@ -290,7 +289,6 @@ mod solana_gateway {
         let mut gateway_state_account_info = ctx.accounts.gateway_state.to_account_info().clone();
         gateway_state_account_info.is_writable = false;
         gateway_state_account_info.is_signer = true;
-
         callback_account_metas.push(AccountMeta::new_readonly(
             gateway_state_account_info.key(),
             true,
@@ -338,7 +336,7 @@ mod solana_gateway {
                 data: callback_data,
             },
             &callback_account_infos,
-            &[&[SEED.as_ref(), &[ctx.accounts.gateway_state.bump]]],
+            &[&[GATEWAY_SEED.as_ref(), &[ctx.accounts.gateway_state.bump]]],
         );
 
         // Emit Message that the task was completed and if it returned Ok
@@ -353,8 +351,8 @@ mod solana_gateway {
 
     pub fn callback_test(ctx: Context<CallbackTest>, task_id: u64, result: Vec<u8>) -> Result<()> {
         // Check if the callback is really coming from the secretpath_gateway and that it was signed by it
-        const SECRET_PATH_ADDRESS: &str = "5mf563g8JSeTE1mMY4GSqbynjayToKSh7x5WLoQ9RDEQ";
-        let secretpath_address_pubkey = pubkey!(SECRET_PATH_ADDRESS);
+        const SECRET_PATH_ADDRESS: &str = "93FWvrFPNWzDQAAdbEQDW5P1pE7WuZc4HAdT6fdFPw26";
+        let secretpath_address_pubkey = Pubkey::from_str(SECRET_PATH_ADDRESS).unwrap();
 
         // Inline check for signature and address
         if !ctx.accounts.secretpath_gateway.is_signer
@@ -372,6 +370,40 @@ mod solana_gateway {
         );
 
         Ok(())
+    }    
+}
+
+fn write_task_to_task_state(
+    task_state: &mut RefMut<'_, TaskState>,
+    task: Task,
+    index: usize
+) -> Result<()> {
+    if index >= (MAX_TASKS as usize) {
+        Err(TaskError::InvalidIndex.into())
+    } else {
+        let start = index * 33;
+        task_state.tasks[start..(start + 32)].copy_from_slice(&task.payload_hash);
+        task_state.tasks[start + 32] = task.completed as u8;
+        Ok(())
+    }
+}
+
+fn get_task_from_task_state(
+    task_state: &mut RefMut<'_, TaskState>,
+    index: usize
+) -> Result<Task> {
+    if index >= (MAX_TASKS as usize) {
+        Err(TaskError::InvalidIndex.into())
+    } else {
+        let start = index * 33;
+        let payload_hash: [u8; 32] = task_state.tasks[start..(start + 32)]
+            .try_into()
+            .map_err(|_| TaskError::InvalidPayloadHash)?;
+        let completed: bool = task_state.tasks[start + 33] != 0;
+        Ok(Task {
+            payload_hash: payload_hash,
+            completed: completed
+        })
     }
 }
 
@@ -386,20 +418,58 @@ pub struct Initialize<'info> {
     #[account(
         init,
         payer = owner,
-        space = 8 + 1024,
-        seeds = [SEED],
-        has_one = owner,
+        space = 10240,
+        seeds = [GATEWAY_SEED],
         bump
     )]
     pub gateway_state: Account<'info, GatewayState>,
+    #[account(
+        init,
+        payer = owner,
+        space = 10240,
+        seeds = [TASK_SEED],
+        bump
+    )]
+    pub task_state: AccountLoader<'info, TaskState>,
     #[account(mut, signer)]
     pub owner: Signer<'info>,
+    #[account(address = system_program::ID)]
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+#[instruction(len: u64)]
+pub struct IncreaseTaskState<'info> {
+    #[account(
+        mut, 
+        seeds = [GATEWAY_SEED], 
+        bump = gateway_state.bump, 
+        has_one = owner
+    )]
+    pub gateway_state: Account<'info, GatewayState>,
+    #[account(
+        mut,
+        realloc = len as usize,
+        realloc::zero = true, 
+        realloc::payer = owner,
+        seeds = [TASK_SEED],
+        bump
+    )]
+    pub task_state: AccountLoader<'info, TaskState>,
+    #[account(mut, signer)]
+    pub owner: Signer<'info>,
+    #[account(address = system_program::ID)]
     pub system_program: Program<'info, System>,
 }
 
 #[derive(Accounts)]
 pub struct IncreaseTaskId<'info> {
-    #[account(mut, seeds = [SEED], bump = gateway_state.bump, has_one = owner)]
+    #[account(
+        mut, 
+        seeds = [GATEWAY_SEED], 
+        bump = gateway_state.bump, 
+        has_one = owner
+    )]
     pub gateway_state: Account<'info, GatewayState>,
     #[account(mut, signer)]
     pub owner: Signer<'info>,
@@ -407,28 +477,56 @@ pub struct IncreaseTaskId<'info> {
 
 #[derive(Accounts)]
 pub struct PayoutBalance<'info> {
-    #[account(mut, seeds = [SEED], bump = gateway_state.bump, has_one = owner)]
+    #[account(
+        mut, 
+        seeds = [GATEWAY_SEED], 
+        bump = gateway_state.bump, 
+        has_one = owner
+    )]
     pub gateway_state: Account<'info, GatewayState>,
     #[account(mut, signer)]
     pub owner: Signer<'info>,
+    #[account(address = system_program::ID)]
     pub system_program: Program<'info, System>,
 }
 
 #[derive(Accounts)]
 pub struct Send<'info> {
-    #[account(mut, seeds = [SEED], bump = gateway_state.bump)]
+    #[account(
+        mut, 
+        seeds = [GATEWAY_SEED], 
+        bump = gateway_state.bump
+    )]
     pub gateway_state: Account<'info, GatewayState>,
+    #[account(
+        mut, 
+        seeds = [TASK_SEED], 
+        bump
+    )]
+    pub task_state: AccountLoader<'info, TaskState>,
     #[account(mut, signer)]
     pub user: Signer<'info>,
+    #[account(address = system_program::ID)]
     pub system_program: Program<'info, System>,
 }
 
 #[derive(Accounts)]
 pub struct PostExecution<'info> {
-    #[account(mut, seeds = [SEED], bump = gateway_state.bump)]
+    #[account(
+        mut, 
+        seeds = [GATEWAY_SEED], 
+        bump = gateway_state.bump
+    )]
     pub gateway_state: Account<'info, GatewayState>,
+    #[account(
+        mut, 
+        seeds = [TASK_SEED], 
+        bump
+    )]
+    pub task_state: AccountLoader<'info, TaskState>,
     #[account(mut, signer)]
     pub signer: Signer<'info>,
+    #[account(address = system_program::ID)]
     pub system_program: Program<'info, System>,
 }
 
@@ -436,19 +534,23 @@ pub struct PostExecution<'info> {
 pub struct GatewayState {
     pub owner: Pubkey,
     pub task_id: u64,
-    pub tasks: Vec<Task>,
-    pub max_tasks: u64,
     pub bump: u8,
 }
 
-#[derive(Debug, Clone, AnchorSerialize, AnchorDeserialize)]
+#[account(zero_copy(unsafe))]
+#[repr(C)]
+pub struct TaskState {
+    pub tasks: [u8; (33*MAX_TASKS + 1) as usize],
+    //pub tasks: [u8; 1000 as usize],
+}
+
+#[derive(Clone, Copy, Default)]
 pub struct Task {
     pub payload_hash: [u8; 32],
-    pub task_id: u64,
     pub completed: bool,
 }
 
-#[derive(Debug, Clone, AnchorSerialize, AnchorDeserialize)]
+#[derive(Clone, AnchorSerialize, AnchorDeserialize)]
 pub struct ExecutionInfo {
     pub user_key: Vec<u8>,
     pub user_pubkey: Vec<u8>,
@@ -461,7 +563,7 @@ pub struct ExecutionInfo {
     pub payload_signature: Vec<u8>,
 }
 
-#[derive(Debug, Clone, AnchorSerialize, AnchorDeserialize)]
+#[derive(Clone, AnchorSerialize, AnchorDeserialize)]
 pub struct PostExecutionInfo {
     pub packet_hash: [u8; 32],
     pub callback_address: Vec<u8>,
@@ -471,18 +573,18 @@ pub struct PostExecutionInfo {
     pub result: Vec<u8>,
 }
 
-#[derive(Debug, Clone, AnchorSerialize, AnchorDeserialize)]
+#[derive(Clone, AnchorSerialize, AnchorDeserialize)]
 pub struct CallbackData {
     task_id: u64,
     result: Vec<u8>,
 }
 
-#[derive(Debug, Clone, AnchorSerialize, AnchorDeserialize)]
+#[derive(Clone, AnchorSerialize, AnchorDeserialize)]
 pub struct SendResponse {
     pub request_id: u64,
 }
 
-#[derive(Debug, Clone, AnchorSerialize, AnchorDeserialize)]
+#[derive(Clone, AnchorSerialize, AnchorDeserialize)]
 pub struct LogNewTask {
     pub task_id: u64,
     pub source_network: String,

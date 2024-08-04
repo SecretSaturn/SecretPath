@@ -167,9 +167,11 @@ class SolanaContract:
     def __init__(self, interface, program_id):
         self.interface = interface
         self.program_id = Pubkey.from_string(program_id)
-        pda, bump = Pubkey.find_program_address([b'gateway_state'], self.program_id)
-        self.bump = bump
-        self.address = pda
+        gateway_pda, gateway_bump = Pubkey.find_program_address([b'gateway_state'], self.program_id)
+        task_pda, task_bump = Pubkey.find_program_address([b'task_state'], self.program_id)
+        self.gateway_pda = gateway_pda
+        self.address = gateway_pda
+        self.task_pda = task_pda
         self.lock = Lock()
         self.logger = getLogger()
         self.logger.info("Initialized Solana contract with program ID: %s", program_id)
@@ -186,7 +188,8 @@ class SolanaContract:
 
             # Create AccountMetas
             accounts: list[AccountMeta] = [
-                AccountMeta(pubkey=self.address, is_signer=False, is_writable=True),
+                AccountMeta(pubkey=self.gateway_pda, is_signer=False, is_writable=True),
+                AccountMeta(pubkey=self.task_pda, is_signer=False, is_writable=True),
                 AccountMeta(pubkey=self.interface.address, is_signer=True, is_writable=True),
                 AccountMeta(pubkey=SYS_PROGRAM_ID, is_signer=False, is_writable=False),
             ]
