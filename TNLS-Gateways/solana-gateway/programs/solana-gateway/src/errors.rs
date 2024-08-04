@@ -6,8 +6,6 @@ pub enum TaskError {
     TaskAlreadyCompleted,
     #[msg("Invalid payload hash")]
     InvalidPayloadHash,
-    #[msg("Invalid payload hash size (must be 32 bytes long)")]
-    InvalidPayloadHashSize,
     #[msg("Invalid packet hash")]
     InvalidPacketHash,
     #[msg("Invalid Public key")]
@@ -22,8 +20,8 @@ pub enum TaskError {
     InsufficientFunds,
     #[msg("Invalid lookup index")]
     InvalidIndex,
-    #[msg("Task Id already pruned")]
-    TaskIdAlreadyPruned,
+    #[msg("Invalid TaskID")]
+    InvalidTaskId,
     #[msg("Callback Addresses are invalid")]
     InvalidCallbackAddresses,
     #[msg("Borsh Data Serialization failed")]
@@ -38,10 +36,6 @@ pub enum TaskError {
 pub enum GatewayError {
     #[msg("The new task_id must be greater than the current task_id")]
     TaskIdTooLow,
-    #[msg("Gateway state is not a PDA")]
-    InvalidGatewayState,
-    #[msg("PDA is already initialized")]
-    PDAAlreadyInitialized,
     #[msg("Only owner can call this function!")]
     NotOwner
 }

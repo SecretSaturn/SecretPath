@@ -363,10 +363,10 @@
 
 
 
-"SolanaDevNet": #Solana DevNet
+"SolDV": #Solana DevNet
   active: true
   type: "solana"
-  chain_id: "SolanaDevNet"
+  chain_id: "SolDV"
   api_endpoint: https://api.devnet.solana.com
   program_id: "DKDX8XbTnCgEk8o1RNnCUokiCmadG1Ch5HLxaz7CnhcD"
   timeout: 2

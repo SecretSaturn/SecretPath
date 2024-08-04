@@ -188,7 +188,7 @@ class SolanaContract:
 
             # Create AccountMetas
             accounts: list[AccountMeta] = [
-                AccountMeta(pubkey=self.gateway_pda, is_signer=False, is_writable=True),
+                AccountMeta(pubkey=self.gateway_pda, is_signer=False, is_writable=False),
                 AccountMeta(pubkey=self.task_pda, is_signer=False, is_writable=True),
                 AccountMeta(pubkey=self.interface.address, is_signer=True, is_writable=True),
                 AccountMeta(pubkey=SYS_PROGRAM_ID, is_signer=False, is_writable=False),
