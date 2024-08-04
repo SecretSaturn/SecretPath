@@ -36,7 +36,7 @@ security_txt! {
 // Constants
 
 const TASK_DESTINATION_NETWORK: &str = "pulsar-3";
-const CHAIN_ID: &str = "SolDV";
+const CHAIN_ID: &str = "SolDN";
 const SECRET_GATEWAY_PUBKEY: &str =
     "0x04f0c3e600c7f7b3c483debe8f98a839c2d93230d8f857b3c298dc8763c208afcd62dcb34c9306302bf790d8c669674a57defa44c6a95b183d94f2e645526ffe5e";
 const GATEWAY_SEED: &[u8] = b"gateway_state";
@@ -566,10 +566,10 @@ pub struct ExecutionInfo {
     pub routing_code_hash: String,
     pub task_destination_network: String,
     pub handle: String,
-    pub nonce: Vec<u8>,
+    pub nonce: [u8; 12],
     pub callback_gas_limit: u32,
     pub payload: Vec<u8>,
-    pub payload_signature: Vec<u8>,
+    pub payload_signature: [u8; 64],
 }
 
 #[derive(Clone, AnchorSerialize, AnchorDeserialize)]
@@ -577,7 +577,7 @@ pub struct PostExecutionInfo {
     pub packet_hash: [u8; 32],
     pub callback_address: Vec<u8>,
     pub callback_selector: Vec<u8>,
-    pub callback_gas_limit: Vec<u8>,
+    pub callback_gas_limit: [u8; 4],
     pub packet_signature: [u8; 65],
     pub result: Vec<u8>,
 }
@@ -605,8 +605,8 @@ pub struct LogNewTask {
     pub routing_code_hash: String,
     pub task_destination_network: String,
     pub handle: String,
-    pub nonce: Vec<u8>,
+    pub nonce: [u8; 12],
     pub callback_gas_limit: u32,
     pub payload: Vec<u8>,
-    pub payload_signature: Vec<u8>,
+    pub payload_signature: [u8; 64],
 }

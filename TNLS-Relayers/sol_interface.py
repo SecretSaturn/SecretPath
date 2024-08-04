@@ -30,10 +30,10 @@ class LogNewTask:
         "routing_code_hash" / String,
         "task_destination_network" / String,
         "handle" / String,
-        "nonce" / Bytes,
+        "nonce" / U8[12],
         "callback_gas_limit" / U32,
         "payload" / Bytes,
-        "payload_signature" / Bytes
+        "payload_signature" / U8[64]
     )
 
 
@@ -46,7 +46,7 @@ class PostExecution:
             "packet_hash" / U8[32],
             "callback_address" / Bytes,
             "callback_selector" / Bytes,
-            "callback_gas_limit" / Bytes,
+            "callback_gas_limit" / U8[4],
             "packet_signature" / U8[65],
             "result" / Bytes,
         )
