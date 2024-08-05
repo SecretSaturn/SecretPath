@@ -345,14 +345,14 @@ contract Gateway is Initializable, OwnableUpgradeable {
     //Core Routing
     bytes32 immutable chain_id_1; bytes32 immutable chain_id_2; 
     bytes32 immutable chain_id_3; uint256 immutable chain_id_length; 
-    //string constant public task_destination_network = "secret-4";
-    //address constant public secret_gateway_signer_address = 0x88e43F4016f8282Ea6235aC069D02BA1cE5417aB;
-    string constant public task_destination_network = "pulsar-3";
-    address constant public secret_gateway_signer_address = 0x2821E794B01ABF0cE2DA0ca171A1fAc68FaDCa06;
+    string constant public task_destination_network = "secret-4";
+    address constant public secret_gateway_signer_address = 0x88e43F4016f8282Ea6235aC069D02BA1cE5417aB;
+    //string constant public task_destination_network = "pulsar-3";
+    //address constant public secret_gateway_signer_address = 0x2821E794B01ABF0cE2DA0ca171A1fAc68FaDCa06;
 
     //Secret VRF additions
-    //string constant public VRF_routing_info = "secret16pcjalfuy72r4k26r4kn5f5x64ruzv30knflwx";
-    string constant public VRF_routing_info = "secret1fxs74g8tltrngq3utldtxu9yys5tje8dzdvghr";
+    string constant public VRF_routing_info = "secret16pcjalfuy72r4k26r4kn5f5x64ruzv30knflwx";
+    //string constant public VRF_routing_info = "secret1fxs74g8tltrngq3utldtxu9yys5tje8dzdvghr";
 
     string constant public VRF_routing_code_hash = "49ffed0df451622ac1865710380c14d4af98dca2d32342bb20f2b22faca3d00d";
     bytes constant VRF_info = abi.encodePacked('}","routing_info":"',VRF_routing_info,'","routing_code_hash":"',VRF_routing_code_hash,'","user_address":"0x0000","user_key":"AAA=","callback_address":"');
