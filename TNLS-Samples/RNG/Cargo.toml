@@ -20,19 +20,17 @@ incremental = false
 overflow-checks = true
 
 [features]
-default = []
-# debug-print = ["cosmwasm-std/debug-print"] doesn't work anymore?
-# for quicker tests, cargo test --lib
-# for more explicit tests, cargo test --features=backtraces
-backtraces = ["cosmwasm-std/backtraces"]
+default = ["rand"]
+rand = ["rand_core"]
 
 [dependencies]
 cosmwasm-std = { package = "secret-cosmwasm-std", version = "1.1.11" , features = ["stargate"]}
 cosmwasm-storage = { package = "secret-cosmwasm-storage", version = "1.1.11" }
-secret-toolkit = { version = "0.10.0", default-features = false, features = ["utils", "storage"] }
+rand_core = { version = "0.6.4", default-features = false, optional = true }
+secret-toolkit = { version = "0.10.0", default-features = false, features = ["utils", "storage", "crypto"] }
+secret-toolkit-crypto = { version = "0.10.0", features = ["rand"] }
 serde = { version = "1.0.144", default-features = false, features = ["derive"] }
 serde-json-wasm = "1.0.0"
-base64 = "0.21.0"
-secret-toolkit-serialization = { version = "0.10.0", features = ["base64"] }
+base64 = "0.22.1"
 secret-path = { git = "https://github.com/SecretSaturn/SecretPath", branch = "main", package = "secret_gateway", default-features = false }
 anybuf = "0.5.0"
