@@ -1,14 +1,14 @@
-name: Python package
+name: Relayer Tests
 
 on:
   workflow_dispatch:
   push:
     branches:
+      - main
       - test-fixes
-  # push:
-  #   paths:
-  #     - 'TNLS-Relayers/**'
-  #     - '.github/workflows/Python_tests.yml'
+    paths:
+      - "TNLS-Relayers/**"
+      - ".github/workflows/Relayer_tests.yml"
 
 jobs:
   build-and-test-python:

@@ -1,12 +1,14 @@
 name: Foundry Tests
+
 on:
   workflow_dispatch:
   push:
     branches:
+      - main
       - test-fixes
-  # push:
-  #   paths:
-  #     - 'public-gateway/**'
+    paths:
+      - "TNLS-Gateways/public-gateway/**"
+      - ".github/workflows/Foundry_tests.yml"
 
 jobs:
   tests:

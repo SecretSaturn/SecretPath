@@ -1,11 +1,7 @@
 name: Ethereum Deployment
 
-# on:
-#   push:
-#     branches:
-#       - main
-
-on: workflow_dispatch
+on:
+  workflow_dispatch:
 
 env:
   FOUNDRY_PROFILE: ci
@@ -46,6 +42,5 @@ jobs:
           ALCHEMY_ENDPOINT: ${{secrets.ALCHEMY_ENDPOINT}}
           PRIVATE_KEY: ${{secrets.PRIVATE_KEY}}
           ETHERSCAN_KEY: ${{secrets.ETHERSCAN_KEY}}
-        run: | 
+        run: |
           forge script script/DeployScript.s.sol:DeployScript --rpc-url "$ALCHEMY_ENDPOINT" --private-key "$PRIVATE_KEY" --etherscan-api-key "$ETHERSCAN_KEY" --broadcast --verify -vvvv
-

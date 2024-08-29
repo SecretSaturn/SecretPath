@@ -1,12 +1,7 @@
-name: Deployment
+name: Full Deployment
 
 on:
   workflow_dispatch:
-  # push:
-  #   branches:
-  #     - main
-  #   paths-ignore:
-  #     - 'README.md'
 
 jobs:
   Deploy-to-main:
