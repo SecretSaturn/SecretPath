@@ -2,6 +2,9 @@ name: Python package
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - test-fixes
   # push:
   #   paths:
   #     - 'TNLS-Relayers/**'
@@ -32,13 +35,13 @@ jobs:
       - name: Start LocalSecret
         working-directory: ./TNLS-Relayers
         run: |
-          docker pull ghcr.io/scrtlabs/localsecret:v1.12.1
+          docker pull ghcr.io/scrtlabs/localsecret:v1.13.3
           docker run -it -d -p 9091:9091 -p 26657:26657 -p 1317:1317 -p 5000:5000 --name localsecret ghcr.io/scrtlabs/localsecret:v1.12.1
           sleep 60
 
       - name: Install secretcli
         run: |
-          wget https://github.com/scrtlabs/SecretNetwork/releases/download/v1.12.1/secretcli-Linux
+          wget https://github.com/scrtlabs/SecretNetwork/releases/download/v1.13.3/secretcli-Linux
           chmod +x secretcli-Linux
           sudo mv secretcli-Linux /usr/local/bin/secretcli
 

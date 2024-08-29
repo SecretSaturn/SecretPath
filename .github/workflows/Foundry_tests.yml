@@ -1,6 +1,9 @@
 name: Foundry Tests
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - test-fixes
   # push:
   #   paths:
   #     - 'public-gateway/**'
