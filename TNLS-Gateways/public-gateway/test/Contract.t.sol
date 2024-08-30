@@ -112,9 +112,20 @@ contract ContractTest is Test {
                            Helper Functions
     //////////////////////////////////////////////////////////////*/
 
-    function getPayloadHash(bytes memory _payload) public pure returns (bytes32) {
-        return keccak256(abi.encodePacked(_payload));
-       // return keccak256(bytes.concat("\x19Ethereum Signed Message:\n", bytes32(_payload.length), _payload));
+    // function getPayloadHash(bytes memory _payload) public pure returns (bytes32) {
+    //     return keccak256(abi.encodePacked(_payload));
+    //    // return keccak256(bytes.concat("\x19Ethereum Signed Message:\n", bytes32(_payload.length), _payload));
+    // }
+
+   function getPayloadHash(bytes memory _payload) public pure returns (bytes32 payloadHash) {
+        assembly {
+            // Take scratch memory for the data to hash
+            let data := mload(0x40)
+            mstore(data,"\x19Ethereum Signed Message:\n32")
+            mstore(add(data, 28), keccak256(add(_payload, 32), mload(_payload)))
+            payloadHash := keccak256(data, 60)
+            mstore(0x40, add(data, 64))
+        }
     }
 
     function getResultHash(bytes memory _result) public pure returns (bytes32) {
