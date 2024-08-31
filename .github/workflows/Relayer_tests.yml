@@ -5,7 +5,12 @@ on:
   push:
     branches:
       - main
-      - test-fixes
+    paths:
+      - "TNLS-Relayers/**"
+      - ".github/workflows/Relayer_tests.yml"
+  pull_request:
+    branches:
+      - main
     paths:
       - "TNLS-Relayers/**"
       - ".github/workflows/Relayer_tests.yml"

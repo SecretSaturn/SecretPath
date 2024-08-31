@@ -5,7 +5,12 @@ on:
   push:
     branches:
       - main
-      - test-fixes
+    paths:
+      - "TNLS-Gateways/public-gateway/**"
+      - ".github/workflows/Foundry_tests.yml"
+  pull_request:
+    branches:
+      - main
     paths:
       - "TNLS-Gateways/public-gateway/**"
       - ".github/workflows/Foundry_tests.yml"
