@@ -13,6 +13,7 @@ use solana_security_txt::security_txt;
 use std::{
     cell::RefMut, str::FromStr
 };
+use serde::{Serialize, Deserialize};   
 
 pub mod errors;
 use crate::errors::{GatewayError, ProgramError, TaskError};
@@ -39,10 +40,12 @@ const TASK_DESTINATION_NETWORK: &str = "pulsar-3";
 const CHAIN_ID: &str = "SolDN";
 const SECRET_GATEWAY_PUBKEY: &str =
     "0x04f0c3e600c7f7b3c483debe8f98a839c2d93230d8f857b3c298dc8763c208afcd62dcb34c9306302bf790d8c669674a57defa44c6a95b183d94f2e645526ffe5e";
+const VRF_CONTRACT_ADDRESS: &str = "secret1cknezaxnzfys2w8lyyrr7fed9wxejvgq7alhqx";
+const VRF_CODE_HASH: &str = "0b9395a7550b49d2b8ed73497fd2ebaf896c48950c4186e491ded6d22e58b8c3";
+
 const GATEWAY_SEED: &[u8] = b"gateway_state";
 const TASK_SEED: &[u8] = b"task_state";
 const LAMPORTS_PER_COMPUTE_UNIT: f64 = 0.1;
-
 const TASK_STATE_SIZE: u64 = 296900;
 const MAX_TASKS: u64 = TASK_STATE_SIZE/33;
 
@@ -149,6 +152,7 @@ mod solana_gateway {
         let task_state = &mut ctx.accounts.task_state.load_mut()?;
         write_task_to_task_state(task_state, task, index)?;
 
+        // Emit LogNewTask message
         let log_new_task = LogNewTask {
             task_id: task_id,
             source_network: CHAIN_ID.to_string(),
@@ -165,8 +169,136 @@ mod solana_gateway {
             payload: execution_info.payload,
             payload_signature: execution_info.payload_signature,
         };
+        msg!(&format!(
+            "LogNewTask:{}",
+            STANDARD.encode(&log_new_task.try_to_vec().unwrap())
+        ));
 
-        // Emit LogNewTask mesasge
+        // Increase Task ID for the next Task
+        ctx.accounts.gateway_state.task_id += 1;
+
+        Ok(SendResponse {
+            request_id: task_id,
+        })
+    }
+
+    pub fn RequestRandomness(
+        ctx: Context<RequestRandomness>,
+        u32: num_words,
+        u32: callback_compute_limit
+    ) -> Result<SendResponse> {
+        let gateway_state = &mut ctx.accounts.gateway_state;
+
+        // Load current task_id for Log and for Response
+        let task_id = gateway_state.task_id;
+
+        // Use the current lamports per signature value of = 5000
+        let lamports_per_signature = 5000;
+
+        // Current cost on using CU = 0
+        let estimated_price = (callback_compute_limit as f64 * LAMPORTS_PER_COMPUTE_UNIT)
+            as u64
+            + lamports_per_signature;
+
+        // Check if user = signer has enough lamports to pay for storage rent
+        require!(
+            ctx.accounts.user.lamports() >= estimated_price,
+            TaskError::InsufficientFunds
+        );
+
+        require!(
+            12 >= num_words,
+            TaskError::RandomWordsTooMany
+        );
+
+        // Send lamports to prepay for callback costs
+        let cpi_accounts = system_program::Transfer {
+            from: ctx.accounts.user.to_account_info(),
+            to: gateway_state.to_account_info(),
+        };
+        let cpi_context =
+            CpiContext::new(ctx.accounts.system_program.to_account_info(), cpi_accounts);
+        system_program::transfer(cpi_context, estimated_price)?;
+
+        /*
+        //construct the payload that is sent into the Secret Gateway
+        bytes memory payload = bytes.concat(
+            '{"data":"{\\"numWords\\":',
+            uint256toBytesString(_numWords),
+            VRF_info,
+            encodeAddressToBase64(msg.sender), //callback_address
+            '","callback_selector":"OLpGFA==","callback_gas_limit":', // 0x38ba4614 hex value already converted into base64, callback_selector of the fullfillRandomWords function
+            uint256toBytesString(_callbackGasLimit),
+            '}' 
+        );
+
+        //generate the payload hash using the ethereum hash format for messages
+        bytes32 payloadHash = ethSignedPayloadHash(payload);
+
+        bytes memory emptyBytes = hex"0000";
+
+        // ExecutionInfo struct
+        ExecutionInfo memory executionInfo = ExecutionInfo({
+            user_key: emptyBytes, // equals AAA= in base64
+            user_pubkey: emptyBytes, // Fill with 0 bytes
+            routing_code_hash: VRF_routing_code_hash, //RNG Contract codehash on Secret 
+            task_destination_network: task_destination_network,
+            handle: "request_random",
+            nonce: bytes12(0),
+            callback_gas_limit: _callbackGasLimit,
+            payload: payload,
+            payload_signature: emptyBytes // empty signature, fill with 0 bytes
+        });
+         */
+
+        let payload = Payload {
+            data:"",
+            routing_info: VRF_CONTRACT_ADDRESS,
+            routing_code_hash: VRF_CODE_HASH,
+            user_address: vec!(0),
+            user_key: vec!(0),
+            callback_address: Vec<u8>,
+            callback_selector: Vec<u8>,
+            /// Callback gas limit for the post execution message.
+            callback_gas_limit: u32,
+        }
+
+        //Hash the payload
+        let generated_payload_hash =
+            solana_program::keccak::hashv(&[&payload]).to_bytes();
+
+        // Persist the task
+        let task = Task {
+            payload_hash: generated_payload_hash,
+            task_id: task_id,
+            completed: false,
+        }; 
+
+        // Index wraps around MAX_TASKS, effectively pruning old tasks
+        let index = (gateway_state.task_id % MAX_TASKS) as usize;
+
+        // Write task to the task state
+        let task_state = &mut ctx.accounts.task_state.load_mut()?;
+        write_task_to_task_state(task_state, task, index)?;
+
+        // Emit LogNewTask message
+        let log_new_task = LogNewTask {
+            task_id: task_id,
+            source_network: CHAIN_ID.to_string(),
+            user_address: user_address.to_bytes().to_vec(),
+            routing_info: VRF_CONTRACT_ADDRESS.to_string(),
+            payload_hash: generated_payload_hash,
+            user_key: vec![0; 4],
+            user_pubkey: vec![0; 4],
+            routing_code_hash: VRF_CODE_HASH.to_string(),
+            task_destination_network: TASK_DESTINATION_NETWORK.to_string(),
+            handle: "request_random".to_string(),
+            nonce: [0u8; 12],
+            callback_gas_limit: callback_gas_limit,
+            payload: payload,
+            payload_signature: [0u8; 4],
+        };
+
         msg!(&format!(
             "LogNewTask:{}",
             STANDARD.encode(&log_new_task.try_to_vec().unwrap())
@@ -384,7 +516,6 @@ fn write_task_to_task_state(
         task_state.tasks[start..(start + 32)].copy_from_slice(&task.payload_hash);
         // Convert the u64 task_id to low endian bytes and copy
         task_state.tasks[(start + 33)..(start + 41)].copy_from_slice(&task.task_id.to_le_bytes());
-
         task_state.tasks[start + 41] = task.completed as u8;
         Ok(())
     }
@@ -521,6 +652,26 @@ pub struct Send<'info> {
 }
 
 #[derive(Accounts)]
+pub struct RequestRandomness<'info> {
+    #[account(
+        mut,
+        seeds = [GATEWAY_SEED], 
+        bump = gateway_state.bump
+    )]
+    pub gateway_state: Account<'info, GatewayState>,
+    #[account(
+        mut, 
+        seeds = [TASK_SEED], 
+        bump
+    )]
+    pub task_state: AccountLoader<'info, TaskState>,
+    #[account(mut, signer)]
+    pub user: Signer<'info>,
+    #[account(address = system_program::ID)]
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
 pub struct PostExecution<'info> {
     #[account(
         seeds = [GATEWAY_SEED], 
@@ -550,7 +701,6 @@ pub struct GatewayState {
 #[repr(C)]
 pub struct TaskState {
     pub tasks: [u8; TASK_STATE_SIZE as usize],
-    //pub tasks: [u8; 1000 as usize],
 }
 
 pub struct Task {
@@ -572,13 +722,40 @@ pub struct ExecutionInfo {
     pub payload_signature: [u8; 64],
 }
 
+#[derive(Clone, Serialize, Deserialize)]
+pub struct Payload {
+    /// Input values as JSON string.
+    pub data: String,
+    /// Destination contract address.
+    pub routing_info: Vec<u8>,
+    /// Destination contract code hash.
+    pub routing_code_hash: String,
+    /// User public chain address.
+    pub user_address: Vec<u8>,
+    /// User public key from payload encryption (not their wallet public key).
+    pub user_key: Vec<u8>,
+    /// Callback address for the post execution message.
+    pub callback_address: Vec<u8>,
+    /// Callback selector for the post execution message.
+    pub callback_selector: Vec<u8>,
+    /// Callback gas limit for the post execution message.
+    pub callback_gas_limit: u32,
+}
+
 #[derive(Clone, AnchorSerialize, AnchorDeserialize)]
 pub struct PostExecutionInfo {
+    /// The hash of the packet data.
     pub packet_hash: [u8; 32],
+    /// The callback addresses for the result, here all addresses concatinated.
     pub callback_address: Vec<u8>,
-    pub callback_selector: Vec<u8>,
+    /// Selector used for the callback function after execution
+    /// Consists of 32 bytes Program ID + 8 bytes function discriminator
+    pub callback_selector: [u8; 40],
+    /// Compute limit for the post-execution callback function.
     pub callback_gas_limit: [u8; 4],
+    /// The signature of the packet for verification.
     pub packet_signature: [u8; 65],
+    /// Result data sent to callback program after task execution.
     pub result: Vec<u8>,
 }
 

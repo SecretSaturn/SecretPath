@@ -106,7 +106,7 @@ class SolanaInterface:
         Get transactions for a given address.
         """
         #jump = 0
-        jump = 10
+        jump = 20
         if height % jump != 0:
             return []
 
