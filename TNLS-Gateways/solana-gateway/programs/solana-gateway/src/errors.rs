@@ -4,6 +4,8 @@ use anchor_lang::prelude::*;
 pub enum TaskError {
     #[msg("Task already completed")]
     TaskAlreadyCompleted,
+    #[msg("Invalid packet hash")]
+    TooManyRandomWords,
     #[msg("Invalid payload hash")]
     InvalidPayloadHash,
     #[msg("Invalid packet hash")]
@@ -22,8 +24,8 @@ pub enum TaskError {
     InvalidIndex,
     #[msg("Invalid TaskID")]
     InvalidTaskId,
-    #[msg("Callback Addresses are invalid")]
-    InvalidCallbackAddresses,
+    #[msg("Callback Accounts are invalid")]
+    InvalidCallbackAccounts,
     #[msg("Borsh Data Serialization failed")]
     BorshDataSerializationFailed,
     #[msg("Invalid Callback Selector")]

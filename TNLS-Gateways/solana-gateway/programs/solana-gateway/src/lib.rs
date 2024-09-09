@@ -1,6 +1,7 @@
 use anchor_lang::{
     prelude::*,
-    system_program
+    system_program,
+    idl::serde_json
 };
 use base64::{engine::general_purpose::STANDARD, Engine};
 use hex::decode;
@@ -25,7 +26,7 @@ security_txt! {
     // Required fields
     name: "SecretPath",
     project_url: "https://github.com/SecretSaturn/SecretPath",
-    contacts: "XXX",
+    contacts: "link:https://t.me/SCRTcommunity",
     policy: "tbd",
 
     // Optional Fields
@@ -47,6 +48,7 @@ const GATEWAY_SEED: &[u8] = b"gateway_state";
 const TASK_SEED: &[u8] = b"task_state";
 const LAMPORTS_PER_COMPUTE_UNIT: f64 = 0.1;
 const TASK_STATE_SIZE: u64 = 296900;
+const LAMPORTS_PER_SIGNATURE: u64 = 5000;
 const MAX_TASKS: u64 = TASK_STATE_SIZE/33;
 
 #[program]
@@ -111,13 +113,10 @@ mod solana_gateway {
         // Load current task_id for Log and for Response
         let task_id = gateway_state.task_id;
 
-        // Use the current lamports per signature value of = 5000
-        let lamports_per_signature = 5000;
-
         // Current cost on using CU = 0
         let estimated_price = (execution_info.callback_gas_limit as f64 * LAMPORTS_PER_COMPUTE_UNIT)
             as u64
-            + lamports_per_signature;
+            + LAMPORTS_PER_SIGNATURE;
 
         // Check if user = signer has enough lamports to pay for storage rent
         require!(
@@ -182,23 +181,23 @@ mod solana_gateway {
         })
     }
 
-    pub fn RequestRandomness(
+    pub fn request_randomness(
         ctx: Context<RequestRandomness>,
-        u32: num_words,
-        u32: callback_compute_limit
+        num_words: u32,
+        callback_compute_limit: u32,
+        callback_program_id: [u8; 32],
+        callback_function_distriminator: [u8; 8],
+        callback_accounts: Vec<u8>
     ) -> Result<SendResponse> {
         let gateway_state = &mut ctx.accounts.gateway_state;
 
         // Load current task_id for Log and for Response
         let task_id = gateway_state.task_id;
 
-        // Use the current lamports per signature value of = 5000
-        let lamports_per_signature = 5000;
-
         // Current cost on using CU = 0
         let estimated_price = (callback_compute_limit as f64 * LAMPORTS_PER_COMPUTE_UNIT)
             as u64
-            + lamports_per_signature;
+            + LAMPORTS_PER_SIGNATURE;
 
         // Check if user = signer has enough lamports to pay for storage rent
         require!(
@@ -208,7 +207,7 @@ mod solana_gateway {
 
         require!(
             12 >= num_words,
-            TaskError::RandomWordsTooMany
+            TaskError::TooManyRandomWords
         );
 
         // Send lamports to prepay for callback costs
@@ -216,56 +215,41 @@ mod solana_gateway {
             from: ctx.accounts.user.to_account_info(),
             to: gateway_state.to_account_info(),
         };
+
         let cpi_context =
             CpiContext::new(ctx.accounts.system_program.to_account_info(), cpi_accounts);
         system_program::transfer(cpi_context, estimated_price)?;
 
-        /*
-        //construct the payload that is sent into the Secret Gateway
-        bytes memory payload = bytes.concat(
-            '{"data":"{\\"numWords\\":',
-            uint256toBytesString(_numWords),
-            VRF_info,
-            encodeAddressToBase64(msg.sender), //callback_address
-            '","callback_selector":"OLpGFA==","callback_gas_limit":', // 0x38ba4614 hex value already converted into base64, callback_selector of the fullfillRandomWords function
-            uint256toBytesString(_callbackGasLimit),
-            '}' 
+        let mut callback_selector = [0u8; 40];
+        callback_selector[..32].copy_from_slice(&callback_program_id);
+        callback_selector[32..].copy_from_slice(&callback_function_distriminator);
+        
+        let callback_selector_encoded = STANDARD.encode(callback_selector);
+
+        // Concatenate all accounts that will be accessed
+        require!(
+            callback_accounts.len() % 32 == 0,
+            TaskError::InvalidCallbackAccounts
         );
 
-        //generate the payload hash using the ethereum hash format for messages
-        bytes32 payloadHash = ethSignedPayloadHash(payload);
-
-        bytes memory emptyBytes = hex"0000";
-
-        // ExecutionInfo struct
-        ExecutionInfo memory executionInfo = ExecutionInfo({
-            user_key: emptyBytes, // equals AAA= in base64
-            user_pubkey: emptyBytes, // Fill with 0 bytes
-            routing_code_hash: VRF_routing_code_hash, //RNG Contract codehash on Secret 
-            task_destination_network: task_destination_network,
-            handle: "request_random",
-            nonce: bytes12(0),
-            callback_gas_limit: _callbackGasLimit,
-            payload: payload,
-            payload_signature: emptyBytes // empty signature, fill with 0 bytes
-        });
-         */
+        let callback_address_encoded = STANDARD.encode(callback_accounts);
 
         let payload = Payload {
-            data:"",
-            routing_info: VRF_CONTRACT_ADDRESS,
-            routing_code_hash: VRF_CODE_HASH,
-            user_address: vec!(0),
-            user_key: vec!(0),
-            callback_address: Vec<u8>,
-            callback_selector: Vec<u8>,
-            /// Callback gas limit for the post execution message.
-            callback_gas_limit: u32,
-        }
+            data:format!("{{\"numWords\":{}}}", num_words),
+            routing_info: VRF_CONTRACT_ADDRESS.to_string().into(),
+            routing_code_hash: VRF_CODE_HASH.to_string().into(),
+            user_address: vec![0; 4],
+            user_key: vec![0; 4],
+            callback_address: callback_address_encoded.into(),
+            callback_selector: callback_selector_encoded.into(),
+            callback_gas_limit: callback_compute_limit,
+        };
+
+        let payload_json = serde_json::to_string(&payload).unwrap().into_bytes();
 
         //Hash the payload
         let generated_payload_hash =
-            solana_program::keccak::hashv(&[&payload]).to_bytes();
+            solana_program::keccak::hashv(&[&payload_json]).to_bytes();
 
         // Persist the task
         let task = Task {
@@ -285,18 +269,18 @@ mod solana_gateway {
         let log_new_task = LogNewTask {
             task_id: task_id,
             source_network: CHAIN_ID.to_string(),
-            user_address: user_address.to_bytes().to_vec(),
-            routing_info: VRF_CONTRACT_ADDRESS.to_string(),
+            user_address: vec![0; 4],
+            routing_info: VRF_CONTRACT_ADDRESS.to_string().into(),
             payload_hash: generated_payload_hash,
             user_key: vec![0; 4],
             user_pubkey: vec![0; 4],
             routing_code_hash: VRF_CODE_HASH.to_string(),
-            task_destination_network: TASK_DESTINATION_NETWORK.to_string(),
+            task_destination_network: TASK_DESTINATION_NETWORK.to_string().into(),
             handle: "request_random".to_string(),
             nonce: [0u8; 12],
-            callback_gas_limit: callback_gas_limit,
-            payload: payload,
-            payload_signature: [0u8; 4],
+            callback_gas_limit: callback_compute_limit,
+            payload: payload_json,
+            payload_signature: [0u8; 64],
         };
 
         msg!(&format!(
@@ -407,10 +391,10 @@ mod solana_gateway {
         callback_data.extend_from_slice(&function_identifier[0..8]);
         callback_data.extend_from_slice(&borsh_data);
 
-        // Concatenate all addresses that will be accessed
+        // Concatenate all accounts that will be accessed
         require!(
             post_execution_info.callback_address.len() % 32 == 0,
-            TaskError::InvalidCallbackAddresses
+            TaskError::InvalidCallbackAccounts
         );
 
         // Setup callback_account metas and infos
@@ -454,7 +438,7 @@ mod solana_gateway {
                         return Err(TaskError::MissingRequiredSignature.into());
                     }
                 }
-                Err(_) => return Err(TaskError::InvalidCallbackAddresses.into()),
+                Err(_) => return Err(TaskError::InvalidCallbackAccounts.into()),
             }
         }
 
