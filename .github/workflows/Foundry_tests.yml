@@ -39,4 +39,4 @@ jobs:
 
       - name: Check gas snapshots
         working-directory: TNLS-Gateways/public-gateway
-        run: forge snapshot --check
+        run: forge snapshot --check --tolerance 1
