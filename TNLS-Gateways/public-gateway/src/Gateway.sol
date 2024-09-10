@@ -348,7 +348,7 @@ contract Gateway is Initializable, OwnableUpgradeable {
     //string constant public task_destination_network = "secret-4";
     //address constant public secret_gateway_signer_address = 0x88e43F4016f8282Ea6235aC069D02BA1cE5417aB;
     string constant public task_destination_network = "pulsar-3";
-    address constant public secret_gateway_signer_address = 0x2821E794B01ABF0cE2DA0ca171A1fAc68FaDCa06;
+    address immutable public secret_gateway_signer_address = 0x2821E794B01ABF0cE2DA0ca171A1fAc68FaDCa06;
 
     //Secret VRF additions
     //string constant public VRF_routing_info = "secret16pcjalfuy72r4k26r4kn5f5x64ruzv30knflwx";
@@ -722,8 +722,15 @@ contract Gateway is Initializable, OwnableUpgradeable {
         taskId = 1;
     }
 
-    constructor() {
+    constructor(address secretGatewaySignerAddr) {
         _disableInitializers();
+
+        // Used as an override for testing. 
+        // If not specified otherwise for testing, this just defaults to the signing address defined at the top.
+        if (secretGatewaySignerAddr != address(0x0)) {
+            secret_gateway_signer_address = secretGatewaySignerAddr;
+        }
+
         //Burn in the Chain-ID into the byte code into chain_id_1, chain_id_2 and chain_id_3 and chain_id_length. 
         bytes memory chain_id = uint256toBytesString(block.chainid);
         bytes32 chain_id_1_tmp; bytes32 chain_id_2_tmp; bytes32 chain_id_3_tmp; 
