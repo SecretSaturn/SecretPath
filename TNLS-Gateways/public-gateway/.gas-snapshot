@@ -1,0 +1,5 @@
+ContractTest:testFail_CannotPreExecutionWithoutValidPayloadSig() (gas: 61787)
+ContractTest:testFail_PostExecutionWithoutMapStoredAddressSignatures() (gas: 83236)
+ContractTest:test_PostExecution() (gas: 84170)
+ContractTest:test_PostExecutionExplicitValues() (gas: 2787283)
+ContractTest:test_PreExecution() (gas: 64465)

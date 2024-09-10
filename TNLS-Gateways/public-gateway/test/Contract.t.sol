@@ -21,10 +21,6 @@ contract ContractTest is Test {
     ProxyAdmin proxyAdmin;
     TransparentUpgradeableProxy gatewayProxy;
 
-    event test (
-        string test
-    );
-
     function setUp() public {
         deployer = vm.addr(3);
         gatewayOwner = vm.addr(9);
@@ -95,7 +91,7 @@ contract ContractTest is Test {
                            Helper Functions
     //////////////////////////////////////////////////////////////*/
 
-    function getPacketHash(bytes memory sourceNetwork, uint256 taskId, bytes32 payloadHash, bytes memory result, address callback_address, bytes4 callback_selector) public returns (bytes32 packetHash) {
+    function getPacketHash(bytes memory sourceNetwork, uint256 taskId, bytes32 payloadHash, bytes memory result, address callback_address, bytes4 callback_selector) public view returns (bytes32 packetHash) {
          // Concatenate packet data elements
         bytes memory data = bytes.concat(
             sourceNetwork,
@@ -106,7 +102,6 @@ contract ContractTest is Test {
             bytes20(callback_address),
             callback_selector
         );
-        emit test(string(uint256toBytesString(block.chainid)));
         
         // Perform Keccak256 + sha256 hash
         packetHash = sha256(bytes.concat(keccak256(data)));
@@ -283,8 +278,8 @@ contract ContractTest is Test {
         vm.chainId(11155111); 
         vm.prank(deployer);
 
-        // Deploy Gateway Logic Contract
-        Gateway gatewayLogic = new Gateway(address(0x0));
+        // Deploy Gateway Logic Contract with signer address 0x2821E794B01ABF0cE2DA0ca171A1fAc68FaDCa06
+        Gateway gatewayLogic = new Gateway(address(0x2821E794B01ABF0cE2DA0ca171A1fAc68FaDCa06));
 
         // Prepare initializer data for Gateway
         bytes memory initializerData = abi.encodeWithSelector(
