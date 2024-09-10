@@ -38,4 +38,5 @@ jobs:
         run: forge test -vvv
 
       - name: Check gas snapshots
+        working-directory: TNLS-Gateways/public-gateway
         run: forge snapshot --check
