@@ -14,11 +14,7 @@ contract IncreaseTaskIdScript is Script {
     address deployer;
     Gateway gateway;
 
-    uint256 privKey = vm.envUint("ETH_PRIVATE_KEY");
-
-
     function run() public {
-        deployer = vm.rememberKey(privKey);
         vm.startBroadcast();
 
         // Gateway (Proxy) Contract
