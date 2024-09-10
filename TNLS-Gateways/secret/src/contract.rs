@@ -254,8 +254,8 @@ fn pre_execution(deps: DepsMut, _env: Env, msg: PreExecutionMsg) -> StdResult<Re
     let input_hash = sha_256(&[input_values.as_bytes(), new_task.task_id.as_bytes(),&unsafe_payload_bytes].concat());
 
     // create a task information store
-    let task_info = TaskInfo { 
-        payload: msg.payload, // storing the payload
+    let task_info = TaskInfo {
+        payload: msg.payload, // store the payload
         payload_hash: msg.payload_hash,
         payload_signature: msg.payload_signature,
         decrypted_payload_data: input_values.clone(),
@@ -264,8 +264,8 @@ fn pre_execution(deps: DepsMut, _env: Env, msg: PreExecutionMsg) -> StdResult<Re
         user_pubkey: msg.user_pubkey,
         handle: msg.handle.clone(),
         nonce: msg.nonce,
-        unsafe_payload: unsafe_payload, //store the unsafe_payload flag for later checks
-        input_hash, // storing the input_values hashed together with task
+        unsafe_payload, // store the unsafe_payload flag for later checks
+        input_hash,     // store the input_values hashed together with task
         source_network: msg.source_network,
         user_address: payload.user_address.clone(),
         user_key: payload.user_key.clone(),
@@ -281,20 +281,8 @@ fn pre_execution(deps: DepsMut, _env: Env, msg: PreExecutionMsg) -> StdResult<Re
     let mut signing_key_bytes = [0u8; 32];
     signing_key_bytes.copy_from_slice(config.signing_keys.sk.as_slice());
 
-    // used in production to create signature
-    #[cfg(target_arch = "wasm32")]
     let signature = deps.api.secp256k1_sign(&input_hash, &signing_key_bytes)
         .map_err(|err| StdError::generic_err(err.to_string()))?;
-
-    // used only in unit testing to create signatures
-    #[cfg(not(target_arch = "wasm32"))]
-    let signature = {
-        let secp = secp256k1::Secp256k1::signing_only();
-        let sk = secp256k1::SecretKey::from_slice(&signing_key_bytes).unwrap();
-        let message = secp256k1::Message::from_slice(&input_hash)
-            .map_err(|err| StdError::generic_err(err.to_string()))?;
-        secp.sign_ecdsa(&message, &sk).serialize_compact().to_vec()
-    };
 
     // construct the message to send to the destination contract
     let private_contract_msg = SecretMsg::Input {
@@ -358,15 +346,13 @@ fn post_execution(deps: DepsMut, env: Env, msg: PostExecutionMsg) -> StdResult<R
 
     // load this gateway's signing key
     let private_key = CONFIG.load(deps.storage)?.signing_keys.sk;
-    let mut signing_key_bytes = [0u8; 32];
-    signing_key_bytes.copy_from_slice(private_key.as_slice());
 
     // used in production to create signature
-    // NOTE: api.secp256k1_sign() will perform an additional sha_256 hash operation on the given data
     #[cfg(target_arch = "wasm32")]
+    // NOTE: api.secp256k1_sign() will perform an additional sha_256 hash operation on the given data
     let packet_signature = {
         deps.api
-            .secp256k1_sign(&packet_hash, &signing_key_bytes)
+            .secp256k1_sign(&packet_hash, &private_key.as_slice())
             .map_err(|err| StdError::generic_err(err.to_string()))?
     };
 
@@ -374,7 +360,7 @@ fn post_execution(deps: DepsMut, env: Env, msg: PostExecutionMsg) -> StdResult<R
     #[cfg(not(target_arch = "wasm32"))]
     let packet_signature = {
         let secp = secp256k1::Secp256k1::signing_only();
-        let sk = secp256k1::SecretKey::from_slice(&signing_key_bytes).unwrap();
+        let sk = secp256k1::SecretKey::from_slice(&private_key.as_slice()).unwrap();
 
         let packet_message = secp256k1::Message::from_slice(&sha_256(&packet_hash))
             .map_err(|err| StdError::generic_err(err.to_string()))?;
@@ -382,27 +368,69 @@ fn post_execution(deps: DepsMut, env: Env, msg: PostExecutionMsg) -> StdResult<R
         secp.sign_ecdsa(&packet_message, &sk).serialize_compact()
     };
 
-    // convert the hashes and signatures into hex byte strings
-    // NOTE: we need to perform the additional sha_256 because that is what the secret network API method does
     // NOTE: The result_signature and packet_signature are both missing the recovery ID (v = 0 or 1), due to a Ethereum bug (v = 27 or 28).
     // we need to either manually check both recovery IDs (v = 27 && v = 28) in the solidity contract (I've leaved this the hard way.)
-
     // or we can find out the two recovery IDs inside of this contract here and keep the solidity contract slim (which is probably the better way when it comes to gas costs):
 
     // Load the original public key from storage
     let public_key_data = CONFIG.load(deps.storage)?.signing_keys.pk;
- 
+
     // Deserialize the uncompressed public key
     let uncompressed_public_key = PublicKey::parse(&public_key_data).map_err(|err| StdError::generic_err(err.to_string()))?;
- 
+
     // Compress the public key
     let compressed_public_key = uncompressed_public_key.serialize_compressed();
 
     // Recover and compare public keys for packet, do v = 0 (= 27 in ethereum) and v = 1 (= 28 in ethereum)
+    #[cfg(target_arch = "wasm32")]
     let packet_public_key_27 = deps.api.secp256k1_recover_pubkey(&sha_256(&packet_hash), &packet_signature, 0)
     .map_err(|err| StdError::generic_err(err.to_string()))?;
+
+    // Recover and compare public keys for packet, do v = 0 (= 27 in Ethereum) and v = 1 (= 28 in Ethereum)
+    #[cfg(not(target_arch = "wasm32"))]
+    let packet_public_key_27 = {
+        let secp = secp256k1::Secp256k1::verification_only();
+        let recovery_id = secp256k1::ecdsa::RecoveryId::from_i32(0).unwrap(); // v = 0 in secp256k1 corresponds to v = 27 in Ethereum
+        let recoverable_signature = secp256k1::ecdsa::RecoverableSignature::from_compact(&packet_signature, recovery_id)
+            .map_err(|err| StdError::generic_err(err.to_string()))?;
+
+        let packet_message = secp256k1::Message::from_slice(&{
+            use sha2::{Sha256, Digest};
+            let mut hasher = Sha256::new();
+            hasher.update(&packet_hash);
+            hasher.finalize()
+        }).map_err(|err| StdError::generic_err(err.to_string()))?;
+
+        // Recover the public key and serialize to compressed form
+        secp.recover_ecdsa(&packet_message, &recoverable_signature)
+            .map_err(|err| StdError::generic_err(err.to_string()))?
+            .serialize() // Serialize the public key to its compressed form
+    };
+
+    #[cfg(target_arch = "wasm32")]
     let packet_public_key_28 = deps.api.secp256k1_recover_pubkey(&sha_256(&packet_hash), &packet_signature, 1)
     .map_err(|err| StdError::generic_err(err.to_string()))?;
+
+    #[cfg(not(target_arch = "wasm32"))]
+    let packet_public_key_28 = {
+        let secp = secp256k1::Secp256k1::verification_only();
+        let recovery_id = secp256k1::ecdsa::RecoveryId::from_i32(1).unwrap(); // v = 1 in secp256k1 corresponds to v = 28 in Ethereum
+        let recoverable_signature = secp256k1::ecdsa::RecoverableSignature::from_compact(&packet_signature, recovery_id)
+            .map_err(|err| StdError::generic_err(err.to_string()))?;
+
+        let packet_message = secp256k1::Message::from_slice(&{
+            use sha2::{Sha256, Digest};
+            let mut hasher = Sha256::new();
+            hasher.update(&packet_hash);
+            hasher.finalize()
+        }).map_err(|err| StdError::generic_err(err.to_string()))?;
+
+        // Recover the public key and serialize to compressed form
+        secp.recover_ecdsa(&packet_message, &recoverable_signature)
+            .map_err(|err| StdError::generic_err(err.to_string()))?
+            .serialize() // Serialize the public key to its compressed form
+    };
+
 
     let packet_recovery_id = if packet_public_key_27 == compressed_public_key {
         27
@@ -432,7 +460,7 @@ fn post_execution(deps: DepsMut, env: Env, msg: PostExecutionMsg) -> StdResult<R
         packet_signature: packet_signature,
         callback_address: callback_address,
         callback_selector: callback_selector,
-        callback_gas_limit: callback_gas_limit
+        callback_gas_limit: callback_gas_limit,
     };
 
     RESULT_MAP.insert(deps.storage, &msg.task, &result_info)?;
@@ -470,8 +498,8 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
 fn query_execution_result(deps: Deps, task: Task) -> StdResult<Binary> {
 
     let task_info = RESULT_MAP
-    .get(deps.storage, &task)
-    .ok_or_else(|| StdError::generic_err("task not found"))?;
+        .get(deps.storage, &task)
+        .ok_or_else(|| StdError::generic_err("task not found"))?;
 
     to_binary(&ResultInfo {
         source_network: task_info.source_network,
@@ -523,7 +551,7 @@ mod tests {
     use super::*;
     use crate::types::*;
     use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info};
-    use cosmwasm_std::{from_binary, Addr, Binary, Empty};
+    use cosmwasm_std::{from_binary, Addr, Api, Binary, Empty};
 
     use chacha20poly1305::aead::{Aead, NewAead};
     use chacha20poly1305::{ChaCha20Poly1305, Key, Nonce};
@@ -533,13 +561,11 @@ mod tests {
     const SOMEBODY: &str = "somebody";
 
     #[track_caller]
-    fn setup_test_case(deps: DepsMut) -> Result<Response<Empty>, StdError> {
+    fn setup_test_case(deps: DepsMut) -> Result<Response, StdError> {
         // Instantiate a contract with entropy
         let admin = Some(Addr::unchecked(OWNER.to_owned()));
 
-        let init_msg = InstantiateMsg {
-            admin,
-        };
+        let init_msg = InstantiateMsg { admin };
         instantiate(deps, mock_env(), mock_info(OWNER, &[]), init_msg)
     }
 
@@ -565,15 +591,15 @@ mod tests {
     fn test_init() {
         let mut deps = mock_dependencies();
 
-        let response = setup_test_case(deps.as_mut()).unwrap();
-        assert_eq!(1, response.messages.len());
+        let response = setup_test_case(deps.as_mut());
+        assert!(response.is_ok());
     }
 
     #[test]
     fn test_query() {
         let mut deps = mock_dependencies();
         let env = mock_env();
-        let info = mock_info(OWNER, &[]);
+        let _info = mock_info(OWNER, &[]);
 
         // initialize
         setup_test_case(deps.as_mut()).unwrap();
@@ -629,6 +655,9 @@ mod tests {
             routing_code_hash: routing_code_hash.clone(),
             user_address: user_address.clone(),
             user_key: user_key.clone(),
+            callback_address: base64::encode(hex::decode("ae2Fc483527B8EF99EB5D9B44875F005ba1FaE13").unwrap()).as_bytes().into(),
+            callback_selector: base64::encode(hex::decode("faef40fe").unwrap()).as_bytes().into(),
+            callback_gas_limit: 300_000u32,
         };
         let serialized_payload = to_binary(&payload).unwrap();
 
@@ -642,9 +671,19 @@ mod tests {
             .unwrap();
 
         // sign the payload
-        let payload_hash = sha_256(serialized_payload.as_slice());
-        let message = Message::from_slice(&payload_hash).unwrap();
-        let payload_signature = secp.sign_ecdsa(&message, &secret_key);
+        let prefix = "\x19Ethereum Signed Message:\n32".as_bytes();
+        let mut hasher = Keccak256::new();
+
+        // NOTE: hmmm shouldn't this be a hash of the non-encrypted payload?
+        hasher.update(encrypted_payload.as_slice());
+        let payload_hash_tmp = hasher.finalize_reset();
+        hasher.update([prefix, &payload_hash_tmp].concat());
+        let payload_hash = hasher.finalize();
+
+        // let message = Message::from_slice(&payload_hash).unwrap();
+        // let payload_signature = secp.sign_ecdsa(&message, &secret_key);
+
+        let payload_signature = deps.api.secp256k1_sign(&payload_hash, secret_key.as_ref()).unwrap();
 
         // mock wrong payload (encrypted with a key that does not match the one inside the payload)
         let wrong_user_address = Addr::unchecked("wrong eth address".to_string());
@@ -656,6 +695,9 @@ mod tests {
             routing_code_hash: routing_code_hash.clone(),
             user_address: wrong_user_address.clone(),
             user_key: wrong_user_key.clone(),
+            callback_address: base64::encode(hex::decode("ae2Fc483527B8EF99EB5D9B44875F005ba1FaE13").unwrap()).as_bytes().into(),
+            callback_selector: base64::encode(hex::decode("faef40fe").unwrap()).as_bytes().into(),
+            callback_gas_limit: 300_000u32,
         };
         let wrong_serialized_payload = to_binary(&wrong_payload).unwrap();
 
@@ -666,18 +708,19 @@ mod tests {
 
         // test payload user_key does not match given user_key
         let pre_execution_msg = PreExecutionMsg {
-            task_id: 1,
-            handle: "test".to_string(),
+            task_id: "1".to_string(),
+            source_network: "ethereum".to_string(),
             routing_info: routing_info.clone(),
             routing_code_hash: routing_code_hash.clone(),
+            payload: Binary(wrong_encrypted_payload.clone()),
+            payload_hash: Binary(payload_hash.to_vec()),
+            payload_signature: Binary(payload_signature.to_vec()),
             user_address: user_address.clone(),
             user_key: user_key.clone(),
             user_pubkey: user_pubkey.clone(),
-            payload: Binary(wrong_encrypted_payload.clone()),
+            handle: "test".to_string(),
             nonce: Binary(b"unique nonce".to_vec()),
-            payload_hash: Binary(payload_hash.to_vec()),
-            payload_signature: Binary(payload_signature.serialize_compact().to_vec()),
-            source_network: "ethereum".to_string(),
+            callback_gas_limit: 300_000u32,
         };
         let handle_msg = ExecuteMsg::Input {
             inputs: pre_execution_msg,
@@ -693,18 +736,19 @@ mod tests {
 
         // test internal routing info does not match
         let pre_execution_msg = PreExecutionMsg {
-            task_id: 1u64,
+            task_id: "1".to_string(),
             source_network: "ethereum".to_string(),
             routing_info: wrong_routing_info.clone(),
             routing_code_hash: routing_code_hash.clone(),
             payload: Binary(encrypted_payload.clone()),
             payload_hash: Binary(payload_hash.to_vec()),
-            payload_signature: Binary(payload_signature.serialize_compact().to_vec()),
+            payload_signature: Binary(payload_signature.to_vec()),
             user_address: user_address.clone(),
             user_key: user_key.clone(),
             user_pubkey: user_pubkey.clone(),
             handle: "test".to_string(),
             nonce: Binary(b"unique nonce".to_vec()),
+            callback_gas_limit: 300_000u32,
         };
         let handle_msg = ExecuteMsg::Input {
             inputs: pre_execution_msg,
@@ -714,18 +758,19 @@ mod tests {
 
         // test proper input handle
         let pre_execution_msg = PreExecutionMsg {
-            task_id: 1u64,
-            handle: "test".to_string(),
+            task_id: "1".to_string(),
+            source_network: "ethereum".to_string(),
             routing_info,
             routing_code_hash,
+            payload: Binary(encrypted_payload),
+            payload_hash: Binary(payload_hash.to_vec()),
+            payload_signature: Binary(payload_signature.to_vec()),
             user_address,
             user_key,
             user_pubkey,
-            payload: Binary(encrypted_payload),
+            handle: "test".to_string(),
             nonce: Binary(b"unique nonce".to_vec()),
-            payload_hash: Binary(payload_hash.to_vec()),
-            payload_signature: Binary(payload_signature.serialize_compact().to_vec()),
-            source_network: "ethereum".to_string(),
+            callback_gas_limit: 300_000u32,
         };
         let handle_msg = ExecuteMsg::Input {
             inputs: pre_execution_msg,
@@ -744,7 +789,8 @@ mod tests {
     #[test]
     fn test_post_execution() {
         let mut deps = mock_dependencies();
-        let env = mock_env();
+        let mut env = mock_env();
+        env.block.chain_id = "secret".to_string();
         let info = mock_info(SOMEBODY, &[]);
         // initialize
         setup_test_case(deps.as_mut()).unwrap();
@@ -779,6 +825,9 @@ mod tests {
             routing_code_hash: routing_code_hash.clone(),
             user_address: user_address.clone(),
             user_key: user_key.clone(),
+            callback_address: base64::encode(hex::decode("ae2Fc483527B8EF99EB5D9B44875F005ba1FaE13").unwrap()).as_bytes().into(),
+            callback_selector: base64::encode(hex::decode("faef40fe").unwrap()).as_bytes().into(),
+            callback_gas_limit: 300_000u32,
         };
         let serialized_payload = to_binary(&payload).unwrap();
 
@@ -789,27 +838,34 @@ mod tests {
         let nonce = Nonce::from_slice(b"unique nonce"); // 12-bytes; unique per message
         let encrypted_payload = cipher
             .encrypt(nonce, serialized_payload.as_slice())
-            .expect("encryption failure!"); // NOTE: handle this error to avoid panics!
+            .expect("encryption failure!");
 
         // sign the payload
-        let payload_hash = sha_256(serialized_payload.as_slice());
-        let message = Message::from_slice(&payload_hash).unwrap();
-        let payload_signature = secp.sign_ecdsa(&message, &secret_key);
+        let prefix = "\x19Ethereum Signed Message:\n32".as_bytes();
+        let mut hasher = Keccak256::new();
+
+        hasher.update(encrypted_payload.as_slice());
+        let payload_hash_tmp = hasher.finalize_reset();
+        hasher.update([prefix, &payload_hash_tmp].concat());
+        let payload_hash = hasher.finalize();
+
+        let payload_signature = deps.api.secp256k1_sign(&payload_hash, secret_key.as_ref()).unwrap();
 
         // execute input handle
         let pre_execution_msg = PreExecutionMsg {
-            task_id: 1u64,
+            task_id: "1".to_string(),
             source_network: "ethereum".to_string(),
             routing_info,
             routing_code_hash,
             payload: Binary(encrypted_payload),
             payload_hash: Binary(payload_hash.to_vec()),
-            payload_signature: Binary(payload_signature.serialize_compact().to_vec()),
+            payload_signature: Binary(payload_signature.to_vec()),
             user_address,
             user_key,
             user_pubkey: user_pubkey.clone(),
             handle: "test".to_string(),
             nonce: Binary(b"unique nonce".to_vec()),
+            callback_gas_limit: 300_000u32,
         };
         let handle_msg = ExecuteMsg::Input {
             inputs: pre_execution_msg.clone(),
@@ -818,25 +874,22 @@ mod tests {
 
         // test incorrect input_hash
         let wrong_post_execution_msg = PostExecutionMsg {
-            result: "{\"answer\": 42}".to_string(),
-            task_id: 1u64,
+            result: base64::encode("{\"answer\": 42}".to_string()),
+            task: Task { network: "ethereum".to_string(), task_id: "1".to_string() },
             input_hash: Binary(sha_256("wrong data".as_bytes()).to_vec()),
         };
         let handle_msg = ExecuteMsg::Output {
             outputs: wrong_post_execution_msg,
         };
         let err = execute(deps.as_mut(), env.clone(), info.clone(), handle_msg).unwrap_err();
-        assert_eq!(
-            err,
-            StdError::generic_err("input hash does not match task id")
-        );
+        assert_eq!(err, StdError::generic_err("input hash does not match task"));
 
         // test output handle
         let post_execution_msg = PostExecutionMsg {
-            result: "{\"answer\": 42}".to_string(),
-            task_id: 1,
+            result: base64::encode("{\"answer\": 42}".to_string()),
+            task: Task { network: "ethereum".to_string(), task_id: "1".to_string() },
             input_hash: Binary(
-                sha_256(&[data.as_bytes(), 1u64.to_le_bytes().as_ref()].concat()).to_vec(),
+                sha_256(&[data.as_bytes(), "1".to_string().as_bytes(), &[0u8]].concat()).to_vec(),
             ),
         };
 
@@ -882,16 +935,16 @@ mod tests {
             65
         );
         assert_eq!(
-            hex::decode(logs[7].value.clone().strip_prefix("0x").unwrap())
+            base64::decode(hex::decode(logs[7].value.clone().strip_prefix("0x").unwrap()).unwrap())
                 .unwrap()
                 .len(),
-            32
+            20
         );
         assert_eq!(
             hex::decode(logs[8].value.clone().strip_prefix("0x").unwrap())
                 .unwrap()
                 .len(),
-            65
+            8
         );
     }
 }

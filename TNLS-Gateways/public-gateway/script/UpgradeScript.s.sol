@@ -19,7 +19,7 @@ contract UpgradeScript is Script {
         vm.startBroadcast();
 
         // Deploy New Gateway Logic Contract
-        newGatewayLogic = new Gateway();
+        newGatewayLogic = new Gateway(address(0x0));
         //newGatewayLogic = Gateway(0x59D8C9591dB7179c5d592c5bCD42694021885aFC);
         
         transparentProxy = ITransparentUpgradeableProxy(0xfaFCfceC4e29e9b4ECc8C0a3f7df1011580EEEf2);

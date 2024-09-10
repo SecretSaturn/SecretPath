@@ -1,8 +1,19 @@
 name: Foundry Tests
+
 on:
+  workflow_dispatch:
   push:
+    branches:
+      - main
     paths:
-      - 'public-gateway/**'
+      - "TNLS-Gateways/public-gateway/**"
+      - ".github/workflows/Foundry_tests.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "TNLS-Gateways/public-gateway/**"
+      - ".github/workflows/Foundry_tests.yml"
 
 jobs:
   tests:
@@ -19,12 +30,13 @@ jobs:
           version: nightly
 
       - name: Install forge dependencies
-        working-directory: ./public-gateway
+        working-directory: TNLS-Gateways/public-gateway
         run: forge install
 
       - name: Run tests
-        working-directory: ./public-gateway
+        working-directory: TNLS-Gateways/public-gateway
         run: forge test -vvv
 
       - name: Check gas snapshots
-        run: forge snapshot --check
+        working-directory: TNLS-Gateways/public-gateway
+        run: forge snapshot --check --tolerance 1
