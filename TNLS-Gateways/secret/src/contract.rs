@@ -346,15 +346,27 @@ fn post_execution(deps: DepsMut, env: Env, msg: PostExecutionMsg) -> StdResult<R
 
     // load this gateway's signing key
     let private_key = CONFIG.load(deps.storage)?.signing_keys.sk;
-    println!("{:?}", private_key);
 
+    // used in production to create signature
+    #[cfg(target_arch = "wasm32")]
     // NOTE: api.secp256k1_sign() will perform an additional sha_256 hash operation on the given data
     let packet_signature = {
         deps.api
             .secp256k1_sign(&packet_hash, &private_key.as_slice())
             .map_err(|err| StdError::generic_err(err.to_string()))?
     };
-    println!("{:?}", packet_signature);
+
+    // used only in unit testing to create signature
+    #[cfg(not(target_arch = "wasm32"))]
+    let packet_signature = {
+        let secp = secp256k1::Secp256k1::signing_only();
+        let sk = secp256k1::SecretKey::from_slice(&private_key.as_slice()).unwrap();
+
+        let packet_message = secp256k1::Message::from_slice(&sha_256(&packet_hash))
+            .map_err(|err| StdError::generic_err(err.to_string()))?;
+
+        secp.sign_ecdsa(&packet_message, &sk).serialize_compact()
+    };
 
     // NOTE: The result_signature and packet_signature are both missing the recovery ID (v = 0 or 1), due to a Ethereum bug (v = 27 or 28).
     // we need to either manually check both recovery IDs (v = 27 && v = 28) in the solidity contract (I've leaved this the hard way.)
@@ -370,10 +382,55 @@ fn post_execution(deps: DepsMut, env: Env, msg: PostExecutionMsg) -> StdResult<R
     let compressed_public_key = uncompressed_public_key.serialize_compressed();
 
     // Recover and compare public keys for packet, do v = 0 (= 27 in ethereum) and v = 1 (= 28 in ethereum)
+    #[cfg(target_arch = "wasm32")]
     let packet_public_key_27 = deps.api.secp256k1_recover_pubkey(&sha_256(&packet_hash), &packet_signature, 0)
     .map_err(|err| StdError::generic_err(err.to_string()))?;
+
+    // Recover and compare public keys for packet, do v = 0 (= 27 in Ethereum) and v = 1 (= 28 in Ethereum)
+    #[cfg(not(target_arch = "wasm32"))]
+    let packet_public_key_27 = {
+        let secp = secp256k1::Secp256k1::verification_only();
+        let recovery_id = secp256k1::ecdsa::RecoveryId::from_i32(0).unwrap(); // v = 0 in secp256k1 corresponds to v = 27 in Ethereum
+        let recoverable_signature = secp256k1::ecdsa::RecoverableSignature::from_compact(&packet_signature, recovery_id)
+            .map_err(|err| StdError::generic_err(err.to_string()))?;
+
+        let packet_message = secp256k1::Message::from_slice(&{
+            use sha2::{Sha256, Digest};
+            let mut hasher = Sha256::new();
+            hasher.update(&packet_hash);
+            hasher.finalize()
+        }).map_err(|err| StdError::generic_err(err.to_string()))?;
+
+        // Recover the public key and serialize to compressed form
+        secp.recover_ecdsa(&packet_message, &recoverable_signature)
+            .map_err(|err| StdError::generic_err(err.to_string()))?
+            .serialize() // Serialize the public key to its compressed form
+    };
+
+    #[cfg(target_arch = "wasm32")]
     let packet_public_key_28 = deps.api.secp256k1_recover_pubkey(&sha_256(&packet_hash), &packet_signature, 1)
     .map_err(|err| StdError::generic_err(err.to_string()))?;
+
+    #[cfg(not(target_arch = "wasm32"))]
+    let packet_public_key_28 = {
+        let secp = secp256k1::Secp256k1::verification_only();
+        let recovery_id = secp256k1::ecdsa::RecoveryId::from_i32(1).unwrap(); // v = 1 in secp256k1 corresponds to v = 28 in Ethereum
+        let recoverable_signature = secp256k1::ecdsa::RecoverableSignature::from_compact(&packet_signature, recovery_id)
+            .map_err(|err| StdError::generic_err(err.to_string()))?;
+
+        let packet_message = secp256k1::Message::from_slice(&{
+            use sha2::{Sha256, Digest};
+            let mut hasher = Sha256::new();
+            hasher.update(&packet_hash);
+            hasher.finalize()
+        }).map_err(|err| StdError::generic_err(err.to_string()))?;
+
+        // Recover the public key and serialize to compressed form
+        secp.recover_ecdsa(&packet_message, &recoverable_signature)
+            .map_err(|err| StdError::generic_err(err.to_string()))?
+            .serialize() // Serialize the public key to its compressed form
+    };
+
 
     let packet_recovery_id = if packet_public_key_27 == compressed_public_key {
         27
@@ -542,7 +599,7 @@ mod tests {
     fn test_query() {
         let mut deps = mock_dependencies();
         let env = mock_env();
-        let info = mock_info(OWNER, &[]);
+        let _info = mock_info(OWNER, &[]);
 
         // initialize
         setup_test_case(deps.as_mut()).unwrap();
@@ -598,8 +655,8 @@ mod tests {
             routing_code_hash: routing_code_hash.clone(),
             user_address: user_address.clone(),
             user_key: user_key.clone(),
-            callback_address: b"public gateway address".into(),
-            callback_selector: b"0xfaef40fe".into(),
+            callback_address: base64::encode(hex::decode("ae2Fc483527B8EF99EB5D9B44875F005ba1FaE13").unwrap()).as_bytes().into(),
+            callback_selector: base64::encode(hex::decode("faef40fe").unwrap()).as_bytes().into(),
             callback_gas_limit: 300_000u32,
         };
         let serialized_payload = to_binary(&payload).unwrap();
@@ -638,8 +695,8 @@ mod tests {
             routing_code_hash: routing_code_hash.clone(),
             user_address: wrong_user_address.clone(),
             user_key: wrong_user_key.clone(),
-            callback_address: b"public gateway address".into(),
-            callback_selector: b"0xfaef40fe".into(),
+            callback_address: base64::encode(hex::decode("ae2Fc483527B8EF99EB5D9B44875F005ba1FaE13").unwrap()).as_bytes().into(),
+            callback_selector: base64::encode(hex::decode("faef40fe").unwrap()).as_bytes().into(),
             callback_gas_limit: 300_000u32,
         };
         let wrong_serialized_payload = to_binary(&wrong_payload).unwrap();
@@ -732,7 +789,8 @@ mod tests {
     #[test]
     fn test_post_execution() {
         let mut deps = mock_dependencies();
-        let env = mock_env();
+        let mut env = mock_env();
+        env.block.chain_id = "secret".to_string();
         let info = mock_info(SOMEBODY, &[]);
         // initialize
         setup_test_case(deps.as_mut()).unwrap();
@@ -767,8 +825,8 @@ mod tests {
             routing_code_hash: routing_code_hash.clone(),
             user_address: user_address.clone(),
             user_key: user_key.clone(),
-            callback_address: b"public gateway address".into(),
-            callback_selector: b"0xfaef40fe".into(),
+            callback_address: base64::encode(hex::decode("ae2Fc483527B8EF99EB5D9B44875F005ba1FaE13").unwrap()).as_bytes().into(),
+            callback_selector: base64::encode(hex::decode("faef40fe").unwrap()).as_bytes().into(),
             callback_gas_limit: 300_000u32,
         };
         let serialized_payload = to_binary(&payload).unwrap();
@@ -786,7 +844,6 @@ mod tests {
         let prefix = "\x19Ethereum Signed Message:\n32".as_bytes();
         let mut hasher = Keccak256::new();
 
-        // NOTE: shouldn't this be a hash of the non-encrypted payload?
         hasher.update(encrypted_payload.as_slice());
         let payload_hash_tmp = hasher.finalize_reset();
         hasher.update([prefix, &payload_hash_tmp].concat());
@@ -878,16 +935,16 @@ mod tests {
             65
         );
         assert_eq!(
-            hex::decode(logs[7].value.clone().strip_prefix("0x").unwrap())
+            base64::decode(hex::decode(logs[7].value.clone().strip_prefix("0x").unwrap()).unwrap())
                 .unwrap()
                 .len(),
-            32
+            20
         );
         assert_eq!(
             hex::decode(logs[8].value.clone().strip_prefix("0x").unwrap())
                 .unwrap()
                 .len(),
-            65
+            8
         );
     }
 }
