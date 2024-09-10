@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity ^0.8.24;
+pragma solidity ^0.8.25;
 
 import "forge-std/Test.sol";
 import "forge-std/Vm.sol";
@@ -17,38 +17,21 @@ contract ContractTest is Test {
     address deployer;
     address gatewayOwner;
     address notOwner;
+    address secretGatewaySigner;
     ProxyAdmin proxyAdmin;
     TransparentUpgradeableProxy gatewayProxy;
-
-    event logNewTask(
-        uint256 indexed task_id,
-        string source_network,
-        address user_address,
-        string routing_info,
-        string routing_code_hash,
-        bytes payload,
-        bytes32 payload_hash,
-        bytes payload_signature,
-        bytes user_key,
-        bytes user_pubkey,
-        string handle,
-        bytes12 nonce
-    );
-
-    event logCompletedTask(uint256 indexed task_id, bytes32 payload_hash, bytes32 result_hash);
-
-    event ComputedResult(uint256 indexed taskId, bytes result);
 
     function setUp() public {
         deployer = vm.addr(3);
         gatewayOwner = vm.addr(9);
         notOwner = vm.addr(4);
+        secretGatewaySigner = vm.addr(6);
+
+        vm.chainId(1); 
         vm.prank(deployer);
-        // Deploy ProxyAdmin
-        proxyAdmin = new ProxyAdmin(msg.sender);
 
         // Deploy Gateway Logic Contract
-        Gateway gatewayLogic = new Gateway();
+        Gateway gatewayLogic = new Gateway(secretGatewaySigner);
 
         // Prepare initializer data for Gateway
         bytes memory initializerData = abi.encodeWithSelector(
@@ -59,7 +42,7 @@ contract ContractTest is Test {
         // Deploy TransparentUpgradeableProxy
         gatewayProxy = new TransparentUpgradeableProxy(
             address(gatewayLogic),
-            address(proxyAdmin),
+            msg.sender,
             initializerData
         );
 
@@ -94,7 +77,7 @@ contract ContractTest is Test {
         Signature is produced by signing a keccak256 hash with the following format:
         "\x19Ethereum Signed Message\n" + len(msg) + msg
         */
-        return keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", _messageHash));
+        return keccak256(bytes.concat("\x19Ethereum Signed Message:\n32", _messageHash));
     }
 
     /// @notice Get the encoded hash of the inputs for signing
@@ -104,60 +87,57 @@ contract ContractTest is Test {
         return keccak256(abi.encode(_routeInput, _verificationAddressInput));
     }
 
-    function sliceLastByte(bytes32 data) private pure returns (bytes31) {
-        return bytes31(data & 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00);
-    }
-
     /*//////////////////////////////////////////////////////////////
                            Helper Functions
     //////////////////////////////////////////////////////////////*/
 
-    function getPayloadHash(bytes memory _payload) public pure returns (bytes32) {
-        return keccak256(abi.encodePacked(_payload));
-       // return keccak256(bytes.concat("\x19Ethereum Signed Message:\n", bytes32(_payload.length), _payload));
+    function getPacketHash(bytes memory sourceNetwork, uint256 taskId, bytes32 payloadHash, bytes memory result, address callback_address, bytes4 callback_selector) public view returns (bytes32 packetHash) {
+         // Concatenate packet data elements
+        bytes memory data = bytes.concat(
+            sourceNetwork,
+            uint256toBytesString(block.chainid),
+            uint256toBytesString(taskId),
+            payloadHash,
+            result,
+            bytes20(callback_address),
+            callback_selector
+        );
+        
+        // Perform Keccak256 + sha256 hash
+        packetHash = sha256(bytes.concat(keccak256(data)));
     }
 
-    function getResultHash(bytes memory _result) public pure returns (bytes32) {
-        return keccak256(abi.encodePacked(_result));
+    function uint256toBytesString(uint256 value) public pure returns (bytes memory buffer) {
+        if (value == 0) {
+            return "0";
+        }
+        uint256 temp = value;
+        uint256 digits;
+        while (temp != 0) {
+            digits++;
+            temp /= 10;
+        }
+        buffer = new bytes(digits);
+        while (value != 0) {
+            digits -= 1;
+            buffer[digits] = bytes1(uint8(48 + uint256(value % 10)));
+            value /= 10;
+        }
     }
 
-    function getRouteInfoHash(string memory _routingInfo) public pure returns (bytes32) {
-        return keccak256(abi.encode(_routingInfo));
-    }
-
-    function getRoutingInfoSignature(string memory _routingInfo, uint256 _foundryPkey) public returns (bytes memory) {
-        bytes32 routeHash = getRouteInfoHash(_routingInfo);
-        bytes32 routeEthSignedMessageHash = getEthSignedMessageHash(routeHash);
-        (uint8 v1, bytes32 r1, bytes32 s1) = vm.sign(_foundryPkey, routeEthSignedMessageHash);
-        bytes memory routingInfoSig = abi.encodePacked(r1, s1, v1);
-
-        return routingInfoSig;
-    }
-
-    function getPayloadSignature(bytes memory _payload, uint256 _foundryPkey) public returns (bytes memory) {
-        bytes32 payloadHash = getPayloadHash(_payload);
-        bytes32 payloadEthSignedMessageHash = getEthSignedMessageHash(payloadHash);
+    function getPayloadSignature(bytes memory _payload, uint256 _foundryPkey) public pure returns (bytes memory) {
+        bytes32 payloadEthSignedMessageHash = getEthSignedMessageHash(keccak256(_payload));
         (uint8 v2, bytes32 r2, bytes32 s2) = vm.sign(_foundryPkey, payloadEthSignedMessageHash);
         bytes memory payloadSig = abi.encodePacked(r2, s2, v2);
 
         return payloadSig;
     }
 
-    function getPacketSignature(bytes32 _packetHash, uint256 _foundryPkey) public returns (bytes memory) {
-        bytes32 packetEthSignedMessageHash = getEthSignedMessageHash(_packetHash);
-        (uint8 v3, bytes32 r3, bytes32 s3) = vm.sign(_foundryPkey, packetEthSignedMessageHash);
+    function getPacketSignature(bytes32 _packetHash, uint256 _foundryPkey) public pure returns (bytes memory) {
+        (uint8 v3, bytes32 r3, bytes32 s3) = vm.sign(_foundryPkey, _packetHash);
         bytes memory packetSig = abi.encodePacked(r3, s3, v3);
 
         return packetSig;
-    }
-
-    function getResultSignature(bytes memory _result, uint256 _foundryPkey) public returns (bytes memory) {
-        bytes32 resultHash = getResultHash(_result);
-        bytes32 resultEthSignedMessageHash = getEthSignedMessageHash(resultHash);
-        (uint8 v2, bytes32 r2, bytes32 s2) = vm.sign(_foundryPkey, resultEthSignedMessageHash);
-        bytes memory resultSig = abi.encodePacked(r2, s2, v2);
-
-        return resultSig;
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -168,13 +148,12 @@ contract ContractTest is Test {
     function test_PreExecution() public {
         // USER ADDRESS       ----->   vm.addr(5);
         // CALLBACK ADDRESS   ----->   vm.addr(7);
-
+        
         string memory routingInfo = "secret";
 
         // bytes32 string encoding of "add a bunch of stuff"
         bytes memory payload = hex"61646420612062756e6368206f66207374756666000000000000000000000000";
-        bytes32 payloadHash = getPayloadHash(payload);
-        payloadHash = getEthSignedMessageHash(payloadHash);
+        bytes32 payloadHash = getEthSignedMessageHash(keccak256(payload));
 
         // encoding bytes of "some public key"
         bytes memory userKey = hex"736f6d65207075626c6963206b65790000000000000000000000000000000000";
@@ -195,7 +174,7 @@ contract ContractTest is Test {
         gateway.send(payloadHash, vm.addr(5), routingInfo, assembledInfo);
 
         (bytes31 tempPayloadHash,) = gateway.tasks(1);
-        assertEq(tempPayloadHash, sliceLastByte(payloadHash), "payloadHash failed");
+        assertEq(tempPayloadHash, bytes31(payloadHash), "payloadHash failed");
 
         (,bool tempCompleted) = gateway.tasks(1);
         assertEq(tempCompleted, false, "tempCompleted failed");
@@ -207,8 +186,7 @@ contract ContractTest is Test {
 
         // bytes32 string encoding of "add a bunch of stuff"
         bytes memory payload = hex"61646420612062756e6368206f66207374756666000000000000000000000000";
-        bytes32 payloadHash = getPayloadHash(payload);
-        payloadHash = getEthSignedMessageHash(payloadHash);
+        bytes32 payloadHash = getEthSignedMessageHash(keccak256(payload));
 
         // encoding bytes of "some public key"
         bytes memory userKey = hex"736f6d65207075626c6963206b65790000000000000000000000000000000000";
@@ -232,26 +210,25 @@ contract ContractTest is Test {
     }
 
     function test_PostExecution() public {
-                vm.chainId(11155111); 
+        test_PreExecution();
         string memory sourceNetwork = "secret";
     
         uint256 taskId = 1;
 
         // bytes32 string encoding of "add a bunch of stuff"
         bytes memory payload = hex"61646420612062756e6368206f66207374756666000000000000000000000000";
-        bytes32 payloadHash = getPayloadHash(payload);
-        payloadHash = getEthSignedMessageHash(payloadHash);
+        bytes32 payloadHash = getEthSignedMessageHash(keccak256(payload));
 
         // bytes32 string encoding of "some result"
         bytes memory result = hex"736f6d6520726573756c74000000000000000000000000000000000000000000";
-        bytes32 resultHash = getResultHash(result);
-        resultHash = getEthSignedMessageHash(resultHash);
+        bytes32 packetHash = getPacketHash(bytes(sourceNetwork), taskId, payloadHash, result, address(gateway), hex"faef40fe");
+        bytes memory packetSignature = getPacketSignature(packetHash, 6);
 
         Gateway.PostExecutionInfo memory assembledInfo = Gateway.PostExecutionInfo({
             payload_hash: payloadHash,
             result: result,
-            packet_hash: resultHash,
-            packet_signature: getResultSignature(result, 2),
+            packet_hash: packetHash,
+            packet_signature: packetSignature,
             callback_address: bytes20(address(gateway)),
             callback_selector: hex"faef40fe",
             callback_gas_limit: bytes4(uint32(300000))
@@ -271,19 +248,18 @@ contract ContractTest is Test {
 
         // bytes32 string encoding of "add a bunch of stuff"
         bytes memory payload = hex"61646420612062756e6368206f66207374756666000000000000000000000000";
-        bytes32 payloadHash = getPayloadHash(payload);
-        payloadHash = getEthSignedMessageHash(payloadHash);
+        bytes32 payloadHash = getEthSignedMessageHash(keccak256(payload));
 
         // bytes32 string encoding of "some result"
         bytes memory result = hex"736f6d6520726573756c74000000000000000000000000000000000000000000";
-        bytes32 resultHash = getResultHash(result);
-        resultHash = getEthSignedMessageHash(resultHash);
+        bytes32 packetHash = getPacketHash(bytes(sourceNetwork), taskId, payloadHash, result, address(gateway), hex"faef40fe");
+        bytes memory packetSignature = getPacketSignature(packetHash, 6);
 
         Gateway.PostExecutionInfo memory assembledInfo = Gateway.PostExecutionInfo({
             payload_hash: payloadHash,
             result: result,
-            packet_hash: resultHash,
-            packet_signature: getResultSignature(result, 6),
+            packet_hash: packetHash,
+            packet_signature: packetSignature,
             callback_address: bytes20(address(gateway)),
             callback_selector: hex"faef40fe",
             callback_gas_limit: bytes4(uint32(300000))
@@ -298,78 +274,81 @@ contract ContractTest is Test {
                       Stubbed Value Case Setup
     //////////////////////////////////////////////////////////////*/
 
-    function test_PreExecutionSetupForExplicitCase() public {
+    function test_PostExecutionExplicitValues() public {
+        vm.chainId(11155111); 
+        vm.prank(deployer);
+
+        // Deploy Gateway Logic Contract with signer address 0x2821E794B01ABF0cE2DA0ca171A1fAc68FaDCa06
+        Gateway gatewayLogic = new Gateway(address(0x2821E794B01ABF0cE2DA0ca171A1fAc68FaDCa06));
+
+        // Prepare initializer data for Gateway
+        bytes memory initializerData = abi.encodeWithSelector(
+            Gateway.initialize.selector
+        );
+        
+        vm.prank(gatewayOwner);
+        // Deploy TransparentUpgradeableProxy
+        TransparentUpgradeableProxy gatewayProxyNew = new TransparentUpgradeableProxy(
+            address(gatewayLogic),
+            msg.sender,
+            initializerData
+        );
+
+        // Cast the proxy address to the Gateway interface
+        Gateway gatewayNew = Gateway(address(gatewayProxyNew));
 
         address userAddress = 0x50FcF0c327Ee4341313Dd5Cb987f0Cd289Be6D4D;
 
-        string memory routingInfo = "secret";
+        uint256 taskId = 968;
+        vm.store(address(gatewayNew), bytes32(uint256(0)), bytes32(uint256(taskId)));
+
+        string memory routingInfo = "secret1aawazragzd7zlmn3ym09wuryhxn54x2846gd2v";
 
         // bytes32 string encoding of "add a bunch of stuff"
-        bytes memory payload = hex"0e9cff93bb71eb6eaabb1d64dba1841ba9202784af250812f7588a42c53d7ff1866cc2c682fd8968a2a36a9a7b5f1721c69d761a6bd4a26ef6b1c2f82cd35a7d29369fbeab8ad35c9ce162560e9a5cf2a271d30bb5b3e86206396bc6973f30ecb87959d5310688cb5283cf6eec57d86bb3c0bcd2d29d341d686f66208d90f65223cc988ce5b8923bed3225847ddc5859eef515ffb8ea77e8faafc891c2bcf8c1898ad53081367c052c866444536972c58672a1994cfc0ed174eea0ec7b324f2c4214c658fd75d06180e0984546a838559b890220d41d1ee4882f6371b7352c49f10ce45c360c4a98f9c5bf988bc49392ac005edb8c8683258163acb87e989dee647fcbf4e94b7bb320525c054dadad82764c34d82fa3b10bfd9edf260224eb86275f5ad390ce42fd423689cbe45f42350ed23465112554857d25f12a00f33e1c202cd419f512ad842f1fef95fa5bfd4898a810e9f0ab4354453aca9bb516c49c8a88bc1134cc8f2fa1d7e5cb65ff23ffbc7727d091c0b1e18c7c6647a49e3e951c2e8ec87ca3cdeb3bedb5d5b1650d4b622bfc3e6ca7c3d5afa6cbe4f0d80ac8dbd966359d";
-        bytes32 payloadHash = hex"fa6ec6995359ca7c7ea6602443f212e8295b9407cfa9f1f04c4651df345453fa";
+        bytes memory payload = hex"9fcc87a3acaae44bab74c4e4ea5c53438b5332a37c1435f1d6afb03a6c060d9cbf01de09d562888748751a213dfe8261112eac91997fa1e774853af3c6f02454fae85ab9dd7caa9e75cd27f0c57572e04724922c2b32dd157ce307bdd3ad8091d9c97a27d3a17ba9300e32735f93eb4e30ec5f1f0288628c5149220ee2ff5663eb1cf72bdf0251d570c39cd912bc618dc612e8ac8cede0f4d4cd5b14061b4d289960a02bd8aa832865749bde39b9adfa33eb09d44cd9e3953253158995019001e585f8661ddbed26d6b4a1898eba208a56b71f7a11e7fdc50414a12e63522e810691567138485aecb6af3ef4ee2f6d1469cdc8744efecace87276eda920ec425b68b4ccf8cdfe2af531c4d8c5f019e7566ee629b57f371f42746f2716b32dca16d95a4137c95fcda80ccde94d4acd84ff2ecc7abf2d87cac33abb571c026df6ab91b346f3a6dda3f9a0294b4be5d7e71a2adf8102fa3bf954da327bd2e0f981c13a8dff3b045c0ad948acbf16305e44910a36aa477e935a5628ab510d8b021f692cf5150d2c82af56c40ad97f6f7044242befe2bcfef3ec3732609128f18ed85d8186b871a8d686ea028f6b767681cb53d8ee48dec4605621bb59c0b01d0868a0e04803d24b19a4e25d1f7c9071e85";
+        bytes32 payloadHash = hex"497a3b745cef16ffe10fe3412e0fdda0642f3e919b9a037ad7cceafcb28b658f";
         bytes memory payloadSignature =
-            hex"a6c728c5307ec4a84f15805f55d3827c6e58eb661fa5633956b500540e6b0b376cba788ef8ad19024ecc5c769cdd917ae07423f0724709e10fce0e3d7510da7c1c";
+            hex"c6d8dad66ff1309464660516d2d65d6e89218ceded094bb05f5085811a66c2f64304ad70a87c7002e09b07eabd75ffd464a777ae19f8359113c210a7212cc5021c";
 
         // encoding bytes of "some public key"
-        bytes memory userKey = hex"736f6d65207075626c6963206b65790000000000000000000000000000000000";
-        bytes memory userPublicKey = hex"040b8d42640a7eded641dd42ad91d7c9ae3644a2412bdff174790012774e5528a30f9f0a630977d53e7a862eb2fb89207fe4fafc824992d281ba0180c6a1fddb4c";
+        bytes memory userKey = hex"035326b77c45a33eb9153dca33325358870b897416982028ae03a8b3a46f78b4d6";
+        bytes memory userPublicKey = hex"048e368db756bc5f586c074851625a21593c21e6a6814820b545fe52b0e1466fc04154a3182d86e27b00f48857a427d985d29d8dfad936a434c1b01f0f0adcd6a0";
 
         Gateway.ExecutionInfo memory assembledInfo = Gateway.ExecutionInfo({
             user_key: userKey,
             user_pubkey:userPublicKey,
-            routing_code_hash: "some RoutingCodeHash",
+            routing_code_hash: "4f4054beb60d13c1fceece7be3ea7c349e46b70c1fbbf2517f713180d6033c84",
             task_destination_network: "pulsar-3",
-            handle: "some kinda handle",
-            nonce: "ssssssssssss",
-            callback_gas_limit: 300000,
+            handle: "request_random",
+            nonce: hex"086d58cf22336d92798128d4",
+            callback_gas_limit: 90000,
             payload: payload,
             payload_signature: payloadSignature
         });
 
-        gateway.send(payloadHash, userAddress, routingInfo, assembledInfo );
-
-        (bytes31 tempPayloadHash,) = gateway.tasks(1);
-        assertEq(tempPayloadHash, sliceLastByte(payloadHash));
-
-        (,bool tempCompleted) = gateway.tasks(1);
-        assertEq(tempCompleted, false);
-    }
-
-    function test_PostExecutionExplicitValues() public {
-        test_PreExecutionSetupForExplicitCase();
-
-        string memory sourceNetwork = "secret";
-        uint256 taskId = 1;
-
-        // callback
-        bytes20 callback_address = hex"7b226d795f76616c7565223a327d";
-        bytes4 callback_selector = hex"faef40fe";
-        bytes4 callback_gas_limit = bytes4(uint32(300000));
-
-        // payload
-        bytes32 payloadHash = hex"fa6ec6995359ca7c7ea6602443f212e8295b9407cfa9f1f04c4651df345453fa";
+        gatewayNew.send(payloadHash, userAddress, routingInfo, assembledInfo );
 
         // result
-        bytes memory result = hex"7b226d795f76616c7565223a327d";
+        bytes memory result = hex"3238";
 
         // packet
-        bytes32 packetHash = hex"923b23c023d0e5e66ac122d9804414f4f9cab06d7a6ce6c4b8c586a1fa57264c";
+        bytes32 packetHash = hex"79f6c82153147da3e7ec399229b41a1accbc7ad34620adcb96990087b9ac58f3";
         bytes memory packetSignature =
-            hex"2db95ebb82b81f8240d952e1c6edf021e098de63d32f1f0d3bbbb7daf0e9edbd3378fc42e31d1041467c76388a35078968f1f6f2eb781b5b83054a1d90ba41ff1c";
+            hex"c51a532a75b9758c239b02d2f797236290db8b0a80a1a8a33ed889ceb0d9061a24c2cb463437b7c0fda60c560b2ba0e240fbda421182d5d0b30ebd609de1f1971b";
 
-        Gateway.PostExecutionInfo memory assembledInfo = Gateway.PostExecutionInfo({
+        Gateway.PostExecutionInfo memory assembledPostInfo = Gateway.PostExecutionInfo({
             payload_hash: payloadHash,
             result: result,
             packet_hash: packetHash,
             packet_signature: packetSignature,
-            callback_address: callback_address,
-            callback_selector: callback_selector,
-            callback_gas_limit: callback_gas_limit
+            callback_address: hex"3879e146140b627a5c858a08e507b171d9e43139",
+            callback_selector: hex"373d450c",
+            callback_gas_limit: bytes4(uint32(90000))
         });
 
-        gateway.postExecution(taskId, sourceNetwork, assembledInfo);
+        gatewayNew.postExecution(taskId, "pulsar-3", assembledPostInfo);
 
-        (,bool tempCompleted) = gateway.tasks(1);
-        assertEq(tempCompleted, true);
+        (,bool tempCompleted_2) = gatewayNew.tasks(taskId);
+        assertEq(tempCompleted_2, true);
     }
 }

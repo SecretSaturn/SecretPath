@@ -6,7 +6,7 @@ base58==2.1.1
 based58==0.1.1
 bech32==1.2.0
 bip32utils==0.3.post4
-bitarray==1.2.2
+bitarray==2.4.0
 black==22.3.0
 boltons==21.0.0
 cachetools==4.2.4

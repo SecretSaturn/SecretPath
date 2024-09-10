@@ -21,7 +21,7 @@ contract DeployScript is Script {
         vm.startBroadcast();
 
         // Deploy Gateway Logic Contract
-        gatewayLogic = new Gateway();
+        gatewayLogic = new Gateway(address(0x0));
 
         // Prepare initializer data for Gateway
         bytes memory initializerData = abi.encodeWithSelector(
