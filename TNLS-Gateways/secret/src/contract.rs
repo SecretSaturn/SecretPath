@@ -1,23 +1,26 @@
-use cosmwasm_std::{
-    from_binary, entry_point, to_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdError,
-    StdResult,
+use crate::{
+    msg::{
+        ExecuteMsg, InputResponse, InstantiateMsg, MigrateMsg, PostExecutionMsg, PreExecutionMsg,
+        PublicKeyResponse, QueryMsg, ResponseStatus::Success, SecretMsg,
+    },
+    state::{
+        KeyPair, ResultInfo, State, Task, TaskInfo, CONFIG, CREATOR, MY_ADDRESS, RESULT_MAP,
+        TASK_MAP,
+    },
+    PrivContractHandleMsg,
 };
+use base64::{engine::general_purpose::STANDARD, Engine};
+use cosmwasm_std::{
+    entry_point, from_binary, to_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response,
+    StdError, StdResult,
+};
+use hex::ToHex;
 use secret_toolkit::{
     crypto::secp256k1::{PrivateKey, PublicKey},
     crypto::{sha_256, ContractPrng},
     utils::{pad_handle_result, pad_query_result, HandleCallback},
 };
-use base64::{engine::general_purpose, Engine};
-use hex::ToHex;
 use sha3::{Digest, Keccak256};
-use crate::{
-    msg::{
-        ExecuteMsg, InputResponse, InstantiateMsg, PostExecutionMsg, PreExecutionMsg,
-        PublicKeyResponse, QueryMsg, ResponseStatus::Success, SecretMsg, MigrateMsg
-    },
-    state::{KeyPair, State, Task, TaskInfo, ResultInfo, CONFIG, CREATOR, MY_ADDRESS, TASK_MAP, RESULT_MAP},
-    PrivContractHandleMsg,
-};
 
 /// pad handle responses and log attributes to blocks of 256 bytes to prevent leaking info based on
 /// response size
@@ -72,7 +75,6 @@ pub fn instantiate(
 }
 
 #[cfg(feature = "contract")]
-
 ///////////////////////////////////// Handle //////////////////////////////////////
 /// Returns HandleResult
 ///
@@ -81,14 +83,9 @@ pub fn instantiate(
 /// * `deps` - mutable reference to Extern containing all the contract's external dependencies
 /// * `env` - Env of contract's environment
 /// * `msg` - HandleMsg passed in with the execute message
-/// 
+///
 #[entry_point]
-pub fn execute(
-    deps: DepsMut,
-    env: Env,
-    info: MessageInfo,
-    msg: ExecuteMsg,
-) -> StdResult<Response> {
+pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> StdResult<Response> {
     let response = match msg {
         ExecuteMsg::Input { inputs } => pre_execution(deps, env, inputs),
         ExecuteMsg::Output { outputs } => post_execution(deps, env, outputs),
@@ -100,12 +97,9 @@ pub fn execute(
 #[entry_point]
 pub fn migrate(_deps: DepsMut, _env: Env, msg: MigrateMsg) -> StdResult<Response> {
     match msg {
-        MigrateMsg::Migrate {} => {
-            Ok(Response::default())
-        }
+        MigrateMsg::Migrate {} => Ok(Response::default()),
     }
 }
-
 
 fn rotate_gateway_keys(deps: DepsMut, env: Env, info: MessageInfo) -> StdResult<Response> {
     // load config
@@ -115,10 +109,11 @@ fn rotate_gateway_keys(deps: DepsMut, env: Env, info: MessageInfo) -> StdResult<
 
     // check if the keys have already been created
     if state.keyed {
-        //if keys were have already been created, check if admin is calling this 
+        //if keys were have already been created, check if admin is calling this
         if state.admin != caller_raw {
             return Err(StdError::generic_err(
-                "keys have already been created and only admin is allowed to rotate gateway keys".to_string(),
+                "keys have already been created and only admin is allowed to rotate gateway keys"
+                    .to_string(),
             ));
         }
     }
@@ -196,49 +191,60 @@ fn pre_execution(deps: DepsMut, _env: Env, msg: PreExecutionMsg) -> StdResult<Re
     // load config
     let config = CONFIG.load(deps.storage)?;
 
+    // Check if the payload matches the payload hash for Solana
     let mut hasher = Keccak256::new();
-
-    // check if the payload matches the payload hash for Solana
     hasher.update(msg.payload.as_slice());
     let payload_hash_tmp_solana = hasher.finalize_reset();
 
-    // check if the payload matches the payload hash for Ethereum
+    // Check if the payload matches the payload hash for Ethereum
     hasher.update(msg.payload.as_slice());
     let payload_hash_tmp_eth = hasher.finalize_reset();
-    hasher.update(["\x19Ethereum Signed Message:\n32".as_bytes(), &payload_hash_tmp_eth].concat());
+    hasher.update(
+        [
+            "\x19Ethereum Signed Message:\n32".as_bytes(),
+            &payload_hash_tmp_eth,
+        ]
+        .concat(),
+    );
     let payload_hash_tmp_eth = hasher.finalize();
 
-    if msg.payload_hash.as_slice() != payload_hash_tmp_eth.as_slice() && msg.payload_hash.as_slice() != payload_hash_tmp_solana.as_slice() {
-        return Err(StdError::generic_err("Hashed Payload does not match payload hash"));
+    if msg.payload_hash.as_slice() != payload_hash_tmp_eth.as_slice()
+        && msg.payload_hash.as_slice() != payload_hash_tmp_solana.as_slice()
+    {
+        return Err(StdError::generic_err(
+            "Hashed Payload does not match payload hash",
+        ));
     }
 
     // Attempt to decrypt the payload
     let decrypted_payload_result = msg.decrypt_payload(config.encryption_keys.sk);
 
-    let mut unsafe_payload = false;
+    let mut unsafe_payload = true;
 
     let payload = match decrypted_payload_result {
         Ok(decrypted_payload) => {
             // If decryption is successful, attempt to verify
             match msg.verify(&deps) {
-                Ok(_) => decrypted_payload, // Both decryption and verification succeeded
+                Ok(_) => {
+                    unsafe_payload = false;
+                    // Both decryption and verification succeeded
+                    decrypted_payload
+                }
                 Err(_err) => {
-                    unsafe_payload = true;
                     //return Err(StdError::generic_err(format!("Verification failed: {}", err)));
                     // Continue with the decrypted payload if only verification fails
                     decrypted_payload
                 }
             }
-        },
+        }
         Err(_err) => {
-            unsafe_payload = true;
             //return Err(StdError::generic_err(format!("Decryption failed: {}", err)));
             // If decryption fails, continue with the original, encrypted payload
             // We are not verifying the payload in this case as it's already deemed unsafe
             from_binary(&Binary::from(msg.payload.as_slice()))?
-        },
+        }
     };
-    
+
     // verify the internal verification key matches the user address
     if payload.user_key != msg.user_key {
         return Err(StdError::generic_err("verification key mismatch"));
@@ -254,21 +260,30 @@ fn pre_execution(deps: DepsMut, _env: Env, msg: PreExecutionMsg) -> StdResult<Re
 
     let new_task = Task {
         network: msg.source_network.clone(),
-        task_id: msg.task_id
+        task_id: msg.task_id,
     };
 
     // check if the task wasn't executed before already
     let map_contains_task = TASK_MAP.contains(deps.storage, &new_task);
 
     if map_contains_task {
-        return Err(StdError::generic_err("Task already exists, not executing again"));
+        return Err(StdError::generic_err(
+            "Task already exists, not executing again",
+        ));
     }
 
     let input_values = payload.data;
 
     // combine input values and task to create verification hash
     let unsafe_payload_bytes = if unsafe_payload { [1u8] } else { [0u8] };
-    let input_hash = sha_256(&[input_values.as_bytes(), new_task.task_id.as_bytes(),&unsafe_payload_bytes].concat());
+    let input_hash = sha_256(
+        &[
+            input_values.as_bytes(),
+            new_task.task_id.as_bytes(),
+            &unsafe_payload_bytes,
+        ]
+        .concat(),
+    );
 
     // create a task information store
     let task_info = TaskInfo {
@@ -288,15 +303,17 @@ fn pre_execution(deps: DepsMut, _env: Env, msg: PreExecutionMsg) -> StdResult<Re
         user_key: payload.user_key,
         callback_address: payload.callback_address,
         callback_selector: payload.callback_selector,
-        callback_gas_limit: payload.callback_gas_limit
+        callback_gas_limit: payload.callback_gas_limit,
     };
 
     // map task to task info
     TASK_MAP.insert(deps.storage, &new_task, &task_info)?;
 
-    let signing_key_bytes = <[u8; 32]>::try_from(config.signing_keys.sk.as_slice()).unwrap();
+    let signing_key_bytes = config.signing_keys.sk.as_slice();
 
-    let signature = deps.api.secp256k1_sign(&input_hash, &signing_key_bytes)
+    let signature = deps
+        .api
+        .secp256k1_sign(&input_hash, &signing_key_bytes)
         .map_err(|err| StdError::generic_err(err.to_string()))?;
 
     // construct the message to send to the destination contract
@@ -334,9 +351,13 @@ fn post_execution(deps: DepsMut, env: Env, msg: PostExecutionMsg) -> StdResult<R
         return Err(StdError::generic_err("input hash does not match task"));
     }
 
-    let result = match general_purpose::STANDARD.decode(msg.result) {
+    let result = match STANDARD.decode(msg.result) {
         Ok(bytes) => bytes,
-        Err(_) => {return Err(StdError::generic_err("could not decode base64 result string"));}
+        Err(_) => {
+            return Err(StdError::generic_err(
+                "could not decode base64 result string",
+            ));
+        }
     };
 
     // rename for clarity (original source network is now the routing destination)
@@ -358,11 +379,11 @@ fn post_execution(deps: DepsMut, env: Env, msg: PostExecutionMsg) -> StdResult<R
     let mut data = Vec::with_capacity(total_length);
 
     // Extend the vector with slices from the individual data components
-    data.extend_from_slice(env.block.chain_id.as_bytes());    // source network
-    data.extend_from_slice(routing_info.as_bytes());          // task_destination_network
-    data.extend_from_slice(msg.task.task_id.as_bytes());      // task ID
-    data.extend_from_slice(&task_info.payload_hash);// original payload message
-    data.extend_from_slice(&result);                // result
+    data.extend_from_slice(env.block.chain_id.as_bytes()); // source network
+    data.extend_from_slice(routing_info.as_bytes()); // task_destination_network
+    data.extend_from_slice(msg.task.task_id.as_bytes()); // task ID
+    data.extend_from_slice(&task_info.payload_hash); // original payload message
+    data.extend_from_slice(&result); // result
     data.extend_from_slice(&task_info.callback_address); // callback address
     data.extend_from_slice(&task_info.callback_selector); // callback selector
 
@@ -400,31 +421,27 @@ fn post_execution(deps: DepsMut, env: Env, msg: PostExecutionMsg) -> StdResult<R
     // Load the original public key from storage
     let public_key_data = CONFIG.load(deps.storage)?.signing_keys.pk;
 
-    // Deserialize the uncompressed public key
-    let uncompressed_public_key = PublicKey::parse(&public_key_data).map_err(|err| StdError::generic_err(err.to_string()))?;
-
-    // Compress the public key
-    let compressed_public_key = uncompressed_public_key.serialize_compressed();
+    // Deserialize the uncompressed public key & Compress the public key
+    let compressed_public_key = PublicKey::parse(&public_key_data)?.serialize_compressed();
 
     // Recover and compare public keys for packet, do v = 0 (= 27 in ethereum) and v = 1 (= 28 in ethereum)
     #[cfg(target_arch = "wasm32")]
-    let packet_public_key_27 = deps.api.secp256k1_recover_pubkey(&sha_256(&packet_hash), &packet_signature, 0)
-    .map_err(|err| StdError::generic_err(err.to_string()))?;
+    let packet_public_key_27 = deps
+        .api
+        .secp256k1_recover_pubkey(&sha_256(&packet_hash), &packet_signature, 0)
+        .map_err(|err| StdError::generic_err(err.to_string()))?;
 
     // Recover and compare public keys for packet, do v = 0 (= 27 in Ethereum) and v = 1 (= 28 in Ethereum)
     #[cfg(not(target_arch = "wasm32"))]
     let packet_public_key_27 = {
         let secp = secp256k1::Secp256k1::verification_only();
         let recovery_id = secp256k1::ecdsa::RecoveryId::from_i32(0).unwrap(); // v = 0 in secp256k1 corresponds to v = 27 in Ethereum
-        let recoverable_signature = secp256k1::ecdsa::RecoverableSignature::from_compact(&packet_signature, recovery_id)
-            .map_err(|err| StdError::generic_err(err.to_string()))?;
+        let recoverable_signature =
+            secp256k1::ecdsa::RecoverableSignature::from_compact(&packet_signature, recovery_id)
+                .map_err(|err| StdError::generic_err(err.to_string()))?;
 
-        let packet_message = secp256k1::Message::from_slice(&{
-            use sha2::{Sha256, Digest};
-            let mut hasher = Sha256::new();
-            hasher.update(&packet_hash);
-            hasher.finalize()
-        }).map_err(|err| StdError::generic_err(err.to_string()))?;
+        let packet_message = secp256k1::Message::from_slice(&sha_256(&packet_hash))
+        .map_err(|err| StdError::generic_err(err.to_string()))?;
 
         // Recover the public key and serialize to compressed form
         secp.recover_ecdsa(&packet_message, &recoverable_signature)
@@ -433,22 +450,21 @@ fn post_execution(deps: DepsMut, env: Env, msg: PostExecutionMsg) -> StdResult<R
     };
 
     #[cfg(target_arch = "wasm32")]
-    let packet_public_key_28 = deps.api.secp256k1_recover_pubkey(&sha_256(&packet_hash), &packet_signature, 1)
-    .map_err(|err| StdError::generic_err(err.to_string()))?;
+    let packet_public_key_28 = deps
+        .api
+        .secp256k1_recover_pubkey(&sha_256(&packet_hash), &packet_signature, 1)
+        .map_err(|err| StdError::generic_err(err.to_string()))?;
 
     #[cfg(not(target_arch = "wasm32"))]
     let packet_public_key_28 = {
         let secp = secp256k1::Secp256k1::verification_only();
         let recovery_id = secp256k1::ecdsa::RecoveryId::from_i32(1).unwrap(); // v = 1 in secp256k1 corresponds to v = 28 in Ethereum
-        let recoverable_signature = secp256k1::ecdsa::RecoverableSignature::from_compact(&packet_signature, recovery_id)
-            .map_err(|err| StdError::generic_err(err.to_string()))?;
+        let recoverable_signature =
+            secp256k1::ecdsa::RecoverableSignature::from_compact(&packet_signature, recovery_id)
+                .map_err(|err| StdError::generic_err(err.to_string()))?;
 
-        let packet_message = secp256k1::Message::from_slice(&{
-            use sha2::{Sha256, Digest};
-            let mut hasher = Sha256::new();
-            hasher.update(&packet_hash);
-            hasher.finalize()
-        }).map_err(|err| StdError::generic_err(err.to_string()))?;
+        let packet_message = secp256k1::Message::from_slice(&sha_256(&packet_hash))
+        .map_err(|err| StdError::generic_err(err.to_string()))?;
 
         // Recover the public key and serialize to compressed form
         secp.recover_ecdsa(&packet_message, &recoverable_signature)
@@ -456,23 +472,45 @@ fn post_execution(deps: DepsMut, env: Env, msg: PostExecutionMsg) -> StdResult<R
             .serialize() // Serialize the public key to its compressed form
     };
 
-
     let packet_recovery_id = if packet_public_key_27 == compressed_public_key {
         27
     } else if packet_public_key_28 == compressed_public_key {
         28
-    }
-    else {
-        return Err(StdError::generic_err("Generation of Recovery ID for Packet Signature failed"));
+    } else {
+        return Err(StdError::generic_err(
+            "Generation of Recovery ID for Packet Signature failed",
+        ));
     };
 
-    let payload_hash = format!("0x{}",task_info.payload_hash.as_slice().encode_hex::<String>());
+    let payload_hash = format!(
+        "0x{}",
+        task_info.payload_hash.as_slice().encode_hex::<String>()
+    );
     let result = format!("0x{}", result.as_slice().encode_hex::<String>());
     let packet_hash = format!("0x{}", sha_256(&packet_hash).encode_hex::<String>());
-    let packet_signature = format!("0x{}{:x}", &packet_signature.encode_hex::<String>(),packet_recovery_id);
-    let callback_address = format!("0x{}", task_info.callback_address.as_slice().encode_hex::<String>());
-    let callback_selector = format!("0x{}", task_info.callback_selector.as_slice().encode_hex::<String>());
-    let callback_gas_limit = format!("0x{}", task_info.callback_gas_limit.to_be_bytes().encode_hex::<String>());
+    let packet_signature = format!(
+        "0x{}{:x}",
+        &packet_signature.encode_hex::<String>(),
+        packet_recovery_id
+    );
+    let callback_address = format!(
+        "0x{}",
+        task_info.callback_address.as_slice().encode_hex::<String>()
+    );
+    let callback_selector = format!(
+        "0x{}",
+        task_info
+            .callback_selector
+            .as_slice()
+            .encode_hex::<String>()
+    );
+    let callback_gas_limit = format!(
+        "0x{}",
+        task_info
+            .callback_gas_limit
+            .to_be_bytes()
+            .encode_hex::<String>()
+    );
 
     // task info
     let result_info = ResultInfo {
@@ -492,7 +530,10 @@ fn post_execution(deps: DepsMut, env: Env, msg: PostExecutionMsg) -> StdResult<R
 
     Ok(Response::new()
         .add_attribute_plaintext("source_network", result_info.source_network)
-        .add_attribute_plaintext("task_destination_network", result_info.task_destination_network)
+        .add_attribute_plaintext(
+            "task_destination_network",
+            result_info.task_destination_network,
+        )
         .add_attribute_plaintext("task_id", result_info.task_id)
         .add_attribute_plaintext("payload_hash", result_info.payload_hash)
         .add_attribute_plaintext("result", result_info.result)
@@ -515,13 +556,12 @@ fn post_execution(deps: DepsMut, env: Env, msg: PostExecutionMsg) -> StdResult<R
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     let response = match msg {
         QueryMsg::GetPublicKeys {} => query_public_keys(deps),
-        QueryMsg::GetExecutionResult {task} => query_execution_result(deps, task),
+        QueryMsg::GetExecutionResult { task } => query_execution_result(deps, task),
     };
     pad_query_result(response, BLOCK_SIZE)
 }
 
 fn query_execution_result(deps: Deps, task: Task) -> StdResult<Binary> {
-
     let task_info = RESULT_MAP
         .get(deps.storage, &task)
         .ok_or_else(|| StdError::generic_err("task not found"))?;
@@ -536,7 +576,7 @@ fn query_execution_result(deps: Deps, task: Task) -> StdResult<Binary> {
         packet_signature: task_info.packet_signature,
         callback_address: task_info.callback_address,
         callback_selector: task_info.callback_selector,
-        callback_gas_limit: task_info.callback_gas_limit
+        callback_gas_limit: task_info.callback_gas_limit,
     })
 }
 
@@ -545,7 +585,10 @@ fn query_public_keys(deps: Deps) -> StdResult<Binary> {
     let state: State = CONFIG.load(deps.storage)?;
     to_binary(&PublicKeyResponse {
         encryption_key: state.encryption_keys.pk,
-        verification_key: format!("0x{}",state.signing_keys.pk.as_slice().encode_hex::<String>()),
+        verification_key: format!(
+            "0x{}",
+            state.signing_keys.pk.as_slice().encode_hex::<String>()
+        ),
     })
 }
 
@@ -558,10 +601,7 @@ fn query_public_keys(deps: Deps) -> StdResult<Binary> {
 /// # Arguments
 ///
 /// * `env` - contract's environment to be used for randomization
-pub fn generate_keypair(
-    env: &Env,
-) -> Result<(PrivateKey, PublicKey), StdError> {
-
+pub fn generate_keypair(env: &Env) -> Result<(PrivateKey, PublicKey), StdError> {
     // generate and return key pair
     let mut rng = ContractPrng::from_env(env);
     let sk = PrivateKey::parse(&rng.rand_bytes())?;
@@ -570,13 +610,12 @@ pub fn generate_keypair(
     Ok((sk, pk))
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::types::*;
     use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info};
-    use cosmwasm_std::{from_binary, Addr, Api, Binary, Empty};
+    use cosmwasm_std::{from_binary, Addr, Binary};
 
     use chacha20poly1305::aead::{Aead, NewAead};
     use chacha20poly1305::{ChaCha20Poly1305, Key, Nonce};
@@ -680,8 +719,14 @@ mod tests {
             routing_code_hash: routing_code_hash.clone(),
             user_address: user_address.clone(),
             user_key: user_key.clone(),
-            callback_address: base64::encode(hex::decode("ae2Fc483527B8EF99EB5D9B44875F005ba1FaE13").unwrap()).as_bytes().into(),
-            callback_selector: base64::encode(hex::decode("faef40fe").unwrap()).as_bytes().into(),
+            callback_address: STANDARD
+                .encode(hex::decode("ae2Fc483527B8EF99EB5D9B44875F005ba1FaE13").unwrap())
+                .as_bytes()
+                .into(),
+            callback_selector: STANDARD
+                .encode(hex::decode("faef40fe").unwrap())
+                .as_bytes()
+                .into(),
             callback_gas_limit: 300_000u32,
         };
         let serialized_payload = to_binary(&payload).unwrap();
@@ -699,18 +744,14 @@ mod tests {
         let prefix = "\x19Ethereum Signed Message:\n32".as_bytes();
         let mut hasher = Keccak256::new();
 
-        // NOTE: hmmm shouldn't this be a hash of the non-encrypted payload?
         hasher.update(encrypted_payload.as_slice());
         let payload_hash_tmp = hasher.finalize_reset();
         hasher.update([prefix, &payload_hash_tmp].concat());
         let payload_hash = hasher.finalize();
 
-        // let message = Message::from_slice(&payload_hash).unwrap();
-        // let payload_signature = secp.sign_ecdsa(&message, &secret_key);
+        let payload_signature = secp.sign_ecdsa(&Message::from_slice(&payload_hash).unwrap(), &secret_key).serialize_compact();
 
-        let payload_signature = deps.api.secp256k1_sign(&payload_hash, secret_key.as_ref()).unwrap();
-
-        // mock wrong payload (encrypted with a key that does not match the one inside the payload)
+        // mock wrong payload (signed payload_hash does not correspond to the payload)
         let wrong_user_address = Addr::unchecked("wrong eth address".to_string());
         let wrong_user_key = Binary(wrong_public_key.serialize().to_vec());
 
@@ -720,8 +761,14 @@ mod tests {
             routing_code_hash: routing_code_hash.clone(),
             user_address: wrong_user_address.clone(),
             user_key: wrong_user_key.clone(),
-            callback_address: base64::encode(hex::decode("ae2Fc483527B8EF99EB5D9B44875F005ba1FaE13").unwrap()).as_bytes().into(),
-            callback_selector: base64::encode(hex::decode("faef40fe").unwrap()).as_bytes().into(),
+            callback_address: STANDARD
+                .encode(hex::decode("ae2Fc483527B8EF99EB5D9B44875F005ba1FaE13").unwrap())
+                .as_bytes()
+                .into(),
+            callback_selector: STANDARD
+                .encode(hex::decode("faef40fe").unwrap())
+                .as_bytes()
+                .into(),
             callback_gas_limit: 300_000u32,
         };
         let wrong_serialized_payload = to_binary(&wrong_payload).unwrap();
@@ -741,6 +788,70 @@ mod tests {
             payload_hash: Binary(payload_hash.to_vec()),
             payload_signature: Binary(payload_signature.to_vec()),
             user_address: user_address.clone(),
+            user_key: user_key.clone(),
+            user_pubkey: user_pubkey.clone(),
+            handle: "test".to_string(),
+            nonce: Binary(b"unique nonce".to_vec()),
+            callback_gas_limit: 300_000u32,
+        };
+        let handle_msg = ExecuteMsg::Input {
+            inputs: pre_execution_msg,
+        };
+        let err = execute(deps.as_mut(), env.clone(), info.clone(), handle_msg).unwrap_err();
+        assert_eq!(
+            err,
+            StdError::generic_err("Hashed Payload does not match payload hash")
+        );
+
+        // mock payload with wrong user address (encrypted with a key that does not match the one inside the payload)
+        let wrong_user_address = Addr::unchecked("wrong eth address".to_string());
+        let wrong_user_key = Binary(wrong_public_key.serialize().to_vec());
+
+        let wrong_payload = Payload {
+            data: data.clone(),
+            routing_info: routing_info.clone(),
+            routing_code_hash: routing_code_hash.clone(),
+            user_address: wrong_user_address.clone(),
+            user_key: wrong_user_key.clone(),
+            callback_address: STANDARD
+                .encode(hex::decode("ae2Fc483527B8EF99EB5D9B44875F005ba1FaE13").unwrap())
+                .as_bytes()
+                .into(),
+            callback_selector: STANDARD
+                .encode(hex::decode("faef40fe").unwrap())
+                .as_bytes()
+                .into(),
+            callback_gas_limit: 300_000u32,
+        };
+        let wrong_serialized_payload = to_binary(&wrong_payload).unwrap();
+
+        // encrypt the mock wrong payload
+        let wrong_encrypted_payload = cipher
+            .encrypt(nonce, wrong_serialized_payload.as_slice())
+            .unwrap();
+
+        // make wrong payload hash
+            let prefix = "\x19Ethereum Signed Message:\n32".as_bytes();
+            let mut hasher = Keccak256::new();
+    
+            hasher.update(wrong_encrypted_payload.as_slice());
+            let wrong_payload_hash_tmp = hasher.finalize_reset();
+            hasher.update([prefix, &wrong_payload_hash_tmp].concat());
+            let wrong_payload_hash = hasher.finalize();
+
+        // make wrong payload signature
+        let wrong_payload_signature = secp.sign_ecdsa(&Message::from_slice(&wrong_payload_hash).unwrap(), &secret_key).serialize_compact();
+
+        // test payload user_key does not match given user_key
+        let pre_execution_msg = PreExecutionMsg {
+            task_id: "1".to_string(),
+            source_network: "ethereum".to_string(),
+            routing_info: routing_info.clone(),
+            routing_code_hash: routing_code_hash.clone(),
+            payload: Binary(wrong_encrypted_payload.clone()),
+            payload_hash: Binary(wrong_payload_hash.to_vec()),
+            payload_signature: Binary(wrong_payload_signature.to_vec()),
+            user_address: wrong_user_address.clone(),
             user_key: user_key.clone(),
             user_pubkey: user_pubkey.clone(),
             handle: "test".to_string(),
@@ -850,8 +961,14 @@ mod tests {
             routing_code_hash: routing_code_hash.clone(),
             user_address: user_address.clone(),
             user_key: user_key.clone(),
-            callback_address: base64::encode(hex::decode("ae2Fc483527B8EF99EB5D9B44875F005ba1FaE13").unwrap()).as_bytes().into(),
-            callback_selector: base64::encode(hex::decode("faef40fe").unwrap()).as_bytes().into(),
+            callback_address: STANDARD
+                .encode(hex::decode("ae2Fc483527B8EF99EB5D9B44875F005ba1FaE13").unwrap())
+                .as_bytes()
+                .into(),
+            callback_selector: STANDARD
+                .encode(hex::decode("faef40fe").unwrap())
+                .as_bytes()
+                .into(),
             callback_gas_limit: 300_000u32,
         };
         let serialized_payload = to_binary(&payload).unwrap();
@@ -874,7 +991,7 @@ mod tests {
         hasher.update([prefix, &payload_hash_tmp].concat());
         let payload_hash = hasher.finalize();
 
-        let payload_signature = deps.api.secp256k1_sign(&payload_hash, secret_key.as_ref()).unwrap();
+        let payload_signature = secp.sign_ecdsa(&Message::from_slice(&payload_hash).unwrap(), &secret_key).serialize_compact();
 
         // execute input handle
         let pre_execution_msg = PreExecutionMsg {
@@ -899,8 +1016,11 @@ mod tests {
 
         // test incorrect input_hash
         let wrong_post_execution_msg = PostExecutionMsg {
-            result: base64::encode("{\"answer\": 42}".to_string()),
-            task: Task { network: "ethereum".to_string(), task_id: "1".to_string() },
+            result: STANDARD.encode("{\"answer\": 42}".to_string()),
+            task: Task {
+                network: "ethereum".to_string(),
+                task_id: "1".to_string(),
+            },
             input_hash: Binary(sha_256("wrong data".as_bytes()).to_vec()),
         };
         let handle_msg = ExecuteMsg::Output {
@@ -911,8 +1031,11 @@ mod tests {
 
         // test output handle
         let post_execution_msg = PostExecutionMsg {
-            result: base64::encode("{\"answer\": 42}".to_string()),
-            task: Task { network: "ethereum".to_string(), task_id: "1".to_string() },
+            result: STANDARD.encode("{\"answer\": 42}".to_string()),
+            task: Task {
+                network: "ethereum".to_string(),
+                task_id: "1".to_string(),
+            },
             input_hash: Binary(
                 sha_256(&[data.as_bytes(), "1".to_string().as_bytes(), &[0u8]].concat()).to_vec(),
             ),
@@ -960,7 +1083,8 @@ mod tests {
             65
         );
         assert_eq!(
-            base64::decode(hex::decode(logs[7].value.clone().strip_prefix("0x").unwrap()).unwrap())
+            STANDARD
+                .decode(hex::decode(logs[7].value.clone().strip_prefix("0x").unwrap()).unwrap())
                 .unwrap()
                 .len(),
             20
