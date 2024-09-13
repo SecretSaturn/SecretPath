@@ -7,6 +7,8 @@ import "forge-std/console2.sol";
 import {Gateway} from "../src/Gateway.sol";
 import "@openzeppelin/contracts/proxy/transparent/ProxyAdmin.sol";
 import "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
+import "@openzeppelin/contracts/utils/Base64.sol";
+import "@openzeppelin/contracts/utils/Strings.sol";
 
 contract ContractTest is Test {
     /*//////////////////////////////////////////////////////////////
@@ -95,8 +97,8 @@ contract ContractTest is Test {
          // Concatenate packet data elements
         bytes memory data = bytes.concat(
             sourceNetwork,
-            uint256toBytesString(block.chainid),
-            uint256toBytesString(taskId),
+            bytes(Strings.toString(block.chainid)),
+            bytes(Strings.toString(taskId)),
             payloadHash,
             result,
             bytes20(callback_address),
@@ -105,24 +107,6 @@ contract ContractTest is Test {
         
         // Perform Keccak256 + sha256 hash
         packetHash = sha256(bytes.concat(keccak256(data)));
-    }
-
-    function uint256toBytesString(uint256 value) public pure returns (bytes memory buffer) {
-        if (value == 0) {
-            return "0";
-        }
-        uint256 temp = value;
-        uint256 digits;
-        while (temp != 0) {
-            digits++;
-            temp /= 10;
-        }
-        buffer = new bytes(digits);
-        while (value != 0) {
-            digits -= 1;
-            buffer[digits] = bytes1(uint8(48 + uint256(value % 10)));
-            value /= 10;
-        }
     }
 
     function getPayloadSignature(bytes memory _payload, uint256 _foundryPkey) public pure returns (bytes memory) {
@@ -268,6 +252,41 @@ contract ContractTest is Test {
         gateway.postExecution(taskId, sourceNetwork, assembledInfo);
 
         vm.expectRevert(abi.encodeWithSignature("InvalidResultSignature()"));
+    }
+
+     function test_RequestRandomness() public {
+        vm.prank(vm.addr(5));
+
+        uint32 _numWords = 88;
+        uint32 _callbackGasLimit = 100000;
+
+        string memory VRF_routing_info = "secret1cknezaxnzfys2w8lyyrr7fed9wxejvgq7alhqx";
+        string memory VRF_routing_code_hash = "0b9395a7550b49d2b8ed73497fd2ebaf896c48950c4186e491ded6d22e58b8c3";
+
+        bytes memory VRF_info = abi.encodePacked('}","routing_info":"',VRF_routing_info,'","routing_code_hash":"',VRF_routing_code_hash,'","user_address":"0x0000","user_key":"AAA=","callback_address":"');
+
+        //construct the payload that is sent into the Secret Gateway
+        bytes memory payload = bytes.concat(
+            '{"data":"{\\"numWords\\":',
+            bytes(Strings.toString(_numWords)),
+            VRF_info,
+            bytes(Base64.encode(bytes.concat(bytes20(vm.addr(5))))), //callback_address
+            '","callback_selector":"OLpGFA==","callback_gas_limit":', // 0x38ba4614 hex value already converted into base64, callback_selector of the fullfillRandomWords function
+            bytes(Strings.toString(_callbackGasLimit)),
+            '}' 
+        );
+
+        //generate the payload hash using the ethereum hash format for messages
+        bytes32 payloadHash = getEthSignedMessageHash(keccak256(payload));
+
+        uint256 requestId = gateway.requestRandomness(_numWords, _callbackGasLimit);
+        assertEq(requestId, 1, "requestId failed");
+
+        (bytes31 tempPayloadHash,) = gateway.tasks(1);
+        assertEq(tempPayloadHash, bytes31(payloadHash), "payloadHash failed");
+
+        (,bool tempCompleted) = gateway.tasks(1);
+        assertEq(tempCompleted, false, "tempCompleted failed");
     }
 
     /*//////////////////////////////////////////////////////////////
