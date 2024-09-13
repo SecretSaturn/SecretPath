@@ -3,7 +3,7 @@ use crate::{
     state::{Input, State, CONFIG},
 };
 use anybuf::Anybuf;
-use base64::{engine::general_purpose, Engine};
+use base64::{engine::general_purpose::STANDARD, Engine};
 use cosmwasm_std::{
     entry_point, to_binary, to_vec, Binary, ContractResult, Deps, DepsMut, Env, MessageInfo,
     Response, StdError, StdResult, SystemResult,
@@ -97,7 +97,7 @@ fn try_random(
     prng.fill_bytes(&mut random_numbers);
 
     // Encode the random numbers as a base64 string
-    let result = general_purpose::STANDARD.encode(random_numbers);
+    let result = STANDARD.encode(random_numbers);
 
     // Get the contract's code hash using the gateway address
     let gateway_code_hash = get_contract_code_hash(deps, config.gateway_address.to_string())?;

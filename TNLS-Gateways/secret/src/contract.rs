@@ -441,7 +441,7 @@ fn post_execution(deps: DepsMut, env: Env, msg: PostExecutionMsg) -> StdResult<R
                 .map_err(|err| StdError::generic_err(err.to_string()))?;
 
         let packet_message = secp256k1::Message::from_slice(&sha_256(&packet_hash))
-        .map_err(|err| StdError::generic_err(err.to_string()))?;
+            .map_err(|err| StdError::generic_err(err.to_string()))?;
 
         // Recover the public key and serialize to compressed form
         secp.recover_ecdsa(&packet_message, &recoverable_signature)
@@ -464,7 +464,7 @@ fn post_execution(deps: DepsMut, env: Env, msg: PostExecutionMsg) -> StdResult<R
                 .map_err(|err| StdError::generic_err(err.to_string()))?;
 
         let packet_message = secp256k1::Message::from_slice(&sha_256(&packet_hash))
-        .map_err(|err| StdError::generic_err(err.to_string()))?;
+            .map_err(|err| StdError::generic_err(err.to_string()))?;
 
         // Recover the public key and serialize to compressed form
         secp.recover_ecdsa(&packet_message, &recoverable_signature)
@@ -749,7 +749,9 @@ mod tests {
         hasher.update([prefix, &payload_hash_tmp].concat());
         let payload_hash = hasher.finalize();
 
-        let payload_signature = secp.sign_ecdsa(&Message::from_slice(&payload_hash).unwrap(), &secret_key).serialize_compact();
+        let payload_signature = secp
+            .sign_ecdsa(&Message::from_slice(&payload_hash).unwrap(), &secret_key)
+            .serialize_compact();
 
         // mock wrong payload (signed payload_hash does not correspond to the payload)
         let wrong_user_address = Addr::unchecked("wrong eth address".to_string());
@@ -831,16 +833,21 @@ mod tests {
             .unwrap();
 
         // make wrong payload hash
-            let prefix = "\x19Ethereum Signed Message:\n32".as_bytes();
-            let mut hasher = Keccak256::new();
-    
-            hasher.update(wrong_encrypted_payload.as_slice());
-            let wrong_payload_hash_tmp = hasher.finalize_reset();
-            hasher.update([prefix, &wrong_payload_hash_tmp].concat());
-            let wrong_payload_hash = hasher.finalize();
+        let prefix = "\x19Ethereum Signed Message:\n32".as_bytes();
+        let mut hasher = Keccak256::new();
+
+        hasher.update(wrong_encrypted_payload.as_slice());
+        let wrong_payload_hash_tmp = hasher.finalize_reset();
+        hasher.update([prefix, &wrong_payload_hash_tmp].concat());
+        let wrong_payload_hash = hasher.finalize();
 
         // make wrong payload signature
-        let wrong_payload_signature = secp.sign_ecdsa(&Message::from_slice(&wrong_payload_hash).unwrap(), &secret_key).serialize_compact();
+        let wrong_payload_signature = secp
+            .sign_ecdsa(
+                &Message::from_slice(&wrong_payload_hash).unwrap(),
+                &secret_key,
+            )
+            .serialize_compact();
 
         // test payload user_key does not match given user_key
         let pre_execution_msg = PreExecutionMsg {
@@ -991,7 +998,9 @@ mod tests {
         hasher.update([prefix, &payload_hash_tmp].concat());
         let payload_hash = hasher.finalize();
 
-        let payload_signature = secp.sign_ecdsa(&Message::from_slice(&payload_hash).unwrap(), &secret_key).serialize_compact();
+        let payload_signature = secp
+            .sign_ecdsa(&Message::from_slice(&payload_hash).unwrap(), &secret_key)
+            .serialize_compact();
 
         // execute input handle
         let pre_execution_msg = PreExecutionMsg {
