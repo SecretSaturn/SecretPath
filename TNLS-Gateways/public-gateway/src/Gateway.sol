@@ -419,7 +419,7 @@ contract Gateway is Initializable, OwnableUpgradeable {
     /// @param _signature The signature
     /// @return signerAddress The address of the signer
 
-    function recoverSigner(bytes32 _signedMessageHash, bytes calldata _signature) private view returns (address signerAddress) {
+    function recoverSigner(bytes32 _signedMessageHash, bytes calldata _signature) public view returns (address signerAddress) {
         require(_signature.length == 65, "Invalid Signature Length");
         
         assembly {
@@ -778,7 +778,7 @@ contract Gateway is Initializable, OwnableUpgradeable {
     /// @notice Increase the task_id to check for problems 
     /// @param _callbackGasLimit the Callback Gas Limit
 
-    function estimateRequestPrice(uint32 _callbackGasLimit) private view returns (uint256 baseFee) {
+    function estimateRequestPrice(uint32 _callbackGasLimit) public view returns (uint256 baseFee) {
         baseFee = _callbackGasLimit*tx.gasprice;
     }
 
