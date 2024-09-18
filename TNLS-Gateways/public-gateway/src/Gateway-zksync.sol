@@ -768,7 +768,7 @@ contract Gateway is Initializable, OwnableUpgradeable {
     /// @notice Payout the paid balance to the owner
 
     function payoutBalance() external onlyOwner {
-        payable(owner()).transfer(address(this).balance);
+        payable(owner()).call{gas: 2300, value:address(this).balance}("");
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -805,7 +805,7 @@ contract Gateway is Initializable, OwnableUpgradeable {
 
         // Refund any excess gas paid beyond the estimated price
         if (msg.value > estimatedPrice) {
-            payable(tx.origin).transfer(msg.value - estimatedPrice);
+            payable(msg.sender).call{gas: 2300, value:msg.value - estimatedPrice}("");
         } else {
             // If not enough gas was paid, revert the transaction
             require(msg.value >= estimatedPrice, "Paid Callback Fee Too Low");
@@ -850,7 +850,7 @@ contract Gateway is Initializable, OwnableUpgradeable {
 
         // Refund any excess gas paid beyond the estimated price
         if (msg.value > estimatedPrice) {
-            payable(tx.origin).transfer(msg.value - estimatedPrice);
+            payable(msg.sender).call{gas: 2300, value:msg.value - estimatedPrice}("");
         } else {
             // If not enough gas was paid, revert the transaction
             require(msg.value >= estimatedPrice, "Paid Callback Fee Too Low");
@@ -892,7 +892,7 @@ contract Gateway is Initializable, OwnableUpgradeable {
         emit logNewTask(
             requestId,
             getChainId(chain_id_1, chain_id_2, chain_id_3, chain_id_length),
-            tx.origin,
+            msg.sender,
             VRF_routing_info, //RNG Contract address on Secret 
             payloadHash,
             executionInfo
