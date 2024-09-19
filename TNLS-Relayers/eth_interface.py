@@ -134,21 +134,30 @@ class EthInterface(BaseChainInterface):
         """
         See base_interface.py for documentation
         """
-        """
-                Gets the transactions from a particular block for a particular address.
-                Args:
-                    block_number:  Which block to get
-                    contract_interface: Which contract to get transactions for
+        return self.get_last_txs(contract_interface=contract_interface, block_number=height)
 
-                Returns: a list of transaction receipts
+    def get_last_block(self):
+        """
+        Gets the number of the most recent block
+        """
+        return self.provider.eth.get_block('latest').number
+
+    def get_last_txs(self, block_number=None, contract_interface=None):
+        """
+        Gets the transactions from a particular block for a particular address.
+        Args:
+            block_number:  Which block to get
+            contract_interface: Which contract to get transactions for
+
+        Returns: a list of transaction receipts
 
         """
         try:
             if block_number is None:
-                block_number = self.get_last_block()
+                block_number = self.provider.eth.get_block('latest').number
             valid_transactions = contract_interface.contract.events.logNewTask().get_logs(
-                fromBlock=height,
-                toBlock=height
+                fromBlock=block_number,
+                toBlock=block_number
             )
         except Exception as e:
             self.logger.warning(e)
@@ -164,8 +173,7 @@ class EthInterface(BaseChainInterface):
         try:
             with ThreadPoolExecutor(max_workers=50) as executor:
                 # Create a future for each transaction
-                future_to_transaction = {executor.submit(process_transaction, tx_hash): tx_hash for tx_hash in
-                                         transaction_hashes}
+                future_to_transaction = {executor.submit(self.process_transaction, tx_hash): tx_hash for tx_hash in transaction_hashes}
                 for future in as_completed(future_to_transaction):
                     result = future.result()
                     if result is not None:
@@ -176,11 +184,13 @@ class EthInterface(BaseChainInterface):
 
         return correct_transactions
 
-    def get_last_block(self):
-        """
-        Gets the number of the most recent block
-        """
-        return self.provider.eth.get_block('latest').number
+    def process_transaction(self, transaction_hash):
+        try:
+            tx_receipt = self.provider.eth.get_transaction_receipt(transaction_hash)
+            return tx_receipt
+        except Exception as e:
+            self.logger.warning(e)
+            return None
 
 
 class EthContract(BaseContractInterface):
@@ -203,12 +213,20 @@ class EthContract(BaseContractInterface):
         self.logger.info("Initialized Eth contract with address: %s", self.address)
         pass
 
+    def get_function(self, function_name):
+        """
+        Gets a particular function from the contract.
+        Args:
+            function_name: The name of the function to get.
+        """
+        return self.contract.functions[function_name]
+
     def call_function(self, function_name, *args):
         """
         See base_interface.py for documentation
         """
         kwargs = None
-        function = self.contract.functions[function_name]
+        function = self.get_function(function_name)
         if len(args) == 1:
             args = json.loads(args[0])
             if isinstance(args, dict):
@@ -258,4 +276,3 @@ class EthContract(BaseContractInterface):
 
 if __name__ == "__main__":
     interface = EthInterface(address='')
-

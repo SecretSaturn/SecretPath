@@ -397,13 +397,21 @@
   contract_address: "0xAaA666CE51E4c4dcB50781d4F84461e267392fC9"
   timeout: 1
   
- "SolDN": #Solana DevNet
+"SolDN": #Solana DevNet
   active: true
   type: "solana"
   chain_id: "SolDN"
   api_endpoint: https://rpc.ankr.com/solana_devnet
   program_id: "DKDX8XbTnCgEk8o1RNnCUokiCmadG1Ch5HLxaz7CnhcD"
-  timeout: 2
+  timeout: 1
+
+"SolTN": #Solana TestNet
+  active: true
+  type: "solana"
+  chain_id: "SolTN"
+  api_endpoint: https://rpc.ankr.com/solana_testnet
+  program_id: "DKDX8XbTnCgEk8o1RNnCUokiCmadG1Ch5HLxaz7CnhcD"
+  timeout: 1
 
 "pulsar-3":
   active: true

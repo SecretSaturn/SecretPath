@@ -45,7 +45,7 @@ class PostExecution:
         "post_execution_info" / CStruct(
             "packet_hash" / U8[32],
             "callback_address" / Bytes,
-            "callback_selector" / Bytes,
+            "callback_selector" / U8[40],
             "callback_gas_limit" / U8[4],
             "packet_signature" / U8[65],
             "result" / Bytes,
