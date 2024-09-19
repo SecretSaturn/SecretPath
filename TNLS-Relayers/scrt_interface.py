@@ -4,7 +4,7 @@ from logging import getLogger, basicConfig, DEBUG, StreamHandler
 from threading import Lock, Timer
 from concurrent.futures import ThreadPoolExecutor
 from typing import List
-from time import sleep
+from time import sleep, time
 
 from secret_sdk.client.lcd import LCDClient
 from secret_sdk.client.lcd.api.tx import CreateTxOptions, BroadcastMode
@@ -67,7 +67,6 @@ class SCRTInterface(BaseChainInterface):
         try:
             with self.sequence_lock:
                 self.logger.info("Starting Secret sequence sync")
-                sleep(3)
                 account_info = self.wallet.account_number_and_sequence()
                 self.account_number = account_info['account_number']
                 new_sequence = int(account_info['sequence'])
@@ -90,20 +89,41 @@ class SCRTInterface(BaseChainInterface):
                 the receipt of the broadcast transaction
 
         """
-        max_retries = 10
-        for attempt in range(max_retries):
-            try:
-                final_tx = self.provider.tx.broadcast_adapter(tx, mode=BroadcastMode.BROADCAST_MODE_BLOCK)
-                return final_tx
-            except LCDResponseError as e:
-                print(e)
-                if attempt < max_retries - 1:
-                    continue
-                else:
+        max_retries = 20
+        try:
+            # Broadcast the transaction in SYNC mode
+            final_tx = self.provider.tx.broadcast_adapter(tx, mode=BroadcastMode.BROADCAST_MODE_ASYNC)
+            print(final_tx)
+            tx_hash = final_tx.txhash
+            self.logger.info(f"Transaction broadcasted with hash: {tx_hash}")
+
+            # Repeatedly fetch the transaction result until it's included in a block
+            for attempt in range(max_retries):
+                try:
+                    tx_result = self.provider.tx.tx_info(tx_hash)
+                    print(tx_result)
+                    if tx_result:
+                        self.logger.info(f"Transaction included in block: {tx_result.height}")
+                        return tx_result
+                except LCDResponseError as e:
+                    if 'not found' in str(e).lower():
+                        # Transaction not yet found, wait and retry
+                        self.logger.info(f"Transaction not found, retrying... ({attempt+1}/{max_retries})")
+                        sleep(3)
+                        continue
+                    else:
+                        self.logger.error(f"LCDResponseError while fetching tx result: {e}")
+                        raise e
+                except Exception as e:
+                    self.logger.error(f"Unexpected error while fetching tx result: {e}")
                     raise e
-            except Exception as e:
-                self.logger.error(f"An unexpected error occurred: {e}")
-                raise e
+            raise Exception(f"Transaction {tx_hash} not included in a block after {max_retries} retries")
+        except LCDResponseError as e:
+            self.logger.error(f"LCDResponseError during transaction broadcast: {e}")
+            raise e
+        except Exception as e:
+            self.logger.error(f"An unexpected error occurred during transaction broadcast: {e}")
+            raise e
 
     def get_last_block(self):
         """
@@ -220,18 +240,18 @@ class SCRTContract(BaseContractInterface):
             arg_dict = json.loads(args)
         function_schema = {function_name: arg_dict}
         if function_name == 'inputs':
-            nschema = {'input': deepcopy(function_schema)}
-            function_schema = nschema
+            new_schema = {'input': deepcopy(function_schema)}
+            function_schema = new_schema
         self.logger.info(
             f"Using arguments {function_schema} to call function {function_name} at address {self.address}")
         txn_msgs = self.interface.provider.wasm.contract_execute_msg(
             sender_address=self.interface.address,
             contract_address=self.address,
             handle_msg=function_schema,
-            contract_code_hash = self.code_hash
+            contract_code_hash=self.code_hash
         )
         gas = '3000000'
-        gas_prices = '0.05uscrt'
+        gas_prices = '0.1uscrt'
         tx_options = CreateTxOptions(
             msgs=[txn_msgs],
             gas=gas,
@@ -247,7 +267,7 @@ class SCRTContract(BaseContractInterface):
             gas_prices=gas_prices,
             sequence=deepcopy(self.interface.sequence),
             account_number=self.interface.account_number,
-            fee = fee
+            fee=fee
         )
         txn = self.interface.wallet.create_and_sign_tx(options=tx_options)
         self.interface.sequence = self.interface.sequence + 1

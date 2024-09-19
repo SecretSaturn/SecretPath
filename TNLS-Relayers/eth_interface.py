@@ -3,8 +3,7 @@ from copy import deepcopy
 from logging import getLogger, basicConfig, INFO, StreamHandler
 from typing import List
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from threading import Lock, Timer
-from time import sleep
+from threading import Lock, Thread, Event
 
 from web3 import Web3, middleware, auto
 from web3.datastructures import AttributeDict
@@ -33,7 +32,7 @@ class EthInterface(BaseChainInterface):
         self.contract_address = contract_address
         self.chain_id = chain_id
         self.nonce = self.provider.eth.get_transaction_count(self.address, 'pending')
-        
+
         # Set up logging
         basicConfig(
             level=INFO,
@@ -46,32 +45,30 @@ class EthInterface(BaseChainInterface):
         self.nonce_lock = Lock()
         self.timer = None
         self.sync_interval = sync_interval
-        self.executor = ThreadPoolExecutor(max_workers=1)
 
-        # Schedule nonce synchronization
-        self.schedule_sync()
+        self.stop_event = Event()
+        self.sync_thread = Thread(target=self.sync_loop)
+        self.sync_thread.start()
 
-    def schedule_sync(self):
+    def sync_loop(self):
         """
-        Schedule nonce sync task with the executor and restart the timer
+        Continuously sync nonce at specified intervals.
         """
-        try:
-            self.executor.submit(self.sync_nonce)
-        except Exception as e:
-            self.logger.error(f"Error during Ethereum nonce sync: {e}")
-        finally:
-            # Re-run the sync at specified intervals
-            self.timer = Timer(self.sync_interval, self.schedule_sync)
-            self.timer.start()
+        while not self.stop_event.is_set():
+            try:
+                self.sync_nonce()
+            except Exception as e:
+                self.logger.error(f"Error during Ethereum nonce sync: {e}")
+            # Wait for the sync interval or until the stop event is set
+            self.stop_event.wait(self.sync_interval)
 
     def sync_nonce(self):
         """
-        Sync the nonce with the latest data from the provider
+        Sync the nonce with the latest data from the provider.
         """
         try:
             with self.nonce_lock:
                 self.logger.info(f"Starting Chain-id {self.chain_id} nonce sync")
-                sleep(1)  # Introduce a delay if needed to reduce frequency of sync errors
                 new_nonce = self.provider.eth.get_transaction_count(self.address, 'pending')
                 if self.nonce is None or new_nonce >= self.nonce:
                     self.nonce = new_nonce
@@ -95,7 +92,7 @@ class EthInterface(BaseChainInterface):
                 'from': self.address,
                 'gas': callback_gas_limit,
                 'nonce': deepcopy(self.nonce),
-                'gasPrice': self.provider.eth.gas_price
+                'gasPrice': int(1.5*self.provider.eth.gas_price)
                 #'maxFeePerGas': self.provider.eth.max_base
                 #'maxPriorityFeePerGas': self.provider.eth.max_priority_fee,
             })
@@ -104,7 +101,7 @@ class EthInterface(BaseChainInterface):
                 'from': self.address,
                 'gas': 2000000,
                 'nonce': deepcopy(self.nonce),
-                'gasPrice': self.provider.eth.gas_price
+                'gasPrice': int(1.5*self.provider.eth.gas_price)
                 #'maxFeePerGas': self.provider.eth.max_priority_fee
                 #'maxPriorityFeePerGas': self.provider.eth.max_priority_fee,
             })
@@ -114,7 +111,7 @@ class EthInterface(BaseChainInterface):
                 'from': self.address,
                 'gas': callback_gas_limit,
                 'nonce': deepcopy(self.nonce),
-                'gasPrice': self.provider.eth.gas_price
+                'gasPrice': int(1.5*self.provider.eth.gas_price)
                 #'maxFeePerGas': self.provider.eth.max_priority_fee
                 #'maxPriorityFeePerGas': self.provider.eth.max_priority_fee,
             })
@@ -145,26 +142,17 @@ class EthInterface(BaseChainInterface):
 
                 Returns: a list of transaction receipts
 
-                """
-
-        def process_transaction(transaction_hash):
-            try:
-                tx_receipt = self.provider.eth.get_transaction_receipt(transaction_hash)
-                return tx_receipt
-            except Exception as e:
-                self.logger.error(f"Error processing transaction: {e}")
-                return None
-
-        if height is None:
-            height = self.get_last_block()
-
+        """
         try:
+            if block_number is None:
+                block_number = self.get_last_block()
             valid_transactions = contract_interface.contract.events.logNewTask().get_logs(
                 fromBlock=height,
                 toBlock=height
             )
         except Exception as e:
             self.logger.warning(e)
+            return []
 
         if len(valid_transactions) == 0:
             return []
@@ -183,7 +171,7 @@ class EthInterface(BaseChainInterface):
                     if result is not None:
                         correct_transactions.append(result)
         except Exception as e:
-            self.logger.error(f"Error fetching transactions: {e}")
+            self.logger.warning(e)
             return []
 
         return correct_transactions
