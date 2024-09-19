@@ -1,7 +1,7 @@
 import json
 import os
+from logging import getLogger, basicConfig, INFO, StreamHandler
 from pathlib import Path
-from threading import Thread
 
 from flask import Flask, current_app, Blueprint
 from yaml import safe_load
@@ -13,6 +13,9 @@ from base_interface import eth_chains, scrt_chains
 from dotenv import load_dotenv
 
 load_dotenv()
+with open('Gateway.json', 'r') as file:
+    eth_contract_schema = json.load(file)
+
 
 def generate_eth_config(config_dict, provider=None):
     """
@@ -27,7 +30,7 @@ def generate_eth_config(config_dict, provider=None):
     """
     priv_key = bytes.fromhex(os.environ['ethereum-private-key'])
     contract_address = config_dict['contract_address']
-    contract_schema = config_dict['contract_schema']
+    contract_schema = eth_contract_schema
     chain_id = config_dict['chain_id']
     api_endpoint = config_dict['api_endpoint']
     timeout = config_dict['timeout']
@@ -35,11 +38,13 @@ def generate_eth_config(config_dict, provider=None):
     event_name = 'logNewTask'
     function_name = 'postExecution'
 
-    initialized_chain = EthInterface(private_key=priv_key, provider=provider, chain_id=chain_id, api_endpoint=api_endpoint, timeout=timeout)
+    initialized_chain = EthInterface(private_key=priv_key, provider=provider, chain_id=chain_id,
+                                     api_endpoint=api_endpoint, timeout=timeout)
     initialized_contract = EthContract(interface=initialized_chain, address=contract_address,
                                        abi=contract_schema)
     eth_tuple = (initialized_chain, initialized_contract, event_name, function_name)
     return eth_tuple
+
 
 def generate_solana_config(config_dict):
     """
@@ -64,6 +69,7 @@ def generate_solana_config(config_dict):
     solana_tuple = (rpc_client, contract_address, wallet_address, function_name)
     return solana_tuple
 
+
 def generate_scrt_config(config_dict, provider=None):
     """
         Converts a config dict into a tuple of (chain_interface, contract_interface, event_name, function_name)
@@ -85,16 +91,16 @@ def generate_scrt_config(config_dict, provider=None):
         contract_schema = f.read()
     event_name = 'wasm'
     function_name = list(json.loads(contract_schema).keys())[0]
-    initialized_chain = None
 
     if provider is None:
-        initialized_chain = SCRTInterface(private_key = priv_key, provider = None,
-                                          api_url = api_endpoint, chain_id = chain_id, feegrant_address = feegrant_address)
+        initialized_chain = SCRTInterface(private_key=priv_key, provider=None,
+                                          api_url=api_endpoint, chain_id=chain_id, feegrant_address=feegrant_address)
     else:
-        initialized_chain = SCRTInterface(private_key=priv_key, provider = provider, chain_id = chain_id,  feegrant_address = feegrant_address)
+        initialized_chain = SCRTInterface(private_key=priv_key, provider=provider, chain_id=chain_id,
+                                          feegrant_address=feegrant_address)
 
     initialized_contract = SCRTContract(interface=initialized_chain, address=contract_address,
-                                        abi=contract_schema, code_hash = code_hash)
+                                        abi=contract_schema, code_hash=code_hash)
     scrt_tuple = (initialized_chain, initialized_contract, event_name, function_name)
     return scrt_tuple
 
@@ -110,6 +116,13 @@ def generate_full_config(config_file, provider_pair=None):
             a dict mapping scrt and eth to their respective configs
 
     """
+    basicConfig(
+        level=INFO,
+        format="%(asctime)s [Eth Interface: %(levelname)8.8s] %(message)s",
+        handlers=[StreamHandler()],
+    )
+    logger = getLogger()
+
     with open(config_file) as f:
         config_dict = safe_load(f)
     if provider_pair is None:
@@ -120,11 +133,20 @@ def generate_full_config(config_file, provider_pair=None):
     chains_dict = {}
     for chain in eth_chains:
         if config_dict[chain]['active']:
-            chains_dict[chain] = generate_eth_config(config_dict[chain], provider=provider_eth)
+            try:
+                chains_dict[chain] = generate_eth_config(config_dict[chain], provider=provider_eth)
+            except Exception as e:
+                logger.error(f"Error generating ETH config for chain '{chain}': {e}")
+
     for chain in scrt_chains:
         if config_dict[chain]['active']:
-            chains_dict[chain] = generate_scrt_config(config_dict[chain], provider=provider_scrt)
+            try:
+                chains_dict[chain] = generate_scrt_config(config_dict[chain], provider=provider_scrt)
+            except Exception as e:
+                logger.error(f"Error generating SCRT config for chain '{chain}': {e}")
+
     return chains_dict, keys_dict
+
 
 route_blueprint = Blueprint('route_blueprint', __name__)
 

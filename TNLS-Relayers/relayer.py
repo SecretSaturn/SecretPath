@@ -12,29 +12,25 @@ spin up thread to handle routing each object to the right location
 Individual thread:
 for each object:
 get destination network
-verify signature?
 stringify object as json
 send json string to destination network
 """
-import json
 from logging import getLogger, basicConfig, DEBUG, StreamHandler
 from threading import Thread
 from time import sleep
 from typing import Dict, Tuple
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from base_interface import Task, BaseContractInterface, BaseChainInterface, eth_chains, scrt_chains
 import warnings
+
 warnings.filterwarnings("ignore")
-from concurrent.futures import ThreadPoolExecutor, as_completed
+
 
 class Relayer:
     def __init__(self,
                  dict_of_names_to_interfaces: Dict[str, Tuple[BaseChainInterface, BaseContractInterface, str, str]],
                  num_loops=None):
-
-        """
-        NOTE: the below default private key is for testing only, and does not correspond to any real account/wallet
-        """
 
         # Create the dictionary and add the tuple
         self.dict_of_names_to_interfaces = dict_of_names_to_interfaces
@@ -85,8 +81,9 @@ class Relayer:
                     tasks_tmp.extend(contract_interface.parse_event_from_txn(evt_name, transaction))
                 return block_num, tasks_tmp
 
-            with ThreadPoolExecutor(max_workers = 30) as executor2:
-                futures2 = [executor2.submit(fetch_transactions, block_num) for block_num in range(prev_height + 1, curr_height + 1)]
+            with ThreadPoolExecutor(max_workers=30) as executor2:
+                futures2 = [executor2.submit(fetch_transactions, block_num) for block_num in
+                            range(prev_height + 1, curr_height + 1)]
                 for future in futures2:
                     block_num, tasks = future.result()
                     self.logger.info(f'Processed block {block_num} on {name}')
@@ -95,11 +92,9 @@ class Relayer:
                         self.task_ids_to_statuses[task_id] = 'Received from {}'.format(name)
                     self.task_list.extend(tasks)
 
-
-        with ThreadPoolExecutor(max_workers = 200) as executor:
+        with ThreadPoolExecutor(max_workers=200) as executor:
             # Filter out secret chains if needed
             futures = [executor.submit(process_chain, chain) for chain in chains_to_poll]
-
 
     def route_transaction(self, task: Task):
         """
@@ -107,7 +102,7 @@ class Relayer:
         Args:
             task: the Task to be routed
         """
-        self.logger.info('Routing task {}',vars(task))
+        self.logger.info('Routing task {}', vars(task))
         if task.task_destination_network is None:
             self.logger.warning(f'Task {task} has no destination network, not routing')
             self.task_ids_to_statuses[task.task_data['task_id']] = 'Failed to route'
@@ -119,8 +114,8 @@ class Relayer:
         contract_for_txn = self.dict_of_names_to_interfaces[task.task_destination_network][1]
         function_name = self.dict_of_names_to_interfaces[task.task_destination_network][3]
         if task.task_destination_network in scrt_chains:
-            ntasks, _ = contract_for_txn.call_function(function_name, str(task))
-            self.task_list.extend(ntasks)
+            new_tasks, _ = contract_for_txn.call_function(function_name, str(task))
+            self.task_list.extend(new_tasks)
         else:
             contract_for_txn.call_function(function_name, str(task))
         self.task_ids_to_statuses[str(task.task_data['task_id'])] = 'Routed to {}'.format(task.task_destination_network)
@@ -133,6 +128,7 @@ class Relayer:
         Spins up threads to handle each task in the task list
 
         """
+
         def _thread_func():
             while len(self.task_list) > 0:
                 task = self.task_list.pop()
@@ -154,12 +150,10 @@ class Relayer:
 
         """
         self.logger.info('Starting relayer')
-        self.loops_run = 0
-        while (self.num_loops is not None and self.loops_run < self.num_loops) or self.num_loops is None:
+        while True:
             self.poll_for_transactions()
             self.logger.info('Polled for transactions, now have {} remaining'.format(len(self.task_list)))
             self.task_list_handle()
-            self.loops_run += 1
             sleep(1)
         pass
 
