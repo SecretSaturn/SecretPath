@@ -5,8 +5,9 @@ from typing import List
 from yaml import safe_load
 from pathlib import Path
 
-with open(f'{Path(__file__).parent.absolute()}/../config.yml') as f:
+with open(f'{Path(__file__).parent.absolute()}/config.yml') as f:
     data = safe_load(f)
+    
 eth_chains = [info['chain_id'] for key, info in data.items() if info['type'] == 'evm']
 solana_chains = [info['chain_id'] for key, info in data.items() if info['type'] == 'solana']
 scrt_chains = [info['chain_id'] for key, info in data.items() if info['type'] == 'secret']

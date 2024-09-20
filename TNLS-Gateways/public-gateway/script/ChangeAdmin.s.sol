@@ -15,7 +15,7 @@ contract ChangeAdmin is Script {
         vm.startBroadcast();
 
         // Initialize the ProxyAdmin
-        gatewayProxyAdmin = ProxyAdmin(0xb352D4449dC7355d4478784027d7AfAe69843085);
+        gatewayProxyAdmin = ProxyAdmin(0x59D8C9591dB7179c5d592c5bCD42694021885aFC);
 
         // Get the current owner of the ProxyAdmin
         address currentOwner = gatewayProxyAdmin.owner();

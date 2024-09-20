@@ -14,7 +14,7 @@ from base_interface import eth_chains, scrt_chains, solana_chains
 from dotenv import load_dotenv
 
 load_dotenv()
-with open('Gateway.json', 'r') as file:
+with open(f'{Path(__file__).parent.absolute()}/gateway.json', 'r') as file:
     eth_contract_schema = json.load(file)
 
 
@@ -220,7 +220,7 @@ def keys():
     return str(current_app.config['KEYS'])
 
 
-def app_factory(config_filename=f'{Path(__file__).parent.absolute()}/../config.yml',
+def app_factory(config_filename=f'{Path(__file__).parent.absolute()}/config.yml',
                 config_file_converter=generate_full_config, num_loops=None):
     """
     Creates a Flask app with a relayer running on the backend
@@ -245,5 +245,5 @@ def app_factory(config_filename=f'{Path(__file__).parent.absolute()}/../config.y
 
 
 if __name__ == '__main__':
-    app = app_factory(f'{Path(__file__).parent.absolute()}/../config.yml')
+    app = app_factory(f'{Path(__file__).parent.absolute()}/config.yml')
     app.run()
