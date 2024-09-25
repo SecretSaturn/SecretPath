@@ -14,7 +14,7 @@ from base_interface import eth_chains, scrt_chains, solana_chains
 from dotenv import load_dotenv
 
 load_dotenv()
-with open(f'{Path(__file__).parent.absolute()}/gateway.json', 'r') as file:
+with open(f'{Path(__file__).parent.absolute()}/Gateway.json', 'r') as file:
     eth_contract_schema = json.load(file)
 
 
