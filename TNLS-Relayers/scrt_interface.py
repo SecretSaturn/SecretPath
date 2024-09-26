@@ -260,7 +260,8 @@ class SCRTContract(BaseContractInterface):
             account_number=self.interface.account_number,
         )
         fee = self.interface.provider.tx.estimate_fee(options=tx_options)
-        fee.granter = self.interface.feegrant_address
+        if self.interface.feegrant_address is not None:
+            fee.granter = self.interface.feegrant_address
         tx_options = CreateTxOptions(
             msgs=[txn_msgs],
             gas=gas,

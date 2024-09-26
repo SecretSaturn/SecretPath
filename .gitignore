@@ -1,7 +1,5 @@
 .idea
 TNLS-Relayers/etherscan_api_key.txt
-TNLS-Relayers/infura_api_endpoint.txt
-*/*/*/infura_api_endpoint.txt
 */.*
 */venv
 */__pycache__
@@ -24,7 +22,6 @@ TNLS-Gateways/secret/contract.wasm
 TNLS-Gateways/secret/contract.wasm.gz
 .env
 __pycache__/
-*.example
 TNLS-Gateways/public-gateway/broadcast/*
 TNLS-Gateways/public-gateway/lib/*
 *.gz

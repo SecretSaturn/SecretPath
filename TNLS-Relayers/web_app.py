@@ -14,8 +14,8 @@ from base_interface import eth_chains, scrt_chains, solana_chains
 from dotenv import load_dotenv
 
 load_dotenv()
-with open(f'{Path(__file__).parent.absolute()}/Gateway.json', 'r') as file:
-    eth_contract_schema = json.load(file)
+with open(f'{Path(__file__).parent.absolute()}/gateway.json', 'r') as file:
+    eth_contract_schema = file.read()
 
 
 def generate_eth_config(config_dict, provider=None):
@@ -89,7 +89,7 @@ def generate_scrt_config(config_dict, provider=None):
     api_endpoint = config_dict['api_endpoint']
     chain_id = config_dict['chain_id']
     code_hash = config_dict['code_hash']
-    feegrant_address = config_dict['feegrant_address']
+    feegrant_address = config_dict['feegrant_address'] if 'feegrant_address' in config_dict else None
     with open(f'{Path(__file__).parent.absolute()}/secret_abi.json') as f:
         contract_schema = f.read()
     event_name = 'wasm'
@@ -142,11 +142,11 @@ def generate_full_config(config_file, providers=None):
                 chains_dict[chain] = generate_eth_config(config_dict[chain], provider=provider_eth)
             except Exception as e:
                 logger.error(f"Error generating ETH config for chain '{chain}': {e}")
-                
+
     for chain in solana_chains:
         if config_dict[chain]['active']:
             chains_dict[chain] = generate_solana_config(config_dict[chain], provider=provider_solana)
-            
+
     for chain in scrt_chains:
         if config_dict[chain]['active']:
             try:

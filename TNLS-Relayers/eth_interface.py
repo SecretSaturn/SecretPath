@@ -3,7 +3,7 @@ from copy import deepcopy
 from logging import getLogger, basicConfig, INFO, StreamHandler
 from typing import List
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from threading import Lock, Thread, Event
+from threading import Lock, Timer
 
 from web3 import Web3, middleware, auto
 from web3.datastructures import AttributeDict
@@ -46,21 +46,21 @@ class EthInterface(BaseChainInterface):
         self.timer = None
         self.sync_interval = sync_interval
 
-        self.stop_event = Event()
-        self.sync_thread = Thread(target=self.sync_loop)
-        self.sync_thread.start()
+        self.sync_interval = sync_interval
+        self.executor = ThreadPoolExecutor(max_workers=1)
+        self.schedule_sync()
 
-    def sync_loop(self):
+    def schedule_sync(self):
         """
-        Continuously sync nonce at specified intervals.
+        Schedule the sync task with the executor and restart the timer
         """
-        while not self.stop_event.is_set():
-            try:
-                self.sync_nonce()
-            except Exception as e:
-                self.logger.error(f"Error during Ethereum nonce sync: {e}")
-            # Wait for the sync interval or until the stop event is set
-            self.stop_event.wait(self.sync_interval)
+        try:
+            self.executor.submit(self.sync_nonce)
+        except Exception as e:
+            self.logger.error(f"Error during Secret sequence sync: {e}")
+        finally:
+            self.timer = Timer(self.sync_interval, self.schedule_sync)
+            self.timer.start()
 
     def sync_nonce(self):
         """
