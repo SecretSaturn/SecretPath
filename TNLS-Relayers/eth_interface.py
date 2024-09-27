@@ -155,7 +155,7 @@ class EthInterface(BaseChainInterface):
         try:
             if block_number is None:
                 block_number = self.provider.eth.get_block('latest').number
-            valid_transactions = contract_interface.contract.events.logNewTask().get_logs(
+            valid_transactions = contract_interface.contract.events.logNewTask().getLogs(
                 fromBlock=block_number,
                 toBlock=block_number
             )

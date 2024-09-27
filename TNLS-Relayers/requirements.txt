@@ -147,7 +147,7 @@ urllib3==2.2.1
 varint==1.0.2
 waitress==3.0.0
 wcwidth==0.2.13
-web3==5.29.0
+web3==5.29.2
 webcolors==24.6.0
 websockets==9.1
 Werkzeug==3.0.3
