@@ -1,7 +1,7 @@
 #Mainnet Chains
 
 "42161": #Arbitrum One
-  active: true
+  active: false
   type: "evm"
   chain_id: "42161"
   api_endpoint: https://arb1.arbitrum.io/rpc
@@ -9,7 +9,7 @@
   timeout: 0.5
 
 "1": #Ethereum
-  active: true
+  active: false
   type: "evm"
   chain_id: "1"
   api_endpoint: https://rpc.flashbots.net
@@ -17,7 +17,7 @@
   timeout: 1
 
 "56": #BSC Chain
-  active: true
+  active: false
   type: "evm"
   chain_id: "56"
   api_endpoint: https://bsc.drpc.org
@@ -25,7 +25,7 @@
   timeout: 1
 
 "137": #Polygon
-  active: true
+  active: false
   type: "evm"
   chain_id: "137"
   api_endpoint: https://polygon-bor.publicnode.com
@@ -33,7 +33,7 @@
   timeout: 1
 
 "10": #Optimsm
-  active: true
+  active: false
   type: "evm"
   chain_id: "10"
   api_endpoint: https://mainnet.optimism.io
@@ -41,7 +41,7 @@
   timeout: 1
 
 "43114": #Avalance C-Chain
-  active: true
+  active: false
   type: "evm"
   chain_id: "43114"
   api_endpoint: https://avalanche-c-chain.publicnode.com
@@ -49,7 +49,7 @@
   timeout: 1
 
 "8453": #Base
-  active: true
+  active: false
   type: "evm"
   chain_id: "8453"
   api_endpoint: https://base.publicnode.com
@@ -57,15 +57,15 @@
   timeout: 1
 
 "59144": #Linea
-  active: true
+  active: false
   type: "evm"
   chain_id: "59144"
-  api_endpoint: https://linea-mainnet.public.blastapi.io
+  api_endpoint: https://rpc.linea.build
   contract_address: "0xfaFCfceC4e29e9b4ECc8C0a3f7df1011580EEEf2"
   timeout: 1
 
 "534352": #Scroll
-  active: true
+  active: false
   type: "evm"
   chain_id: "534352"
   api_endpoint: https://scroll.drpc.org
@@ -73,7 +73,7 @@
   timeout: 1
 
 "1088": #Metis
-  active: true
+  active: false
   type: "evm"
   chain_id: "1088"
   api_endpoint: https://metis.drpc.org
@@ -81,7 +81,7 @@
   timeout: 1
 
 "50": #XDC Network
-  active: true
+  active: false
   type: "evm"
   chain_id: "50"
   api_endpoint: https://rpc1.xinfin.network
@@ -89,7 +89,7 @@
   timeout: 1
 
 "1313161554": #Near Aurora
-  active: true
+  active: false
   type: "evm"
   chain_id: "1313161554"
   api_endpoint: https://aurora.drpc.org
@@ -97,7 +97,7 @@
   timeout: 1
 
 "1135": #Lisk
-  active: true
+  active: false
   type: "evm"
   chain_id: "1135"
   api_endpoint: https://rpc.api.lisk.com
@@ -105,7 +105,7 @@
   timeout: 1
 
 "2016": #Mainnetz Mainnet
-  active: true
+  active: false
   type: "evm"
   chain_id: "2016"
   api_endpoint: https://mainnet-rpc.mainnetz.io
@@ -113,7 +113,7 @@
   timeout: 1
 
 "5000": #Mantle
-  active: true
+  active: false
   type: "evm"
   chain_id: "5000"
   api_endpoint: https://rpc.mantle.xyz
@@ -121,7 +121,7 @@
   timeout: 1
 
 "1116": #Core
-  active: true
+  active: false
   type: "evm"
   chain_id: "1116"
   api_endpoint: https://rpc.ankr.com/core
@@ -129,7 +129,7 @@
   timeout: 1
 
 "1284": #Moonbeam
-  active: true
+  active: false
   type: "evm"
   chain_id: "1284"
   api_endpoint: https://rpc.api.moonbeam.network
@@ -137,7 +137,7 @@
   timeout: 1
 
 "1285": #Moonriver
-  active: true
+  active: false
   type: "evm"
   chain_id: "1285"
   api_endpoint: https://moonriver-rpc.publicnode.com
@@ -145,7 +145,7 @@
   timeout: 1
 
 "1329": #Sei
-  active: true
+  active: false
   type: "evm"
   chain_id: "1329"
   api_endpoint: https://evm-rpc.sei-apis.com
@@ -153,7 +153,7 @@
   timeout: 1
 
 "100": #Gnosis
-  active: true
+  active: false
   type: "evm"
   chain_id: "100"
   api_endpoint: https://gnosis-rpc.publicnode.com
@@ -161,7 +161,7 @@
   timeout: 1
 
 "90002": #Ubit Mainnet
-  active: true
+  active: false
   type: "evm"
   chain_id: "90002"
   api_endpoint: https://rpc.ubitscan.io/
@@ -178,7 +178,7 @@
   timeout: 1
 
 "388": #Cronos zkEVM Mainnet
-  active: true
+  active: false
   type: "evm"
   chain_id: "388"
   api_endpoint: "https://mainnet.zkevm.cronos.org"
@@ -186,7 +186,7 @@
   timeout: 1
 
 "324": #Zksync Era Mainnet
-  active: true
+  active: false
   type: "evm"
   chain_id: "324"
   api_endpoint: "https://mainnet.era.zksync.io"
@@ -194,7 +194,7 @@
   timeout: 1
 
 "secret-4":
-  active: true
+  active: false
   type: "secret"
   chain_id: "secret-4"
   api_endpoint: "https://lcd.mainnet.secretsaturn.net"
@@ -246,7 +246,7 @@
   timeout: 0.5
 
 "534351": #Scroll Sepolia
-  active: true
+  active: false
   type: "evm"
   chain_id: "534351"
   api_endpoint: https://scroll-sepolia.drpc.org
@@ -254,7 +254,7 @@
   timeout: 1
 
 "128123": #Tezos Etherlink Testnet
-  active: true
+  active: false
   type: "evm"
   chain_id: "128123"
   api_endpoint: https://node.ghostnet.etherlink.com
@@ -262,7 +262,7 @@
   timeout: 1
 
 "1802203764": #Kakarot Sepolia
-  active: true
+  active: false
   type: "evm"
   chain_id: "1802203764"
   api_endpoint: https://sepolia-rpc.kakarot.org
@@ -334,7 +334,7 @@
   timeout: 1
 
 "5003": #Mantle Sepolia
-  active: false
+  active: true
   type: "evm"
   chain_id: "5003"
   api_endpoint: "https://rpc.sepolia.mantle.xyz"
@@ -342,7 +342,7 @@
   timeout: 1
 
 "44433": #UBIT Testnet
-  active: true
+  active: false
   type: "evm"
   chain_id: "44433"
   api_endpoint: "https://testnet-rpc.ubitscan.io/"
@@ -350,7 +350,7 @@
   timeout: 1
 
 "713715": #Sei Devnet
-  active: false
+  active: true
   type: "evm"
   chain_id: "713715"
   api_endpoint: "https://evm-rpc-arctic-1.sei-apis.com"
@@ -374,7 +374,7 @@
   timeout: 1
 
 "282": #Cronos zkEVM Testnet
-  active: true
+  active: false
   type: "evm"
   chain_id: "282"
   api_endpoint: "https://testnet.zkevm.cronos.org"
@@ -382,7 +382,7 @@
   timeout: 1
 
 "300": #Zksync Era Testnet
-  active: true
+  active: false
   type: "evm"
   chain_id: "300"
   api_endpoint: "https://sepolia.era.zksync.dev"
@@ -390,7 +390,7 @@
   timeout: 1
   
 "SolDN": #Solana DevNet
-  active: true
+  active: false
   type: "solana"
   chain_id: "SolDN"
   api_endpoint: https://rpc.ankr.com/solana_devnet
@@ -398,7 +398,7 @@
   timeout: 1
 
 "SolTN": #Solana TestNet
-  active: true
+  active: false
   type: "solana"
   chain_id: "SolTN"
   api_endpoint: https://rpc.ankr.com/solana_testnet
