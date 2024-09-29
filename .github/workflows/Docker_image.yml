@@ -1,9 +1,19 @@
 name: Build and Push Docker Image
 
 on:
+  workflow_dispatch:
   push:
     branches:
-      - main  # Change this to your default branch
+      - main
+    paths:
+      - "TNLS-Relayers/**"
+      - ".github/workflows/Docker_image.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "TNLS-Relayers/**"
+      - ".github/workflows/Docker_image.yml"
 
 jobs:
   build_and_push:
