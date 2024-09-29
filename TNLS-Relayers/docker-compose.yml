@@ -5,7 +5,7 @@ services:
     build:
       context: ./  # Path to the build context
       dockerfile: Dockerfile    
-    image: your-dockerhub-username/your-image-name:latest  
+    image: secretsaturn/secretpath:latest  
     container_name: tnls-relayer
     ports:
       - "8000:8000"  # Maps port 8000 on host to port 8000 in container
