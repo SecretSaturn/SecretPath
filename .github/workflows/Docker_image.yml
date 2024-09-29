@@ -46,6 +46,7 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Build and Push Docker Image
+        working-directory: TNLS-Relayers
         run: |
           docker compose build --pull
           docker compose push
