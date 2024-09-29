@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  tnls-relayer:
+    build:
+      context: ./  # Path to the build context
+      dockerfile: Dockerfile    
+    image: your-dockerhub-username/your-image-name:latest  
+    container_name: tnls-relayer
+    ports:
+      - "8000:8000"  # Maps port 8000 on host to port 8000 in container
+    volumes:
+      - ./config.yml:/app/config.yml  # Volume mapping for config.yml
+    environment: {}
+      #- ENV_VAR1=value1
+      #- ENV_VAR2=value2
+    restart: unless-stopped  # Automatically restart container on failure
