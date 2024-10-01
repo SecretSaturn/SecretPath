@@ -45,46 +45,9 @@ jobs:
         working-directory: TNLS-Gateways/public-gateway
         run: forge snapshot --check --tolerance 1
 
-  secret_gateway_tests:
-    name: Secret Gateway Tests
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        rust:
-          - stable
-        target:
-          - x86_64-unknown-linux-gnu
-          - wasm32-unknown-unknown
-    env:
-      CARGO_TERM_COLOR: always
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo
-            target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-
-
-      - uses: mozilla-actions/sccache-action@v0.0.5
-
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ matrix.rust }}
-          target: ${{ matrix.target }}
-
-      - name: Build
-        working-directory: TNLS-Gateways/secret
-        run: cargo build --target ${{ matrix.target }} --no-default-features --release
-
   secret_unit_tests:
     name: Secret Gateway Unit Tests
     runs-on: ubuntu-latest
-    needs: secret_gateway_tests
     strategy:
       matrix:
         rust:

@@ -351,6 +351,7 @@ fn post_execution(deps: DepsMut, env: Env, msg: PostExecutionMsg) -> StdResult<R
         return Err(StdError::generic_err("input hash does not match task"));
     }
 
+    // Decode the base64-encoded result
     let result = match STANDARD.decode(msg.result) {
         Ok(bytes) => bytes,
         Err(_) => {
@@ -363,7 +364,7 @@ fn post_execution(deps: DepsMut, env: Env, msg: PostExecutionMsg) -> StdResult<R
     // rename for clarity (original source network is now the routing destination)
     let routing_info = task_info.source_network;
 
-    // "hasher" is used to perform multiple Keccak256 hashes
+    // Initialize Keccak256 hasher
     let mut hasher = Keccak256::new();
 
     // Calculate the total length of the concatenated data
@@ -379,21 +380,23 @@ fn post_execution(deps: DepsMut, env: Env, msg: PostExecutionMsg) -> StdResult<R
     let mut data = Vec::with_capacity(total_length);
 
     // Extend the vector with slices from the individual data components
-    data.extend_from_slice(env.block.chain_id.as_bytes()); // source network
-    data.extend_from_slice(routing_info.as_bytes()); // task_destination_network
-    data.extend_from_slice(msg.task.task_id.as_bytes()); // task ID
-    data.extend_from_slice(&task_info.payload_hash); // original payload message
-    data.extend_from_slice(&result); // result
-    data.extend_from_slice(&task_info.callback_address); // callback address
-    data.extend_from_slice(&task_info.callback_selector); // callback selector
+    data.extend_from_slice(env.block.chain_id.as_bytes()); // Source network
+    data.extend_from_slice(routing_info.as_bytes());       // Task destination network
+    data.extend_from_slice(msg.task.task_id.as_bytes());   // Task ID
+    data.extend_from_slice(&task_info.payload_hash);       // Original payload hash
+    data.extend_from_slice(&result);                       // Execution result
+    data.extend_from_slice(&task_info.callback_address);   // Callback address
+    data.extend_from_slice(&task_info.callback_selector);  // Callback selector
 
     hasher.update(&data);
     let packet_hash = hasher.finalize();
 
-    // load this gateway's signing key
+    // Load the gateway's signing key
     let private_key = CONFIG.load(deps.storage)?.signing_keys.sk;
 
-    // used in production to create signature
+    // Generate the packet signature using the signing key
+
+    // Used in production to create signature
     #[cfg(target_arch = "wasm32")]
     // NOTE: api.secp256k1_sign() will perform an additional sha_256 hash operation on the given data
     let packet_signature = {
@@ -402,7 +405,7 @@ fn post_execution(deps: DepsMut, env: Env, msg: PostExecutionMsg) -> StdResult<R
             .map_err(|err| StdError::generic_err(err.to_string()))?
     };
 
-    // used only in unit testing to create signature
+    // Handle signature generation for unit testing (non-WASM environment)
     #[cfg(not(target_arch = "wasm32"))]
     let packet_signature = {
         let secp = secp256k1::Secp256k1::signing_only();
@@ -472,6 +475,7 @@ fn post_execution(deps: DepsMut, env: Env, msg: PostExecutionMsg) -> StdResult<R
             .serialize() // Serialize the public key to its compressed form
     };
 
+    // Determine the correct recovery ID based on matching public keys
     let packet_recovery_id = if packet_public_key_27 == compressed_public_key {
         27
     } else if packet_public_key_28 == compressed_public_key {
@@ -482,6 +486,7 @@ fn post_execution(deps: DepsMut, env: Env, msg: PostExecutionMsg) -> StdResult<R
         ));
     };
 
+    // Format data for response 
     let payload_hash = format!(
         "0x{}",
         task_info.payload_hash.as_slice().encode_hex::<String>()
@@ -512,7 +517,7 @@ fn post_execution(deps: DepsMut, env: Env, msg: PostExecutionMsg) -> StdResult<R
             .encode_hex::<String>()
     );
 
-    // task info
+    // Create a ResultInfo object to store the result
     let result_info = ResultInfo {
         source_network: env.block.chain_id,
         task_destination_network: routing_info,
@@ -526,8 +531,10 @@ fn post_execution(deps: DepsMut, env: Env, msg: PostExecutionMsg) -> StdResult<R
         callback_gas_limit: callback_gas_limit,
     };
 
+    // Store the result info in the result map
     RESULT_MAP.insert(deps.storage, &msg.task, &result_info)?;
 
+    // Return a response with the packet information
     Ok(Response::new()
         .add_attribute_plaintext("source_network", result_info.source_network)
         .add_attribute_plaintext(
@@ -554,13 +561,21 @@ fn post_execution(deps: DepsMut, env: Env, msg: PostExecutionMsg) -> StdResult<R
 /// * `msg` - QueryMsg passed in with the query call
 #[entry_point]
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
+    // Match the query message and call the appropriate handler function
     let response = match msg {
         QueryMsg::GetPublicKeys {} => query_public_keys(deps),
         QueryMsg::GetExecutionResult { task } => query_execution_result(deps, task),
     };
+    // Pad the query result to prevent information leakage based on response size
     pad_query_result(response, BLOCK_SIZE)
 }
 
+/// Queries the execution result for a given task.
+///
+/// # Arguments
+///
+/// * `deps` - Dependencies.
+/// * `task` - The task to query.
 fn query_execution_result(deps: Deps, task: Task) -> StdResult<Binary> {
     let task_info = RESULT_MAP
         .get(deps.storage, &task)
