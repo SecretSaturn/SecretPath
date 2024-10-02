@@ -356,6 +356,14 @@
   contract_address: "0x8EaAB5e8551781F3E8eb745E7fcc7DAeEFd27b1f"
   timeout: 1
 
+"1995": #Edexa
+  active: true
+  type: "evm"
+  chain_id: "1995"
+  api_endpoint: "https://testnet.edexa.network/rpc"
+  contract_address: "0x9Bb2D52521Bd93481106D7C35787BD33ceAbb836"
+  timeout: 1
+
 "713715": #Sei Devnet
   active: true
   type: "evm"
