@@ -5,30 +5,26 @@ from typing import List
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Lock, Timer
 
-from web3 import Web3, middleware, auto
+import web3
+from web3 import Web3
 from web3.datastructures import AttributeDict
-from web3.middleware import geth_poa_middleware
 
 from base_interface import BaseChainInterface, BaseContractInterface, Task
 
 
 class EthInterface(BaseChainInterface):
     """
-    Implementaion of BaseChainInterface for eth.
+    Implementation of BaseChainInterface for Ethereum.
     """
 
     def __init__(self, private_key="", provider=None, contract_address="", chain_id="", api_endpoint="", timeout=1, sync_interval=30, **_kwargs):
         if provider is None:
             # If no provider, set a default with middleware for various blockchain scenarios
             provider = Web3(Web3.HTTPProvider(api_endpoint, request_kwargs={'timeout': timeout}))
-            provider.middleware_onion.inject(geth_poa_middleware, layer=0)
-            provider.middleware_onion.add(middleware.time_based_cache_middleware)
-            provider.middleware_onion.add(middleware.latest_block_based_cache_middleware)
-            provider.middleware_onion.add(middleware.simple_cache_middleware)
 
         self.private_key = private_key
         self.provider = provider
-        self.address = auto.w3.eth.account.from_key(private_key).address
+        self.address = self.provider.eth.account.from_key(private_key).address
         self.contract_address = contract_address
         self.chain_id = chain_id
         self.nonce = self.provider.eth.get_transaction_count(self.address, 'pending')
@@ -46,7 +42,6 @@ class EthInterface(BaseChainInterface):
         self.timer = None
         self.sync_interval = sync_interval
 
-        self.sync_interval = sync_interval
         self.executor = ThreadPoolExecutor(max_workers=1)
         self.schedule_sync()
 
@@ -57,7 +52,7 @@ class EthInterface(BaseChainInterface):
         try:
             self.executor.submit(self.sync_nonce)
         except Exception as e:
-            self.logger.error(f"Error during Secret sequence sync: {e}")
+            self.logger.error(f"Error during nonce sync: {e}")
         finally:
             self.timer = Timer(self.sync_interval, self.schedule_sync)
             self.timer.start()
@@ -83,27 +78,22 @@ class EthInterface(BaseChainInterface):
         """
         See base_interface.py for documentation
         """
-        # create task
-        #structure is from eth_task_keys_to_msg
-        #callback_gas_limit is on the 5th position on eth_task_keys_to_msgs
-        if kwargs is {}:
+        if not kwargs:
             callback_gas_limit = int(args[2][4], 16)
             tx = contract_function(*args).build_transaction({
                 'from': self.address,
                 'gas': callback_gas_limit,
                 'nonce': deepcopy(self.nonce),
-                'gasPrice': int(1.5*self.provider.eth.gas_price)
-                #'maxFeePerGas': self.provider.eth.max_base
-                #'maxPriorityFeePerGas': self.provider.eth.max_priority_fee,
+                'maxFeePerGas': self.provider.eth.max_priority_fee + 2 * self.provider.eth.get_block('latest')['baseFeePerGas'],
+                'maxPriorityFeePerGas': self.provider.eth.max_priority_fee,
             })
         elif len(args) == 0:
             tx = contract_function(**kwargs).build_transaction({
                 'from': self.address,
                 'gas': 2000000,
                 'nonce': deepcopy(self.nonce),
-                'gasPrice': int(1.5*self.provider.eth.gas_price)
-                #'maxFeePerGas': self.provider.eth.max_priority_fee
-                #'maxPriorityFeePerGas': self.provider.eth.max_priority_fee,
+                'maxFeePerGas': self.provider.eth.max_priority_fee + 2 * self.provider.eth.get_block('latest')['baseFeePerGas'],
+                'maxPriorityFeePerGas': self.provider.eth.max_priority_fee,
             })
         else:
             callback_gas_limit = int(args[2][4], 16)
@@ -111,22 +101,21 @@ class EthInterface(BaseChainInterface):
                 'from': self.address,
                 'gas': callback_gas_limit,
                 'nonce': deepcopy(self.nonce),
-                'gasPrice': int(1.5*self.provider.eth.gas_price)
-                #'maxFeePerGas': self.provider.eth.max_priority_fee
-                #'maxPriorityFeePerGas': self.provider.eth.max_priority_fee,
+                'maxFeePerGas': self.provider.eth.max_priority_fee + 2 * self.provider.eth.get_block('latest')['baseFeePerGas'],
+                'maxPriorityFeePerGas': self.provider.eth.max_priority_fee,
             })
 
-        self.nonce = self.nonce + 1
+        self.nonce += 1
         return tx
 
     def sign_and_send_transaction(self, tx):
         """
         See base_interface.py for documentation
         """
-        # sign task
+        # Sign transaction
         signed_tx = self.provider.eth.account.sign_transaction(tx, self.private_key)
-        # send task
-        tx_hash = self.provider.eth.send_raw_transaction(signed_tx.rawTransaction)
+        # Send transaction
+        tx_hash = self.provider.eth.send_raw_transaction(signed_tx.raw_transaction)
         self.logger.info('Tx Hash: %s', tx_hash.hex())
         return tx_hash
 
@@ -155,9 +144,9 @@ class EthInterface(BaseChainInterface):
         try:
             if block_number is None:
                 block_number = self.provider.eth.get_block('latest').number
-            valid_transactions = contract_interface.contract.events.logNewTask().getLogs(
-                fromBlock=block_number,
-                toBlock=block_number
+            valid_transactions = contract_interface.contract.events.logNewTask().get_logs(
+                from_block=block_number,
+                to_block=block_number
             )
         except Exception as e:
             self.logger.warning(e)
@@ -195,7 +184,7 @@ class EthInterface(BaseChainInterface):
 
 class EthContract(BaseContractInterface):
     """
-    Implementation of BaseContractInterface for eth.
+    Implementation of BaseContractInterface for Ethereum.
     """
 
     def __init__(self, interface, address, abi, **_kwargs):
@@ -211,7 +200,6 @@ class EthContract(BaseContractInterface):
         self.lock = Lock()
         self.logger = getLogger()
         self.logger.info("Initialized Eth contract with address: %s", self.address)
-        pass
 
     def get_function(self, function_name):
         """
@@ -237,7 +225,7 @@ class EthContract(BaseContractInterface):
                     if isinstance(value, list):
                         args[i] = tuple(value)
                 kwargs = None
-        with self.lock and self.interface.nonce_lock:
+        with self.lock, self.interface.nonce_lock:
             if kwargs is None:
                 txn = self.interface.create_transaction(function, *args)
             elif args is None:
