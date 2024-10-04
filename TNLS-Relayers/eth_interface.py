@@ -5,7 +5,7 @@ from typing import List
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Lock, Timer
 
-import web3
+from web3.middleware import ExtraDataToPOAMiddleware
 from web3 import Web3
 from web3.datastructures import AttributeDict
 
@@ -21,6 +21,7 @@ class EthInterface(BaseChainInterface):
         if provider is None:
             # If no provider, set a default with middleware for various blockchain scenarios
             provider = Web3(Web3.HTTPProvider(api_endpoint, request_kwargs={'timeout': timeout}))
+            provider.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
 
         self.private_key = private_key
         self.provider = provider
@@ -78,58 +79,75 @@ class EthInterface(BaseChainInterface):
         """
         See base_interface.py for documentation
         """
-        if not kwargs:
-            callback_gas_limit = int(args[2][4], 16)
-            tx = contract_function(*args).build_transaction({
-                'from': self.address,
-                'gas': callback_gas_limit,
-                'nonce': deepcopy(self.nonce),
-                'maxFeePerGas': self.provider.eth.max_priority_fee + 2 * self.provider.eth.get_block('latest')['baseFeePerGas'],
-                'maxPriorityFeePerGas': self.provider.eth.max_priority_fee,
-            })
-        elif len(args) == 0:
-            tx = contract_function(**kwargs).build_transaction({
-                'from': self.address,
-                'gas': 2000000,
-                'nonce': deepcopy(self.nonce),
-                'maxFeePerGas': self.provider.eth.max_priority_fee + 2 * self.provider.eth.get_block('latest')['baseFeePerGas'],
-                'maxPriorityFeePerGas': self.provider.eth.max_priority_fee,
-            })
-        else:
-            callback_gas_limit = int(args[2][4], 16)
-            tx = contract_function(*args, **kwargs).build_transaction({
-                'from': self.address,
-                'gas': callback_gas_limit,
-                'nonce': deepcopy(self.nonce),
-                'maxFeePerGas': self.provider.eth.max_priority_fee + 2 * self.provider.eth.get_block('latest')['baseFeePerGas'],
-                'maxPriorityFeePerGas': self.provider.eth.max_priority_fee,
-            })
+        try:
+            if not kwargs:
+                callback_gas_limit = int(args[2][4], 16)
+                tx = contract_function(*args).build_transaction({
+                    'from': self.address,
+                    'gas': callback_gas_limit,
+                    'nonce': deepcopy(self.nonce),
+                    'maxFeePerGas': self.provider.eth.max_priority_fee + 2 * self.provider.eth.get_block('latest')[
+                        'baseFeePerGas'],
+                    'maxPriorityFeePerGas': self.provider.eth.max_priority_fee,
+                })
+            elif len(args) == 0:
+                tx = contract_function(**kwargs).build_transaction({
+                    'from': self.address,
+                    'gas': 2000000,
+                    'nonce': deepcopy(self.nonce),
+                    'maxFeePerGas': self.provider.eth.max_priority_fee + 2 * self.provider.eth.get_block('latest')[
+                        'baseFeePerGas'],
+                    'maxPriorityFeePerGas': self.provider.eth.max_priority_fee,
+                })
+            else:
+                callback_gas_limit = int(args[2][4], 16)
+                tx = contract_function(*args, **kwargs).build_transaction({
+                    'from': self.address,
+                    'gas': callback_gas_limit,
+                    'nonce': deepcopy(self.nonce),
+                    'maxFeePerGas': self.provider.eth.max_priority_fee + 2 * self.provider.eth.get_block('latest')[
+                        'baseFeePerGas'],
+                    'maxPriorityFeePerGas': self.provider.eth.max_priority_fee,
+                })
 
-        self.nonce += 1
-        return tx
+        except Exception as e:
+            self.logger.warning(e)
+        finally:
+            self.nonce += 1
+            return tx
+
 
     def sign_and_send_transaction(self, tx):
         """
         See base_interface.py for documentation
         """
-        # Sign transaction
-        signed_tx = self.provider.eth.account.sign_transaction(tx, self.private_key)
-        # Send transaction
-        tx_hash = self.provider.eth.send_raw_transaction(signed_tx.raw_transaction)
-        self.logger.info('Tx Hash: %s', tx_hash.hex())
-        return tx_hash
+        try:
+            # Sign transaction
+            signed_tx = self.provider.eth.account.sign_transaction(tx, self.private_key)
+            # Send transaction
+            tx_hash = self.provider.eth.send_raw_transaction(signed_tx.raw_transaction)
+            self.logger.info('Tx Hash: %s', tx_hash.hex())
+            return tx_hash
+        except Exception as e:
+            self.logger.warning(e)
 
     def get_transactions(self, contract_interface, height=None):
         """
         See base_interface.py for documentation
         """
-        return self.get_last_txs(contract_interface=contract_interface, block_number=height)
+        try:
+            return self.get_last_txs(contract_interface=contract_interface, block_number=height)
+        except Exception as e:
+            self.logger.warning(e)
 
     def get_last_block(self):
         """
         Gets the number of the most recent block
         """
-        return self.provider.eth.get_block('latest').number
+        try:
+            return self.provider.eth.get_block('latest')['number']
+        except Exception as e:
+            self.logger.warning(e)
 
     def get_last_txs(self, block_number=None, contract_interface=None):
         """
@@ -143,7 +161,7 @@ class EthInterface(BaseChainInterface):
         """
         try:
             if block_number is None:
-                block_number = self.provider.eth.get_block('latest').number
+                block_number = self.provider.eth.get_block('latest')['number']
             valid_transactions = contract_interface.contract.events.logNewTask().get_logs(
                 from_block=block_number,
                 to_block=block_number

@@ -65,7 +65,7 @@
   timeout: 1
 
 "534352": #Scroll
-  active: false
+  active: true
   type: "evm"
   chain_id: "534352"
   api_endpoint: https://scroll.drpc.org
@@ -246,10 +246,10 @@
   timeout: 0.5
 
 "534351": #Scroll Sepolia
-  active: false
+  active: true
   type: "evm"
   chain_id: "534351"
-  api_endpoint: https://scroll-sepolia.drpc.org
+  api_endpoint: https://sepolia-rpc.scroll.io
   contract_address: "0x4c14a6A0CD2DA2848D3C31285B828F6364087735"
   timeout: 1
 
@@ -334,7 +334,7 @@
   timeout: 1
 
 "5003": #Mantle Sepolia
-  active: true
+  active: false
   type: "evm"
   chain_id: "5003"
   api_endpoint: "https://rpc.sepolia.mantle.xyz"
@@ -350,7 +350,7 @@
   timeout: 1
 
 "1995": #Edexa
-  active: true
+  active: false
   type: "evm"
   chain_id: "1995"
   api_endpoint: "https://testnet.edexa.network/rpc"
@@ -358,7 +358,7 @@
   timeout: 1
 
 "713715": #Sei Devnet
-  active: true
+  active: false
   type: "evm"
   chain_id: "713715"
   api_endpoint: "https://evm-rpc-arctic-1.sei-apis.com"
@@ -398,7 +398,7 @@
   timeout: 1
 
 "SolDN": #Solana DevNet
-  active: true
+  active: false
   type: "solana"
   chain_id: "SolDN"
   api_endpoint: https://rpc.ankr.com/solana_devnet
@@ -418,6 +418,6 @@
   type: "secret"
   chain_id: "pulsar-3"
   api_endpoint: "http://81.171.3.86:1317"
-  contract_address: "secret1drjkzeg2x0yyt927zpggnx289aj7ptcq4w6gw3"
-  code_hash: "dfa2af6f3c1dae11343169466fd936db8cefd5cf4955afd73d778597ec2390a6"
+  contract_address: "secret10ex7r7c4y704xyu086lf74ymhrqhypayfk7fkj"
+  code_hash: "012dd8efab9526dec294b6898c812ef6f6ad853e32172788f54ef3c305c1ecc5"
   feegrant_address: "secret1gutgtpw0caqfsp8ja0r5yecv8jxz2y8vhpnck8"
