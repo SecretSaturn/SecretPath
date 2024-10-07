@@ -1,6 +1,8 @@
 import fs from "fs";
 import { Wallet, SecretNetworkClient } from "secretjs";
-import { computeAddress } from "ethers/lib/utils";
+import { HdPath, Slip10RawIndex } from "@cosmjs/crypto";
+import { LedgerSigner } from "@cosmjs/ledger-amino";
+import TransportNodeHid from "@ledgerhq/hw-transport-node-hid";
 import 'dotenv/config'
 
 var mnemonic = process.env.MNEMONIC!;
@@ -8,6 +10,41 @@ var endpoint = process.env.LCD_WEB_URL!;
 var chainId = process.env.CHAIN_ID!;
 
 type PublicKeyResponse = { encryption_key: string, verification_key: string };
+
+// Returns a client with which we can interact with secret network
+const initializeLedgerClient = async (endpoint: string, chainId: string) => {
+  const interactiveTimeout = 120_000;
+  const accountIndex = 0;
+  const derivationPath: HdPath = [
+    Slip10RawIndex.hardened(44),
+    Slip10RawIndex.hardened(529),
+    Slip10RawIndex.hardened(0),
+    Slip10RawIndex.normal(0),
+    Slip10RawIndex.normal(accountIndex),
+  ]
+
+  const ledgerTransport = await TransportNodeHid.create(interactiveTimeout, interactiveTimeout);
+  const ledgerSigner = new LedgerSigner(
+    ledgerTransport,
+  {
+    testModeAllowed: true,
+    hdPaths: [derivationPath],
+    prefix: 'secret',
+    ledgerAppName: 'secret'
+  }
+);
+const [{ address }] = await ledgerSigner.getAccounts();
+  const client = new SecretNetworkClient({
+    // Create a client to interact with the network
+    url: endpoint,
+    chainId: chainId,
+    wallet: ledgerSigner,
+    walletAddress: address,
+  });
+
+  console.log(`\nInitialized client with wallet address: ${address}`);
+  return client;
+};
 
 // Returns a client with which we can interact with secret network
 const initializeClient = async (endpoint: string, chainId: string) => {
@@ -67,9 +104,11 @@ const upgradeGateway = async (
   console.log(`Gateway contract code hash: ${contractCodeHash}`);
 
   const contractAddress = "secret10ex7r7c4y704xyu086lf74ymhrqhypayfk7fkj"
-  const contract = await client.tx.compute.migrateContract(
+  const ledgerClient = await initializeLedgerClient(endpoint, chainId);
+
+  const contract = await ledgerClient.tx.compute.migrateContract(
     {
-      sender: client.address,
+      sender: ledgerClient.address,
       contract_address: contractAddress,
       code_id: codeId,
       msg: {

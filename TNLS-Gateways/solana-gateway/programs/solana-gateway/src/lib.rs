@@ -40,7 +40,7 @@ security_txt! {
 const TASK_DESTINATION_NETWORK: &str = "pulsar-3";
 const CHAIN_ID: &str = "SolDN";
 const SECRET_GATEWAY_PUBKEY: &str =
-    "0x04f0c3e600c7f7b3c483debe8f98a839c2d93230d8f857b3c298dc8763c208afcd62dcb34c9306302bf790d8c669674a57defa44c6a95b183d94f2e645526ffe5e";
+    "0x046d0aac3ef10e69055e934ca899f508ba516832dc74aa4ed4d741052ed5a568774d99d3bfed641a7935ae73aac8e34938db747c2f0e8b2aa95c25d069a575cc8b";
 const VRF_CONTRACT_ADDRESS: &str = "secret1cknezaxnzfys2w8lyyrr7fed9wxejvgq7alhqx";
 const VRF_CODE_HASH: &str = "0b9395a7550b49d2b8ed73497fd2ebaf896c48950c4186e491ded6d22e58b8c3";
 
