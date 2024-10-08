@@ -108,38 +108,52 @@ class SCRTInterface(BaseChainInterface):
         """
         max_retries = 20
         wait_interval = 3
-        try:
-            # Broadcast the transaction in SYNC mode
-            final_tx = self.provider.tx.broadcast_adapter(tx, mode=BroadcastMode.BROADCAST_MODE_ASYNC)
-            tx_hash = final_tx.txhash
-            self.logger.info(f"Transaction broadcasted with hash: {tx_hash}")
+        max_broadcast_attempts = 3  # Number of times to retry the entire broadcast process
+        broadcast_attempt = 0
 
-            # Repeatedly fetch the transaction result until it's included in a block
-            for attempt in range(max_retries):
-                try:
-                    tx_result = self.provider.tx.tx_info(tx_hash)
-                    if tx_result:
-                        self.logger.info(f"Transaction included in block: {tx_result.height}")
-                        return tx_result
-                except LCDResponseError as e:
-                    if 'not found' in str(e).lower():
-                        # Transaction not yet found, wait and retry
-                        self.logger.info(f"Transaction not found, retrying... ({attempt+1}/{max_retries})")
-                        sleep(wait_interval)
-                        continue
-                    else:
-                        self.logger.error(f"LCDResponseError while fetching tx result: {e}")
+        while broadcast_attempt < max_broadcast_attempts:
+            try:
+                # Broadcast the transaction in SYNC mode
+                final_tx = self.provider.tx.broadcast_adapter(tx, mode=BroadcastMode.BROADCAST_MODE_ASYNC)
+                tx_hash = final_tx.txhash
+                self.logger.info(f"Transaction broadcasted with hash: {tx_hash}")
+
+                # Repeatedly fetch the transaction result until it's included in a block
+                for attempt in range(max_retries):
+                    try:
+                        tx_result = self.provider.tx.tx_info(tx_hash)
+                        if tx_result:
+                            self.logger.info(f"Transaction included in block: {tx_result.height}")
+                            return tx_result  # Exit function if transaction is successfully included in a block
+                    except LCDResponseError as e:
+                        if 'not found' in str(e).lower():
+                            # Transaction not yet found, wait and retry
+                            self.logger.info(f"Transaction not found, retrying... ({attempt + 1}/{max_retries})")
+                            sleep(wait_interval)
+                            continue
+                        else:
+                            self.logger.error(f"LCDResponseError while fetching tx result: {e}")
+                            raise e
+                    except Exception as e:
+                        self.logger.error(f"Unexpected error while fetching tx result: {e}")
                         raise e
-                except Exception as e:
-                    self.logger.error(f"Unexpected error while fetching tx result: {e}")
-                    raise e
-            raise Exception(f"Transaction {tx_hash} not included in a block after {max_retries} retries")
-        except LCDResponseError as e:
-            self.logger.error(f"LCDResponseError during transaction broadcast: {e}")
-            raise e
-        except Exception as e:
-            self.logger.error(f"An unexpected error occurred during transaction broadcast: {e}")
-            raise e
+                # If max_retries are exceeded and no result is found, retry broadcasting
+                self.logger.warning(
+                    f"Transaction {tx_hash} not included in a block after {max_retries} retries. Retrying broadcast... ({broadcast_attempt + 1}/{max_broadcast_attempts})")
+
+            except LCDResponseError as e:
+                self.logger.error(f"LCDResponseError during transaction broadcast: {e}")
+                raise e
+            except Exception as e:
+                self.logger.error(f"An unexpected error occurred during transaction broadcast: {e}")
+                raise e
+
+            # Increment the broadcast attempt counter
+            broadcast_attempt += 1
+
+        # If all broadcast attempts fail, raise an exception
+        raise Exception(
+            f"Transaction could not be included in a block after {max_broadcast_attempts} broadcast attempts.")
 
     def get_last_block(self):
         """
