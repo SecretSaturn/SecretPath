@@ -419,5 +419,5 @@
   chain_id: "pulsar-3"
   api_endpoint: "http://81.171.3.86:1317"
   contract_address: "secret10ex7r7c4y704xyu086lf74ymhrqhypayfk7fkj"
-  code_hash: "012dd8efab9526dec294b6898c812ef6f6ad853e32172788f54ef3c305c1ecc5"
+  code_hash: "ad8ca07ffba1cb26ebf952c29bc4eced8319c171430993e5b5089887f27b3f70"
   feegrant_address: "secret1gutgtpw0caqfsp8ja0r5yecv8jxz2y8vhpnck8"
