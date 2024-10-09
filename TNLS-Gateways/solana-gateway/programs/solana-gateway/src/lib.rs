@@ -8,7 +8,8 @@ use hex::decode;
 use solana_program::{
     instruction::Instruction,
     program::invoke_signed,
-    secp256k1_recover::secp256k1_recover
+    secp256k1_recover::secp256k1_recover,
+    sysvar::rent::Rent
 };
 use solana_security_txt::security_txt;
 use std::{
@@ -84,23 +85,29 @@ mod solana_gateway {
     }
 
     pub fn payout_balance(ctx: Context<PayoutBalance>) -> Result<()> {
-        let gateway_state = &mut ctx.accounts.gateway_state;
-
-        let cpi_accounts = system_program::Transfer {
-            from: gateway_state.to_account_info(),
-            to: ctx.accounts.owner.to_account_info(),
-        };
-
-        let cpi_context =
-            CpiContext::new(ctx.accounts.system_program.to_account_info(), cpi_accounts);
-
-        system_program::transfer(
-            cpi_context,
-            ctx.accounts.gateway_state.to_account_info().lamports(),
-        )?;
-
+        // Get the current amount of lamports in the gateway_state account
+        let lamports = **ctx.accounts.gateway_state.to_account_info().lamports.borrow();
+    
+        // Get the rent-exempt minimum balance for the account
+        let rent = Rent::get()?;
+        let rent_exempt_minimum = rent.minimum_balance(ctx.accounts.gateway_state.to_account_info().data_len());
+    
+        // Calculate the amount to transfer, ensuring we don't transfer below the rent-exempt minimum
+        let amount_to_transfer = lamports.saturating_sub(rent_exempt_minimum);
+    
+        // If there is no SOL to transfer, return early
+        if amount_to_transfer == 0 {
+            return Ok(());
+        }
+    
+        // Manually subtract lamports from the gateway_state account
+        **ctx.accounts.gateway_state.to_account_info().lamports.borrow_mut() -= amount_to_transfer;
+        // Add lamports to the owner's account
+        **ctx.accounts.owner.to_account_info().lamports.borrow_mut() += amount_to_transfer;
+    
         Ok(())
     }
+    
 
     pub fn send(
         ctx: Context<Send>,
