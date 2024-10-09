@@ -168,7 +168,9 @@ describe("solana-gateway", () => {
     const callbackGasLimit = 1000000;
 
     const data = JSON.stringify({ numWords: 10 });
-    const nonce = Buffer.from(new Uint8Array(12));
+
+    // Empty nonce because there is no encryption.
+    const nonce = [0,0,0,0,0,0,0,0,0,0,0,0];
 
     // This is an empty callback for the sake of having a callback in the sample code.
     // Here, you would put your callback selector for you contract in.
@@ -202,71 +204,10 @@ describe("solana-gateway", () => {
       routingCodeHash,
       taskDestinationNetwork,
       handle,
-      nonce: Buffer.from(nonce),
+      nonce: nonce,
       callbackGasLimit,
       payload: plaintext,
-      payloadSignature: Buffer.from("AA="),
-    };
-
-    const tx = await program.methods
-      .send(provider.publicKey, routingContract, executionInfo)
-      .accounts({
-        gatewayState: gatewayPDA,
-        taskState: taskPDA,
-        user: provider.publicKey,
-        systemProgram: web3.SystemProgram.programId,
-      })
-      .rpc();
-
-    console.log("Task sent:", tx);
-  });
-
-  it("Sends a task", async () => {
-    const taskDestinationNetwork = "pulsar-3";
-    const routingContract = "secret15n9rw7leh9zc64uqpfxqz2ap3uz4r90e0uz3y3";
-    const routingCodeHash = "931a6fa540446ca028955603fa4b924790cd3c65b3893196dc686de42b833f9c";
-    const handle = "request_random";
-    const callbackGasLimit = 1000000;
-
-    const data = JSON.stringify({ numWords: 10 });
-    const nonce = Buffer.from(new Uint8Array(12));
-
-    // This is an empty callback for the sake of having a callback in the sample code.
-    // Here, you would put your callback selector for you contract in.
-    // 8 bytes of the function Identifier = CallbackTest in the SecretPath Solana Contract
-    const functionIdentifier = [196, 61, 185, 224, 30, 229, 25, 52];
-    const programId = program.programId.toBuffer();
-
-    // Callback Selector is ProgramId (32 bytes) + function identifier (8 bytes) concatenated
-    const callbackSelector = Buffer.concat([
-      programId,
-      Buffer.from(functionIdentifier),
-    ]);
-
-    const payload = {
-      data,
-      routing_info: routingContract,
-      routing_code_hash: routingCodeHash,
-      user_address: provider.publicKey.toBase58(),
-      user_key: Buffer.from(new Uint8Array(4)).toString("base64"),
-      callback_address: "HZy2bXo1NmcTWURJvk9c8zofqE2MUvpu7wU722o7gtEN",
-      callback_selector: callbackSelector.toString("base64"),
-      callback_gas_limit: callbackGasLimit,
-    };
-
-    const payloadJson = JSON.stringify(payload);
-    const plaintext = Buffer.from(payloadJson);
-
-    const executionInfo = {
-      userKey: Buffer.from(new Uint8Array(4)),
-      userPubkey: Buffer.from(new Uint8Array(4)),
-      routingCodeHash,
-      taskDestinationNetwork,
-      handle,
-      nonce: Buffer.from(nonce),
-      callbackGasLimit,
-      payload: plaintext,
-      payloadSignature: Buffer.from("AA="),
+      payloadSignature: [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
     };
 
     const tx = await program.methods
