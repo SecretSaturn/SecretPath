@@ -33,7 +33,7 @@ colorama==0.4.6
 construct==2.10.68
 construct-typing==0.5.3
 cryptography==40.0.2
-cytoolz==0.12.0
+cytoolz==1.0.0
 decorator==5.1.1
 dill==0.3.6
 ecdsa==0.16.1
