@@ -6,7 +6,8 @@ from solders.pubkey import Pubkey
 from threading import Lock
 from solana.transaction import Transaction
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from logging import getLogger, basicConfig, INFO, StreamHandler
+from logging import getLogger, INFO, StreamHandler
+import logging
 from borsh_construct import CStruct, U64, String, U8, U32, Bytes
 from solders.system_program import ID as SYS_PROGRAM_ID
 from solders.instruction import Instruction, AccountMeta
@@ -68,13 +69,14 @@ class SolanaInterface:
         self.lock = Lock()  # Thread lock for synchronization
         self.executor = ThreadPoolExecutor(max_workers=1)  # Thread pool executor with one worker
 
-        # Set up logging
-        basicConfig(
-            level=INFO,
-            format="%(asctime)s [Solana Interface: %(levelname)8.8s] %(message)s",
-            handlers=[StreamHandler()],
-        )
-        self.logger = getLogger()  # Get the logger instance
+        # Create a separate logger instance
+        self.logger = getLogger("SolanaInterface")
+        self.logger.setLevel(INFO)
+        handler = StreamHandler()
+        formatter = logging.Formatter("%(asctime)s [Solana Interface: %(levelname)4.8s] %(message)s")
+        handler.setFormatter(formatter)
+        self.logger.addHandler(handler)
+        self.logger.propagate = False
 
     def sign_and_send_transaction(self, txn):
         """

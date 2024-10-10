@@ -1,6 +1,7 @@
 import json
 from copy import deepcopy
-from logging import getLogger, basicConfig, DEBUG, StreamHandler
+from logging import getLogger, DEBUG, StreamHandler, INFO
+import logging
 from threading import Lock, Timer
 from concurrent.futures import ThreadPoolExecutor
 from typing import List
@@ -197,12 +198,13 @@ class SCRTContract(BaseContractInterface):
         self.code_hash = code_hash
         self.abi = json.loads(abi)
         self.interface = interface
-        basicConfig(
-            level=DEBUG,
-            format="%(asctime)s [SCRT interface: %(levelname)8.8s] %(message)s",
-            handlers=[StreamHandler()],
-        )
-        self.logger = getLogger()
+        self.logger = getLogger("SCRT Interface")
+        self.logger.setLevel(INFO)
+        handler = StreamHandler()
+        formatter = logging.Formatter("%(asctime)s [SCRT Interface: %(levelname)4.8s] %(message)s")
+        handler.setFormatter(formatter)
+        self.logger.addHandler(handler)
+        self.logger.propagate = False
         self.lock = Lock()
         self.logger.info(f"Initialized SCRT interface for contract {self.address}")
         pass

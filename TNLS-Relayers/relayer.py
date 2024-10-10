@@ -15,7 +15,8 @@ get destination network
 stringify object as json
 send json string to destination network
 """
-from logging import getLogger, basicConfig, DEBUG, StreamHandler
+from logging import getLogger, basicConfig, DEBUG, StreamHandler, INFO
+import logging
 from threading import Thread
 from time import sleep
 from typing import Dict, Tuple
@@ -65,12 +66,14 @@ class Relayer:
         }
 
         # Configure the logger
-        basicConfig(
-            level=DEBUG,
-            format="%(asctime)s [relayer: %(levelname)8.8s] %(message)s",
-            handlers=[StreamHandler()],
-        )
-        self.logger = getLogger()
+        # Set up logging
+        self.logger = getLogger("Relayer")
+        self.logger.setLevel(INFO)
+        handler = StreamHandler()
+        formatter = logging.Formatter("%(asctime)s [Relayer: %(levelname)4.8s] %(message)s")
+        handler.setFormatter(formatter)
+        self.logger.addHandler(handler)
+        self.logger.propagate = False
         self.num_loops = num_loops  # Number of loops to run (if specified)
 
     def poll_for_transactions(self):
@@ -112,7 +115,7 @@ class Relayer:
                 Returns:
                     A tuple containing the block number and a list of parsed tasks.
                 """
-
+                #block_num = 6846784
                 # Get transactions from the specified block
                 transactions = chain_interface.get_transactions(contract_interface, height=block_num)
                 tasks_tmp = []

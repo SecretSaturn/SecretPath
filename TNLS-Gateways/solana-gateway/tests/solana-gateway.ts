@@ -121,47 +121,50 @@ describe("solana-gateway", () => {
     );
   });
 
-  it('Prints tasks from task_state', async () => {
+  it("Prints tasks from task_state", async () => {
     // Fetch the raw data of the task_state account
     const accountInfo = await provider.connection.getAccountInfo(taskPDA);
     if (!accountInfo) {
-      console.log('Task State account does not exist');
+      console.log("Task State account does not exist");
       return;
     }
     const data = accountInfo.data;
-  
+
     const TASK_SIZE = 41;
     const PAYLOAD_HASH_SIZE = 32;
     const TASK_ID_SIZE = 8;
     const COMPLETED_OFFSET = 40; // Last byte for completed flag
-  
+
     // Calculate the number of tasks based on a known constant or from data length
     //const numTasks = Math.floor(data.length / TASK_SIZE);
     const numTasks = 20;
     console.log(`Number of tasks: ${numTasks}`);
-  
+
     for (let i = 0; i < numTasks; i++) {
       const start = i * TASK_SIZE;
       const taskBuffer = data.slice(start, start + TASK_SIZE);
-  
+
       // Extract payload_hash (32 bytes)
-      const payloadHash = taskBuffer.slice(0, PAYLOAD_HASH_SIZE).toString('hex');
-  
+      const payloadHash = taskBuffer
+        .slice(0, PAYLOAD_HASH_SIZE)
+        .toString("hex");
+
       // Extract task_id (8 bytes), little-endian
-      const taskIdBuffer = taskBuffer.slice(PAYLOAD_HASH_SIZE, PAYLOAD_HASH_SIZE + TASK_ID_SIZE);
+      const taskIdBuffer = taskBuffer.slice(
+        PAYLOAD_HASH_SIZE,
+        PAYLOAD_HASH_SIZE + TASK_ID_SIZE
+      );
       const taskId = Buffer.from(taskIdBuffer).readBigUInt64LE();
-  
+
       // Extract completed (1 byte)
       const completed = taskBuffer[COMPLETED_OFFSET] !== 0;
-  
+
       console.log(`Task ID: ${taskId}`);
       console.log(`  Payload Hash: 0x${payloadHash}`);
       console.log(`  Completed: ${completed}`);
-      console.log(`  Output: ${taskBuffer.toString('hex')}`);
+      console.log(`  Output: ${taskBuffer.toString("hex")}`);
     }
   });
-  
-  
 
   it("Performs task payout", async () => {
     // Fetch initial balances
@@ -318,230 +321,227 @@ describe("solana-gateway", () => {
     );
 
     // Fetch the transaction details
-  const txDetails = await provider.connection.getTransaction(txSignature, {
-    commitment: "confirmed",
-  });
-  assert.ok(txDetails, "Transaction details not found");
+    const txDetails = await provider.connection.getTransaction(txSignature, {
+      commitment: "confirmed",
+    });
+    assert.ok(txDetails, "Transaction details not found");
 
-  // Extract logs from transaction meta
-  const logs = txDetails.meta.logMessages;
-  assert.ok(logs, "No logs found in transaction");
+    // Extract logs from transaction meta
+    const logs = txDetails.meta.logMessages;
+    assert.ok(logs, "No logs found in transaction");
 
-  console.log(logs);
-  // Find the LogNewTask event in the logs
-  let logNewTaskBase64 = null;
-  for (const log of logs) {
-    if (log.startsWith("Program log: LogNewTask:")) {
-      console.log(log);
-      // Extract the base64-encoded data after the prefix
-      logNewTaskBase64 = log.split("Program log: LogNewTask:")[1].trim();
-      break;
+    console.log(logs);
+    // Find the LogNewTask event in the logs
+    let logNewTaskBase64 = null;
+    for (const log of logs) {
+      if (log.startsWith("Program log: LogNewTask:")) {
+        console.log(log);
+        // Extract the base64-encoded data after the prefix
+        logNewTaskBase64 = log.split("Program log: LogNewTask:")[1].trim();
+        break;
+      }
     }
-  }
 
-  assert.ok(logNewTaskBase64, "LogNewTask event not found in logs");
+    assert.ok(logNewTaskBase64, "LogNewTask event not found in logs");
 
-  // Decode the base64-encoded data
-  const logNewTaskDataBuffer = Buffer.from(logNewTaskBase64, "base64");
+    // Decode the base64-encoded data
+    const logNewTaskDataBuffer = Buffer.from(logNewTaskBase64, "base64");
 
-  // Define the Borsh schema
-  const borsh = require("borsh");
+    // Define the Borsh schema
+    const borsh = require("borsh");
 
-  class LogNewTask {
-    constructor(props) {
-      Object.assign(this, props);
+    class LogNewTask {
+      constructor(props) {
+        Object.assign(this, props);
+      }
     }
-  }
 
-  // Borsh schema for deserialization
-  const logNewTaskSchema = new Map([
-    [
+    // Borsh schema for deserialization
+    const logNewTaskSchema = new Map([
+      [
+        LogNewTask,
+        {
+          kind: "struct",
+          fields: [
+            ["task_id", "u64"],
+            ["source_network", "string"],
+            ["user_address", ["u8"]],
+            ["routing_info", "string"],
+            ["payload_hash", [32]],
+            ["user_key", ["u8"]],
+            ["user_pubkey", ["u8"]],
+            ["routing_code_hash", "string"],
+            ["task_destination_network", "string"],
+            ["handle", "string"],
+            ["nonce", [12]],
+            ["callback_gas_limit", "u32"],
+            ["payload", ["u8"]],
+            ["payload_signature", [64]],
+          ],
+        },
+      ],
+    ]);
+
+    // Deserialize the data using Borsh
+    const logNewTaskData = borsh.deserialize(
+      logNewTaskSchema,
       LogNewTask,
-      {
-        kind: "struct",
-        fields: [
-          ["task_id", "u64"],
-          ["source_network", "string"],
-          ["user_address", ["u8"]],
-          ["routing_info", "string"],
-          ["payload_hash", [32]],
-          ["user_key", ["u8"]],
-          ["user_pubkey", ["u8"]],
-          ["routing_code_hash", "string"],
-          ["task_destination_network", "string"],
-          ["handle", "string"],
-          ["nonce", [12]],
-          ["callback_gas_limit", "u32"],
-          ["payload", ["u8"]],
-          ["payload_signature", [64]],
-        ],
-      },
-    ],
-  ]);
-
-  // Deserialize the data using Borsh
-  const logNewTaskData = borsh.deserialize(
-    logNewTaskSchema,
-    LogNewTask,
-    logNewTaskDataBuffer
-  );
-
-  // Now, add assertions to verify the contents of logNewTaskData
-
-  // Assert source_network
-  assert.strictEqual(
-    logNewTaskData.source_network,
-    "SolDN",
-    "Source network does not match"
-  );
-
-  // Assert task_destination_network
-  assert.strictEqual(
-    logNewTaskData.task_destination_network,
-    taskDestinationNetwork,
-    "Task destination network does not match"
-  );
-
-  // Assert payload_hash
-  const expectedPayloadHash = Buffer.from(getBytes(keccak256(plaintext)))
-
-  const payloadHashFromLog = Buffer.from(logNewTaskData.payload_hash);
-
-  assert.deepStrictEqual(
-    payloadHashFromLog,
-    expectedPayloadHash,
-    `Payload hash does not match. Expected: ${payloadHashFromLog}, Got: ${expectedPayloadHash}`
-  );
-
-  // Assert user_address
-  const userAddressBytes = bs58.decode(provider.publicKey.toBase58());
-  const userAddressFromLog = Buffer.from(logNewTaskData.user_address);
-
-  assert.deepStrictEqual(
-    userAddressFromLog,
-    userAddressBytes,
-    "User address does not match"
-  );
-
-  // Assert routing_info
-  assert.strictEqual(
-    logNewTaskData.routing_info,
-    routingContract,
-    "Routing info does not match"
-  );
-
-  // Assert routing_code_hash
-  assert.strictEqual(
-    logNewTaskData.routing_code_hash,
-    routingCodeHash,
-    "Routing code hash does not match"
-  );
-
-  // Assert handle
-  assert.strictEqual(
-    logNewTaskData.handle,
-    handle,
-    "Handle does not match"
-  );
-
-  // Assert nonce
-  assert.deepStrictEqual(
-    Array.from(logNewTaskData.nonce),
-    Array.from(nonce),
-    `Nonce does not match. Expected: ${logNewTaskData.nonce}, Got: ${nonce}`
-  );
-
-  // Assert callback_gas_limit
-  assert.strictEqual(
-    logNewTaskData.callback_gas_limit,
-    callbackGasLimit,
-    "Callback gas limit does not match"
-  );
-
-  // Assert payload
-  const payloadFromLog = Buffer.from(logNewTaskData.payload);
-
-  assert.deepStrictEqual(
-    payloadFromLog,
-    plaintext,
-    "Payload does not match"
-  );
-
-  // Assert user_key
-  const userKeyFromLog = Buffer.from(logNewTaskData.user_key);
-
-  assert.deepStrictEqual(
-    userKeyFromLog,
-    Buffer.from(new Uint8Array(4)),
-    "User key does not match"
-  );
-
-  // Assert user_pubkey
-  const userPubkeyFromLog = Buffer.from(logNewTaskData.user_pubkey);
-
-  assert.deepStrictEqual(
-    userPubkeyFromLog,
-    Buffer.from(new Uint8Array(4)),
-    "User pubkey does not match"
-  );
-
-  // Assert payload_signature
-  const payloadSignatureFromLog = Buffer.from(
-    logNewTaskData.payload_signature
-  );
-
-  assert.deepStrictEqual(
-    Buffer.from(payloadSignatureFromLog),
-    Buffer.from(emptySignature),
-    "Payload signature does not match"
-  );
-
-   // Fetch the raw data of the task_state account
-   const accountInfo = await provider.connection.getAccountInfo(taskPDA);
-   if (!accountInfo) {
-     console.log('Task State account does not exist');
-     return;
-   }
- 
-   const TASK_SIZE = 41;
-   const PAYLOAD_HASH_SIZE = 32;
-   const TASK_ID_SIZE = 8;
-   const COMPLETED_OFFSET = 40; // Last byte for completed flag
-
-   // +8 bytes for the account discriminator. This is not obvious inside of the program, but needs to be kept in mind when handling the raw account data.
-   const start = logNewTaskData.task_id * TASK_SIZE + 8; 
-   const taskBuffer = accountInfo.data.slice(start, start+TASK_SIZE);
- 
-     // Extract payload_hash (32 bytes)x
-     const payloadHash = taskBuffer.slice(0, PAYLOAD_HASH_SIZE);
- 
-     // Extract task_id (8 bytes), little-endian
-     const taskIdBuffer = taskBuffer.slice(PAYLOAD_HASH_SIZE, PAYLOAD_HASH_SIZE+TASK_ID_SIZE);
-     const taskId = Buffer.from(taskIdBuffer).readBigUInt64LE();
- 
-     // Extract completed (1 byte)
-     const completed = taskBuffer[COMPLETED_OFFSET] !== 0;
- 
-     console.log(`Task ID: ${taskId}`);
-     console.log(`  Payload Hash: 0x${payloadHash.toString('hex')}`);
-     console.log(`  Completed: ${completed}`);
-     console.log(`  Output: ${taskBuffer.toString('hex')}`);
-
-     assert.deepStrictEqual(
-      Buffer.from(logNewTaskData.payload_hash),
-      Buffer.from(payloadHash),
-      `Stored payloadHash do not match. Expected: ${Buffer.from(logNewTaskData.payload_hash).toString('hex')}, Got: ${payloadHash.toString('hex')}`
+      logNewTaskDataBuffer
     );
 
-     assert.deepStrictEqual(
+    // Now, add assertions to verify the contents of logNewTaskData
+
+    // Assert source_network
+    assert.strictEqual(
+      logNewTaskData.source_network,
+      "SolDN",
+      "Source network does not match"
+    );
+
+    // Assert task_destination_network
+    assert.strictEqual(
+      logNewTaskData.task_destination_network,
+      taskDestinationNetwork,
+      "Task destination network does not match"
+    );
+
+    // Assert payload_hash
+    const expectedPayloadHash = Buffer.from(getBytes(keccak256(plaintext)));
+
+    const payloadHashFromLog = Buffer.from(logNewTaskData.payload_hash);
+
+    assert.deepStrictEqual(
+      payloadHashFromLog,
+      expectedPayloadHash,
+      `Payload hash does not match. Expected: ${payloadHashFromLog}, Got: ${expectedPayloadHash}`
+    );
+
+    // Assert user_address
+    const userAddressBytes = bs58.decode(provider.publicKey.toBase58());
+    const userAddressFromLog = Buffer.from(logNewTaskData.user_address);
+
+    assert.deepStrictEqual(
+      userAddressFromLog,
+      userAddressBytes,
+      "User address does not match"
+    );
+
+    // Assert routing_info
+    assert.strictEqual(
+      logNewTaskData.routing_info,
+      routingContract,
+      "Routing info does not match"
+    );
+
+    // Assert routing_code_hash
+    assert.strictEqual(
+      logNewTaskData.routing_code_hash,
+      routingCodeHash,
+      "Routing code hash does not match"
+    );
+
+    // Assert handle
+    assert.strictEqual(logNewTaskData.handle, handle, "Handle does not match");
+
+    // Assert nonce
+    assert.deepStrictEqual(
+      Array.from(logNewTaskData.nonce),
+      Array.from(nonce),
+      `Nonce does not match. Expected: ${logNewTaskData.nonce}, Got: ${nonce}`
+    );
+
+    // Assert callback_gas_limit
+    assert.strictEqual(
+      logNewTaskData.callback_gas_limit,
+      callbackGasLimit,
+      "Callback gas limit does not match"
+    );
+
+    // Assert payload
+    const payloadFromLog = Buffer.from(logNewTaskData.payload);
+
+    assert.deepStrictEqual(payloadFromLog, plaintext, "Payload does not match");
+
+    // Assert user_key
+    const userKeyFromLog = Buffer.from(logNewTaskData.user_key);
+
+    assert.deepStrictEqual(
+      userKeyFromLog,
+      Buffer.from(new Uint8Array(4)),
+      "User key does not match"
+    );
+
+    // Assert user_pubkey
+    const userPubkeyFromLog = Buffer.from(logNewTaskData.user_pubkey);
+
+    assert.deepStrictEqual(
+      userPubkeyFromLog,
+      Buffer.from(new Uint8Array(4)),
+      "User pubkey does not match"
+    );
+
+    // Assert payload_signature
+    const payloadSignatureFromLog = Buffer.from(
+      logNewTaskData.payload_signature
+    );
+
+    assert.deepStrictEqual(
+      Buffer.from(payloadSignatureFromLog),
+      Buffer.from(emptySignature),
+      "Payload signature does not match"
+    );
+
+    // Fetch the raw data of the task_state account
+    const accountInfo = await provider.connection.getAccountInfo(taskPDA);
+    if (!accountInfo) {
+      console.log("Task State account does not exist");
+      return;
+    }
+
+    const TASK_SIZE = 41;
+    const PAYLOAD_HASH_SIZE = 32;
+    const TASK_ID_SIZE = 8;
+    const COMPLETED_OFFSET = 40; // Last byte for completed flag
+
+    // +8 bytes for the account discriminator. This is not obvious inside of the program, but needs to be kept in mind when handling the raw account data.
+    const start = logNewTaskData.task_id * TASK_SIZE + 8;
+    const taskBuffer = accountInfo.data.slice(start, start + TASK_SIZE);
+
+    // Extract payload_hash (32 bytes)x
+    const payloadHash = taskBuffer.slice(0, PAYLOAD_HASH_SIZE);
+
+    // Extract task_id (8 bytes), little-endian
+    const taskIdBuffer = taskBuffer.slice(
+      PAYLOAD_HASH_SIZE,
+      PAYLOAD_HASH_SIZE + TASK_ID_SIZE
+    );
+    const taskId = Buffer.from(taskIdBuffer).readBigUInt64LE();
+
+    // Extract completed (1 byte)
+    const completed = taskBuffer[COMPLETED_OFFSET] !== 0;
+
+    console.log(`Task ID: ${taskId}`);
+    console.log(`  Payload Hash: 0x${payloadHash.toString("hex")}`);
+    console.log(`  Completed: ${completed}`);
+    console.log(`  Output: ${taskBuffer.toString("hex")}`);
+
+    assert.deepStrictEqual(
+      Buffer.from(logNewTaskData.payload_hash),
+      Buffer.from(payloadHash),
+      `Stored payloadHash do not match. Expected: ${Buffer.from(
+        logNewTaskData.payload_hash
+      ).toString("hex")}, Got: ${payloadHash.toString("hex")}`
+    );
+
+    assert.deepStrictEqual(
       Number(logNewTaskData.task_id),
       Number(taskId),
       `Stored Task_ids do not match. Expected: ${logNewTaskData.task_id}, Got: ${taskId}`
     );
 
-   console.log(
-    "All assertions passed, LogNewTask event verified successfully."
-  );
+    console.log(
+      "All assertions passed, LogNewTask event verified successfully."
+    );
   });
 
   /*it("Performs post execution", async () => {

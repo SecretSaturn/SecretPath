@@ -1,6 +1,7 @@
 import json
 import os
-from logging import getLogger, basicConfig, INFO, StreamHandler
+from logging import getLogger, INFO, StreamHandler
+import logging
 from pathlib import Path
 
 from flask import Flask, current_app, Blueprint
@@ -174,12 +175,13 @@ def generate_full_config(config_file, providers=None):
             - keys_dict: A dictionary for storing keys (currently empty).
     """
     # Set up basic logging configuration for the application
-    basicConfig(
-        level=INFO,
-        format="%(asctime)s [Eth Interface: %(levelname)8.8s] %(message)s",
-        handlers=[StreamHandler()],
-    )
-    logger = getLogger()
+    logger = getLogger("Setup Interface")
+    logger.setLevel(INFO)
+    handler = StreamHandler()
+    formatter = logging.Formatter("%(asctime)s [Setup Interface: %(levelname)4.8s] %(message)s")
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    logger.propagate = False
 
     # Load the configuration dictionary from the YAML file
     with open(config_file) as f:

@@ -1,6 +1,7 @@
 import json
 from copy import deepcopy
 from logging import getLogger, basicConfig, INFO, StreamHandler
+import logging
 from typing import List
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Lock, Timer
@@ -31,12 +32,13 @@ class EthInterface(BaseChainInterface):
         self.nonce = self.provider.eth.get_transaction_count(self.address, 'pending')
 
         # Set up logging
-        basicConfig(
-            level=INFO,
-            format="%(asctime)s [Eth Interface: %(levelname)8.8s] %(message)s",
-            handlers=[StreamHandler()],
-        )
-        self.logger = getLogger()
+        self.logger = getLogger("ETH Interface")
+        self.logger.setLevel(INFO)
+        handler = StreamHandler()
+        formatter = logging.Formatter("%(asctime)s [ETH Interface: %(levelname)4.8s] %(message)s")
+        handler.setFormatter(formatter)
+        self.logger.addHandler(handler)
+        self.logger.propagate = False
 
         # Initialize lock, executor, and sync interval
         self.nonce_lock = Lock()
@@ -210,13 +212,18 @@ class EthContract(BaseContractInterface):
         self.abi = abi
         self.interface = interface
         self.contract = interface.provider.eth.contract(address=self.address, abi=self.abi)
-        basicConfig(
-            level=INFO,
-            format="%(asctime)s [Eth Contract: %(levelname)8.8s] %(message)s",
-            handlers=[StreamHandler()],
-        )
+        
+        # Set up logging
+        self.logger = getLogger("ETH Interface")
+        self.logger.setLevel(INFO)
+        handler = StreamHandler()
+        formatter = logging.Formatter("%(asctime)s [ETH Interface: %(levelname)4.8s] %(message)s")
+        handler.setFormatter(formatter)
+        self.logger.addHandler(handler)
+        self.logger.propagate = False
+
+
         self.lock = Lock()
-        self.logger = getLogger()
         self.logger.info("Initialized Eth contract with address: %s", self.address)
 
     def get_function(self, function_name):
