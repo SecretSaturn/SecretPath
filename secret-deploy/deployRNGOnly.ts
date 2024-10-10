@@ -1,6 +1,5 @@
 import fs from "fs";
 import { Wallet, SecretNetworkClient } from "secretjs";
-import { computeAddress } from "ethers/lib/utils";
 import 'dotenv/config'
 
 var mnemonic = process.env.MNEMONIC!;
@@ -141,5 +140,5 @@ async function initializeAndUploadContract(gatewayHash: string,
 
 (async () => {
   const [client, gatewayHash, gatewayAddress, contractHash, contractAddress] =
-    await initializeAndUploadContract("bd6253cde923dc577e7c421d26fc74bd78aad4212bc6bdab4751e2764d678627","secret1mj9ana8lwh2chlalfjw6mjalgynkau2z893akk","0x04173a82969fec6b375013438a650316c7c0ece9bdb0646057c34c61e25d752e6b851d56200ea3dd521f305d7dddff23ee2d40bf1d1f4bc8c592852eac9e7c8a74");
+    await initializeAndUploadContract("012dd8efab9526dec294b6898c812ef6f6ad853e32172788f54ef3c305c1ecc5","secret1qzk574v8lckjmqdg3r3qf3337pk45m7qd8x02a","0x04a0d632acd0d2f5da02fc385ea30a8deab4d5639d1a821a3a552625ad0f1759d0d2e80ca3adb236d90caf1b12e0ddf3a351c5729b5e00505472dca6fed5c31e2a");
 })();

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
-// Version: 0.2.3
-pragma solidity ^0.8.25;
+// Version: 0.2.5
+pragma solidity ^0.8.26;
 
 
 /*//////////////////////////////////////////////////////////////
@@ -352,10 +352,10 @@ contract Gateway is Initializable, OwnableUpgradeable {
     address immutable public secret_gateway_signer_address = 0x2821E794B01ABF0cE2DA0ca171A1fAc68FaDCa06;
 
     //Secret VRF additions
-    string constant public VRF_routing_info = "secret16pcjalfuy72r4k26r4kn5f5x64ruzv30knflwx";
-    //string constant public VRF_routing_info = "secret1fxs74g8tltrngq3utldtxu9yys5tje8dzdvghr";
+    //string constant public VRF_routing_info = "secret10jyexwp4zrv50eysn3l7n4n2spf0u380lcq5nz";
+    string constant public VRF_routing_info = "secret1cknezaxnzfys2w8lyyrr7fed9wxejvgq7alhqx";
 
-    string constant public VRF_routing_code_hash = "49ffed0df451622ac1865710380c14d4af98dca2d32342bb20f2b22faca3d00d";
+    string constant public VRF_routing_code_hash = "0b9395a7550b49d2b8ed73497fd2ebaf896c48950c4186e491ded6d22e58b8c3";
     bytes constant VRF_info = abi.encodePacked('}","routing_info":"',VRF_routing_info,'","routing_code_hash":"',VRF_routing_code_hash,'","user_address":"0x0000","user_key":"AAA=","callback_address":"');
 
 
@@ -419,7 +419,7 @@ contract Gateway is Initializable, OwnableUpgradeable {
     /// @param _signature The signature
     /// @return signerAddress The address of the signer
 
-    function recoverSigner(bytes32 _signedMessageHash, bytes calldata _signature) private view returns (address signerAddress) {
+    function recoverSigner(bytes32 _signedMessageHash, bytes calldata _signature) public view returns (address signerAddress) {
         require(_signature.length == 65, "Invalid Signature Length");
         
         assembly {
@@ -778,7 +778,7 @@ contract Gateway is Initializable, OwnableUpgradeable {
     /// @notice Increase the task_id to check for problems 
     /// @param _callbackGasLimit the Callback Gas Limit
 
-    function estimateRequestPrice(uint32 _callbackGasLimit) private view returns (uint256 baseFee) {
+    function estimateRequestPrice(uint32 _callbackGasLimit) public view returns (uint256 baseFee) {
         baseFee = _callbackGasLimit*tx.gasprice;
     }
 

@@ -1,6 +1,6 @@
 use cosmwasm_std::{Addr, Binary};
 use secret_toolkit::utils::HandleCallback;
-use tnls::msg::{PostExecutionMsg, PrivContractHandleMsg};
+use secret_path::msg::{PostExecutionMsg, PrivContractHandleMsg};
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};

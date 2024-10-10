@@ -11,6 +11,8 @@ use chacha20poly1305::{ChaCha20Poly1305, Nonce};
 use secp256k1::{ecdh::SharedSecret, PublicKey, SecretKey};
 use crate::state::Task;
 
+use base64::{engine::general_purpose, Engine};
+
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
     /// Optional admin address, info.sender if missing.
@@ -26,6 +28,12 @@ pub enum ExecuteMsg {
     Output { outputs: PostExecutionMsg },
     /// Rotates the gateway keys, only callable by admin.
     RotateGatewayKeys {},
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum MigrateMsg {
+    Migrate {},
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, JsonSchema, Debug)]
@@ -89,30 +97,47 @@ pub struct PreExecutionMsg {
 }
 
 impl PreExecutionMsg {
+    
     pub fn verify(&self, deps: &DepsMut) -> StdResult<()> {
-        deps.api
-            .secp256k1_verify(
-                self.payload_hash.as_slice(),
-                self.payload_signature.as_slice(),
-                self.user_pubkey.as_slice(),
-            )
-            .map_err(|err| StdError::generic_err(err.to_string()))?;
-        Ok(())
+        match deps.api.secp256k1_verify(
+            self.payload_hash.as_slice(),
+            self.payload_signature.as_slice(),
+            self.user_pubkey.as_slice(),
+        ) {
+            Ok(true) => Ok(()),
+            Ok(false) | Err(_) => {
+                deps.api.ed25519_verify(
+                    &general_purpose::STANDARD.encode(self.payload_hash.as_slice()).as_bytes(),
+                    self.payload_signature.as_slice(),
+                    self.user_pubkey.as_slice(),
+                )
+                .map_err(|err| StdError::generic_err(err.to_string()))
+                .and_then(|verified| if verified { Ok(()) } else { Err(StdError::generic_err("Verification failed")) })
+            }
+        }
     }
+
     pub fn decrypt_payload(&self, sk: Binary) -> StdResult<Payload> {
         let my_secret = SecretKey::from_slice(sk.as_slice())
             .map_err(|err| StdError::generic_err(err.to_string()))?;
+
         let their_public = PublicKey::from_slice(self.user_key.as_slice())
             .map_err(|err| StdError::generic_err(err.to_string()))?;
+
         let shared_key = SharedSecret::new(&their_public, &my_secret);
+
         let cipher = ChaCha20Poly1305::new_from_slice(shared_key.as_ref())
             .map_err(|err| StdError::generic_err(err.to_string()))?;
+
         let nonce = Nonce::from_slice(self.nonce.as_slice());
+
         let plaintext = cipher
             .decrypt(nonce, self.payload.as_slice())
             .map(Binary)
             .map_err(|err| StdError::generic_err(err.to_string()))?;
+
         let payload: Payload = from_binary(&plaintext)?;
+
         Ok(payload)
     }
 }
@@ -157,26 +182,5 @@ pub struct PostExecutionMsg {
 }
 
 impl HandleCallback for PostExecutionMsg {
-    const BLOCK_SIZE: usize = 256;
-}
-
-/// Message sent to the relayer.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct BroadcastMsg {
-    /// JSON string of results from the private contract.
-    pub result: String,
-    /// Encryption of (data, routing info, and user info).
-    pub payload: Binary,
-    /// Task ID coming from the gateway.
-    pub task_id: String,
-    /// SHA256 hash of (result, packet, task_id).
-    pub output_hash: Binary,
-    /// `output_hash` signed with Private Gateway key.
-    pub signature: Binary,
-    /// Source network (where to go once pulled into the next gateway).
-    pub routing_info: String,
-}
-
-impl HandleCallback for BroadcastMsg {
     const BLOCK_SIZE: usize = 256;
 }

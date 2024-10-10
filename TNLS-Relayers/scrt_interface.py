@@ -1,10 +1,12 @@
 import json
 from copy import deepcopy
-from logging import getLogger, basicConfig, DEBUG, StreamHandler
+from logging import getLogger, DEBUG, StreamHandler, INFO
+import logging
 from threading import Lock, Timer
 from concurrent.futures import ThreadPoolExecutor
 from typing import List
-from time import sleep, time
+from time import sleep
+import requests
 
 from secret_sdk.client.lcd import LCDClient
 from secret_sdk.client.lcd.api.tx import CreateTxOptions, BroadcastMode
@@ -22,24 +24,28 @@ class SCRTInterface(BaseChainInterface):
     """
 
     def __init__(self, private_key="", api_url="", chain_id="", provider=None, feegrant_address=None, sync_interval=30, **kwargs):
+
         if isinstance(private_key, str):
             self.private_key = RawKey.from_hex(private_key)
         else:
             self.private_key = RawKey(private_key)
+
         if provider is None:
             self.provider = LCDClient(url=api_url, chain_id=chain_id, **kwargs)
         else:
             self.provider = provider
+
         self.feegrant_address = feegrant_address
         self.address = str(self.private_key.acc_address)
         self.wallet = self.provider.wallet(self.private_key)
+        self.api_url = api_url
         self.logger = getLogger()
 
         # Initialize account number and sequence
         self.account_number = None
         self.sequence = None
 
-        self.timer = None;
+        self.timer = None
 
         self.sequence_lock = Lock()
 
@@ -59,7 +65,6 @@ class SCRTInterface(BaseChainInterface):
             self.timer = Timer(self.sync_interval, self.schedule_sync)
             self.timer.start()
 
-
     def sync_account_number_and_sequence(self):
         """
         Syncs the account number and sequence with the latest data from the provider
@@ -67,17 +72,30 @@ class SCRTInterface(BaseChainInterface):
         try:
             with self.sequence_lock:
                 self.logger.info("Starting Secret sequence sync")
-                account_info = self.wallet.account_number_and_sequence()
-                self.account_number = account_info['account_number']
-                new_sequence = int(account_info['sequence'])
-                if self.sequence is None or new_sequence >= self.sequence:
-                    self.sequence = new_sequence
-                    self.logger.info("Secret sequence synced")
+
+                # Replace with your wallet address
+                url = f'{self.api_url}/cosmos/auth/v1beta1/accounts/{self.address}'
+
+                # Make the GET request to the URL
+                response = requests.get(url)
+                if response.status_code == 200:
+                    data = response.json()
+
+                    # Extract account number and sequence from the JSON response
+                    account_info = data.get('account', {})
+                    self.account_number = account_info.get('account_number')
+                    new_sequence = int(account_info.get('sequence', 0))
+
+                    if self.sequence is None or new_sequence >= self.sequence:
+                        self.sequence = new_sequence
+                        self.logger.info("Secret sequence synced")
+                    else:
+                        self.logger.warning(
+                            f"New sequence {new_sequence} is not greater than the old sequence {self.sequence}.")
                 else:
-                    self.logger.warning(
-                        f"New sequence {new_sequence} is not greater than the old sequence {self.sequence}.")
+                    self.logger.error(f"Failed to fetch account info: HTTP {response.status_code}")
         except Exception as e:
-            self.logger.error(f"Error syncing account number and sequence: {e}")
+            self.logger.error("An error occurred while syncing account number and sequence")
 
     def sign_and_send_transaction(self, tx):
         """
@@ -90,40 +108,53 @@ class SCRTInterface(BaseChainInterface):
 
         """
         max_retries = 20
-        try:
-            # Broadcast the transaction in SYNC mode
-            final_tx = self.provider.tx.broadcast_adapter(tx, mode=BroadcastMode.BROADCAST_MODE_ASYNC)
-            print(final_tx)
-            tx_hash = final_tx.txhash
-            self.logger.info(f"Transaction broadcasted with hash: {tx_hash}")
+        wait_interval = 3
+        max_broadcast_attempts = 3  # Number of times to retry the entire broadcast process
+        broadcast_attempt = 0
 
-            # Repeatedly fetch the transaction result until it's included in a block
-            for attempt in range(max_retries):
-                try:
-                    tx_result = self.provider.tx.tx_info(tx_hash)
-                    print(tx_result)
-                    if tx_result:
-                        self.logger.info(f"Transaction included in block: {tx_result.height}")
-                        return tx_result
-                except LCDResponseError as e:
-                    if 'not found' in str(e).lower():
-                        # Transaction not yet found, wait and retry
-                        self.logger.info(f"Transaction not found, retrying... ({attempt+1}/{max_retries})")
-                        sleep(3)
-                        continue
-                    else:
-                        self.logger.error(f"LCDResponseError while fetching tx result: {e}")
+        while broadcast_attempt < max_broadcast_attempts:
+            try:
+                # Broadcast the transaction in SYNC mode
+                final_tx = self.provider.tx.broadcast_adapter(tx, mode=BroadcastMode.BROADCAST_MODE_ASYNC)
+                tx_hash = final_tx.txhash
+                self.logger.info(f"Transaction broadcasted with hash: {tx_hash}")
+
+                # Repeatedly fetch the transaction result until it's included in a block
+                for attempt in range(max_retries):
+                    try:
+                        tx_result = self.provider.tx.tx_info(tx_hash)
+                        if tx_result:
+                            self.logger.info(f"Transaction included in block: {tx_result.height}")
+                            return tx_result  # Exit function if transaction is successfully included in a block
+                    except LCDResponseError as e:
+                        if 'not found' in str(e).lower():
+                            # Transaction not yet found, wait and retry
+                            self.logger.info(f"Transaction not found, retrying... ({attempt + 1}/{max_retries})")
+                            sleep(wait_interval)
+                            continue
+                        else:
+                            self.logger.error(f"LCDResponseError while fetching tx result: {e}")
+                            raise e
+                    except Exception as e:
+                        self.logger.error(f"Unexpected error while fetching tx result: {e}")
                         raise e
-                except Exception as e:
-                    self.logger.error(f"Unexpected error while fetching tx result: {e}")
-                    raise e
-            raise Exception(f"Transaction {tx_hash} not included in a block after {max_retries} retries")
-        except LCDResponseError as e:
-            self.logger.error(f"LCDResponseError during transaction broadcast: {e}")
-            raise e
-        except Exception as e:
-            self.logger.error(f"An unexpected error occurred during transaction broadcast: {e}")
-            raise e
+                # If max_retries are exceeded and no result is found, retry broadcasting
+                self.logger.warning(
+                    f"Transaction {tx_hash} not included in a block after {max_retries} retries. Retrying broadcast... ({broadcast_attempt + 1}/{max_broadcast_attempts})")
+
+            except LCDResponseError as e:
+                self.logger.error(f"LCDResponseError during transaction broadcast: {e}")
+                raise e
+            except Exception as e:
+                self.logger.error(f"An unexpected error occurred during transaction broadcast: {e}")
+                raise e
+
+            # Increment the broadcast attempt counter
+            broadcast_attempt += 1
+
+        # If all broadcast attempts fail, raise an exception
+        raise Exception(
+            f"Transaction could not be included in a block after {max_broadcast_attempts} broadcast attempts.")
 
     def get_last_block(self):
         """
@@ -167,12 +198,13 @@ class SCRTContract(BaseContractInterface):
         self.code_hash = code_hash
         self.abi = json.loads(abi)
         self.interface = interface
-        basicConfig(
-            level=DEBUG,
-            format="%(asctime)s [SCRT interface: %(levelname)8.8s] %(message)s",
-            handlers=[StreamHandler()],
-        )
-        self.logger = getLogger()
+        self.logger = getLogger("SCRT Interface")
+        self.logger.setLevel(INFO)
+        handler = StreamHandler()
+        formatter = logging.Formatter("%(asctime)s [SCRT Interface: %(levelname)4.8s] %(message)s")
+        handler.setFormatter(formatter)
+        self.logger.addHandler(handler)
+        self.logger.propagate = False
         self.lock = Lock()
         self.logger.info(f"Initialized SCRT interface for contract {self.address}")
         pass
@@ -260,7 +292,8 @@ class SCRTContract(BaseContractInterface):
             account_number=self.interface.account_number,
         )
         fee = self.interface.provider.tx.estimate_fee(options=tx_options)
-        fee.granter = self.interface.feegrant_address
+        if self.interface.feegrant_address is not None:
+            fee.granter = self.interface.feegrant_address
         tx_options = CreateTxOptions(
             msgs=[txn_msgs],
             gas=gas,

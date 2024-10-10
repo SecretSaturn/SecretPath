@@ -1,0 +1,423 @@
+#Mainnet Chains
+
+"42161": #Arbitrum One
+  active: false
+  type: "evm"
+  chain_id: "42161"
+  api_endpoint: https://arb1.arbitrum.io/rpc
+  contract_address: "0xfaFCfceC4e29e9b4ECc8C0a3f7df1011580EEEf2"
+  timeout: 0.5
+
+"1": #Ethereum
+  active: false
+  type: "evm"
+  chain_id: "1"
+  api_endpoint: https://rpc.flashbots.net
+  contract_address: "0xfaFCfceC4e29e9b4ECc8C0a3f7df1011580EEEf2"
+  timeout: 1
+
+"56": #BSC Chain
+  active: false
+  type: "evm"
+  chain_id: "56"
+  api_endpoint: https://bsc.drpc.org
+  contract_address: "0xfaFCfceC4e29e9b4ECc8C0a3f7df1011580EEEf2"
+  timeout: 1
+
+"137": #Polygon
+  active: false
+  type: "evm"
+  chain_id: "137"
+  api_endpoint: https://polygon-bor.publicnode.com
+  contract_address: "0xA91712bb011eFB27622ca2BAB940E2589954d3d7"
+  timeout: 1
+
+"10": #Optimsm
+  active: false
+  type: "evm"
+  chain_id: "10"
+  api_endpoint: https://mainnet.optimism.io
+  contract_address: "0xfaFCfceC4e29e9b4ECc8C0a3f7df1011580EEEf2"
+  timeout: 1
+
+"43114": #Avalance C-Chain
+  active: false
+  type: "evm"
+  chain_id: "43114"
+  api_endpoint: https://avalanche-c-chain.publicnode.com
+  contract_address: "0xfaFCfceC4e29e9b4ECc8C0a3f7df1011580EEEf2"
+  timeout: 1
+
+"8453": #Base
+  active: false
+  type: "evm"
+  chain_id: "8453"
+  api_endpoint: https://base.publicnode.com
+  contract_address: "0xf50c73581d6def7f911aC1D6d0d5e928691AAa9E"
+  timeout: 1
+
+"59144": #Linea
+  active: false
+  type: "evm"
+  chain_id: "59144"
+  api_endpoint: https://rpc.linea.build
+  contract_address: "0xfaFCfceC4e29e9b4ECc8C0a3f7df1011580EEEf2"
+  timeout: 1
+
+"534352": #Scroll
+  active: true
+  type: "evm"
+  chain_id: "534352"
+  api_endpoint: https://scroll.drpc.org
+  contract_address: "0x59D8C9591dB7179c5d592c5bCD42694021885aFC"
+  timeout: 1
+
+"1088": #Metis
+  active: false
+  type: "evm"
+  chain_id: "1088"
+  api_endpoint: https://metis.drpc.org
+  contract_address: "0x874303B788c8A13a39EFA38ab6C3b77cd4578129"
+  timeout: 1
+
+"50": #XDC Network
+  active: false
+  type: "evm"
+  chain_id: "50"
+  api_endpoint: https://rpc1.xinfin.network
+  contract_address: "0x8EaAB5e8551781F3E8eb745E7fcc7DAeEFd27b1f"
+  timeout: 1
+
+"1313161554": #Near Aurora
+  active: false
+  type: "evm"
+  chain_id: "1313161554"
+  api_endpoint: https://aurora.drpc.org
+  contract_address: "0x8EaAB5e8551781F3E8eb745E7fcc7DAeEFd27b1f"
+  timeout: 1
+
+"1135": #Lisk
+  active: false
+  type: "evm"
+  chain_id: "1135"
+  api_endpoint: https://rpc.api.lisk.com
+  contract_address: "0x8EaAB5e8551781F3E8eb745E7fcc7DAeEFd27b1f"
+  timeout: 1
+
+"2016": #Mainnetz Mainnet
+  active: false
+  type: "evm"
+  chain_id: "2016"
+  api_endpoint: https://mainnet-rpc.mainnetz.io
+  contract_address: "0x874303B788c8A13a39EFA38ab6C3b77cd4578129"
+  timeout: 1
+
+"5000": #Mantle
+  active: false
+  type: "evm"
+  chain_id: "5000"
+  api_endpoint: https://rpc.mantle.xyz
+  contract_address: "0x8EaAB5e8551781F3E8eb745E7fcc7DAeEFd27b1f"
+  timeout: 1
+
+"1116": #Core
+  active: false
+  type: "evm"
+  chain_id: "1116"
+  api_endpoint: https://rpc.ankr.com/core
+  contract_address: "0x8EaAB5e8551781F3E8eb745E7fcc7DAeEFd27b1f"
+  timeout: 1
+
+"1284": #Moonbeam
+  active: false
+  type: "evm"
+  chain_id: "1284"
+  api_endpoint: https://rpc.api.moonbeam.network
+  contract_address: "0x8EaAB5e8551781F3E8eb745E7fcc7DAeEFd27b1f"
+  timeout: 1
+
+"1285": #Moonriver
+  active: false
+  type: "evm"
+  chain_id: "1285"
+  api_endpoint: https://moonriver-rpc.publicnode.com
+  contract_address: "0x8EaAB5e8551781F3E8eb745E7fcc7DAeEFd27b1f"
+  timeout: 1
+
+"1329": #Sei
+  active: false
+  type: "evm"
+  chain_id: "1329"
+  api_endpoint: https://evm-rpc.sei-apis.com
+  contract_address: "0x8EaAB5e8551781F3E8eb745E7fcc7DAeEFd27b1f"
+  timeout: 1
+
+"100": #Gnosis
+  active: false
+  type: "evm"
+  chain_id: "100"
+  api_endpoint: https://gnosis-rpc.publicnode.com
+  contract_address: "0x8EaAB5e8551781F3E8eb745E7fcc7DAeEFd27b1f"
+  timeout: 1
+
+"90002": #Ubit Mainnet
+  active: false
+  type: "evm"
+  chain_id: "90002"
+  api_endpoint: https://rpc.ubitscan.io/
+  contract_address: "0x8EaAB5e8551781F3E8eb745E7fcc7DAeEFd27b1f"
+  timeout: 1
+
+
+"25": #Cronos Mainnet
+  active: false
+  type: "evm"
+  chain_id: "25"
+  api_endpoint: "https://cronos-evm-rpc.publicnode.com"
+  contract_address: "0x59D8C9591dB7179c5d592c5bCD42694021885aFC"
+  timeout: 1
+
+"388": #Cronos zkEVM Mainnet
+  active: false
+  type: "evm"
+  chain_id: "388"
+  api_endpoint: "https://mainnet.zkevm.cronos.org"
+  contract_address: "0x81844Ffce07D2BD4729583a97a7931Fe94b652e5"
+  timeout: 1
+
+"324": #Zksync Era Mainnet
+  active: false
+  type: "evm"
+  chain_id: "324"
+  api_endpoint: "https://mainnet.era.zksync.io"
+  contract_address: "0x81844Ffce07D2BD4729583a97a7931Fe94b652e5"
+  timeout: 1
+
+"secret-4":
+  active: false
+  type: "secret"
+  chain_id: "secret-4"
+  api_endpoint: "https://lcd.mainnet.secretsaturn.net"
+  contract_address: "secret1qzk574v8lckjmqdg3r3qf3337pk45m7qd8x02a"
+  code_hash: "012dd8efab9526dec294b6898c812ef6f6ad853e32172788f54ef3c305c1ecc5"
+  feegrant_address: "secret1tq6y8waegggp4fv2fcxk3zmpsmlfadyc7lsd69"
+
+
+#Testnet Chains
+
+"11155111": #Ethereum Sepolia
+  active: false
+  type: "evm"
+  chain_id: "11155111"
+  api_endpoint: https://eth-sepolia-public.unifra.io
+  contract_address: "0x3879E146140b627a5C858a08e507B171D9E43139"
+  timeout: 1
+
+"80002": #Polygon Amoy
+  active: false
+  type: "evm"
+  chain_id: "80002"
+  api_endpoint: https://rpc-amoy.polygon.technology
+  contract_address: "0x8EaAB5e8551781F3E8eb745E7fcc7DAeEFd27b1f"
+  timeout: 1
+
+"84532": #Base Sepolia
+  active: false
+  type: "evm"
+  chain_id: "84532"
+  api_endpoint: https://sepolia.base.org
+  contract_address: "0xfaFCfceC4e29e9b4ECc8C0a3f7df1011580EEEf2"
+  timeout: 1
+
+"11155420": #Optmism Sepolia
+  active: false
+  type: "evm"
+  chain_id: "11155420"
+  api_endpoint: https://sepolia.optimism.io
+  contract_address: "0xf50c73581d6def7f911aC1D6d0d5e928691AAa9E"
+  timeout: 1
+
+"421614": #Arbitrum Sepolia
+  active: false
+  type: "evm"
+  chain_id: "421614"
+  api_endpoint: https://sepolia-rollup.arbitrum.io/rpc
+  contract_address: "0xfaFCfceC4e29e9b4ECc8C0a3f7df1011580EEEf2"
+  timeout: 0.5
+
+"534351": #Scroll Sepolia
+  active: true
+  type: "evm"
+  chain_id: "534351"
+  api_endpoint: https://sepolia-rpc.scroll.io
+  contract_address: "0x4c14a6A0CD2DA2848D3C31285B828F6364087735"
+  timeout: 1
+
+"128123": #Tezos Etherlink Testnet
+  active: false
+  type: "evm"
+  chain_id: "128123"
+  api_endpoint: https://node.ghostnet.etherlink.com
+  contract_address: "0x4c14a6A0CD2DA2848D3C31285B828F6364087735"
+  timeout: 1
+
+"1802203764": #Kakarot Sepolia
+  active: false
+  type: "evm"
+  chain_id: "1802203764"
+  api_endpoint: https://sepolia-rpc.kakarot.org
+  contract_address: "0x874303B788c8A13a39EFA38ab6C3b77cd4578129"
+  timeout: 1
+
+"59902": #Metis Sepolia
+  active: false
+  type: "evm"
+  chain_id: "59902"
+  api_endpoint: https://sepolia.metisdevops.link
+  contract_address: "0x8EaAB5e8551781F3E8eb745E7fcc7DAeEFd27b1f"
+  timeout: 1
+
+"1313161555": #Near Aurora Testnet
+  active: false
+  type: "evm"
+  chain_id: "1313161555"
+  api_endpoint: https://testnet.aurora.dev
+  contract_address: "0x6f1A599A902982dcD9a632b15D21628cb17f5Cd2"
+  timeout: 1
+
+"59141": #Linea Sepolia
+  active: false
+  type: "evm"
+  chain_id: "59141"
+  api_endpoint: https://rpc.sepolia.linea.build
+  contract_address: "0x8EaAB5e8551781F3E8eb745E7fcc7DAeEFd27b1f"
+  timeout: 1
+
+"51": #XDC Apothem
+  active: false
+  type: "evm"
+  chain_id: "51"
+  api_endpoint: https://erpc.apothem.network
+  contract_address: "0x8EaAB5e8551781F3E8eb745E7fcc7DAeEFd27b1f"
+  timeout: 1
+
+"4202": #Lisk Sepolia
+  active: false
+  type: "evm"
+  chain_id: "4202"
+  api_endpoint: https://rpc.sepolia-api.lisk.com
+  contract_address: "0x8EaAB5e8551781F3E8eb745E7fcc7DAeEFd27b1f"
+  timeout: 1
+
+"9768": #Mainnetz Testnet
+  active: false
+  type: "evm"
+  chain_id: "9768"
+  api_endpoint: https://testnet-rpc.mainnetz.io
+  contract_address: "0x8EaAB5e8551781F3E8eb745E7fcc7DAeEFd27b1f"
+  timeout: 1
+
+"1287": #Moonbase Alpha
+  active: false
+  type: "evm"
+  chain_id: "1287"
+  api_endpoint: "https://rpc.testnet.moonbeam.network"
+  contract_address: "0x874303B788c8A13a39EFA38ab6C3b77cd4578129"
+  timeout: 1
+
+"1115": #Core Testnet
+  active: false
+  type: "evm"
+  chain_id: "1115"
+  api_endpoint: "https://rpc.test.btcs.network"
+  contract_address: "0x8EaAB5e8551781F3E8eb745E7fcc7DAeEFd27b1f"
+  timeout: 1
+
+"5003": #Mantle Sepolia
+  active: false
+  type: "evm"
+  chain_id: "5003"
+  api_endpoint: "https://rpc.sepolia.mantle.xyz"
+  contract_address: "0x8EaAB5e8551781F3E8eb745E7fcc7DAeEFd27b1f"
+  timeout: 1
+
+"44433": #UBIT Testnet
+  active: false
+  type: "evm"
+  chain_id: "44433"
+  api_endpoint: "https://testnet-rpc.ubitscan.io/"
+  contract_address: "0x8EaAB5e8551781F3E8eb745E7fcc7DAeEFd27b1f"
+  timeout: 1
+
+"1995": #Edexa
+  active: false
+  type: "evm"
+  chain_id: "1995"
+  api_endpoint: "https://testnet.edexa.network/rpc"
+  contract_address: "0x9Bb2D52521Bd93481106D7C35787BD33ceAbb836"
+  timeout: 1
+
+"713715": #Sei Devnet
+  active: false
+  type: "evm"
+  chain_id: "713715"
+  api_endpoint: "https://evm-rpc-arctic-1.sei-apis.com"
+  contract_address: "0x8EaAB5e8551781F3E8eb745E7fcc7DAeEFd27b1f"
+  timeout: 1
+
+"10200": #Gnosis Chiado
+  active: false
+  type: "evm"
+  chain_id: "10200"
+  api_endpoint: "https://gnosis-chiado-rpc.publicnode.com"
+  contract_address: "0x8EaAB5e8551781F3E8eb745E7fcc7DAeEFd27b1f"
+  timeout: 1
+
+"338": #Cronos Testnet
+  active: false
+  type: "evm"
+  chain_id: "338"
+  api_endpoint: "https://cronos-testnet.drpc.org"
+  contract_address: "0x8EaAB5e8551781F3E8eb745E7fcc7DAeEFd27b1f"
+  timeout: 1
+
+"282": #Cronos zkEVM Testnet
+  active: false
+  type: "evm"
+  chain_id: "282"
+  api_endpoint: "https://testnet.zkevm.cronos.org"
+  contract_address: "0x3140D461c928381FdA7EFe13e0a4cDfC1B4eE540"
+  timeout: 1
+
+"300": #Zksync Era Testnet
+  active: false
+  type: "evm"
+  chain_id: "300"
+  api_endpoint: "https://sepolia.era.zksync.dev"
+  contract_address: "0xAaA666CE51E4c4dcB50781d4F84461e267392fC9"
+  timeout: 1
+
+"SolDN": #Solana DevNet
+  active: false
+  type: "solana"
+  chain_id: "SolDN"
+  api_endpoint: https://rpc.ankr.com/solana_devnet
+  program_id: "DKDX8XbTnCgEk8o1RNnCUokiCmadG1Ch5HLxaz7CnhcD"
+  timeout: 1
+
+"SolTN": #Solana TestNet
+  active: false
+  type: "solana"
+  chain_id: "SolTN"
+  api_endpoint: https://rpc.ankr.com/solana_testnet
+  program_id: "DKDX8XbTnCgEk8o1RNnCUokiCmadG1Ch5HLxaz7CnhcD"
+  timeout: 1
+
+"pulsar-3":
+  active: true
+  type: "secret"
+  chain_id: "pulsar-3"
+  api_endpoint: "http://81.171.3.86:1317"
+  contract_address: "secret10ex7r7c4y704xyu086lf74ymhrqhypayfk7fkj"
+  code_hash: "ad8ca07ffba1cb26ebf952c29bc4eced8319c171430993e5b5089887f27b3f70"
+  feegrant_address: "secret1gutgtpw0caqfsp8ja0r5yecv8jxz2y8vhpnck8"
