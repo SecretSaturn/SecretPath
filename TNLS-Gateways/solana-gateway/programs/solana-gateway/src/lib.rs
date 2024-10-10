@@ -243,10 +243,10 @@ mod solana_gateway {
 
         let payload = Payload {
             data:format!("{{\"numWords\":{}}}", num_words),
-            routing_info: VRF_CONTRACT_ADDRESS.to_string().into(),
-            routing_code_hash: VRF_CODE_HASH.to_string().into(),
-            user_address: vec![0; 4],
-            user_key: vec![0; 4],
+            routing_info: VRF_CONTRACT_ADDRESS.into(),
+            routing_code_hash: VRF_CODE_HASH.into(),
+            user_address: "AAA=".to_string(),
+            user_key: "AAA=".to_string(),
             callback_address: callback_address_encoded.into(),
             callback_selector: callback_selector_encoded.into(),
             callback_gas_limit: callback_compute_limit,
@@ -276,11 +276,11 @@ mod solana_gateway {
         let log_new_task = LogNewTask {
             task_id: task_id,
             source_network: CHAIN_ID.to_string(),
-            user_address: vec![0; 4],
+            user_address: vec![0; 2],
             routing_info: VRF_CONTRACT_ADDRESS.to_string().into(),
             payload_hash: generated_payload_hash,
-            user_key: vec![0; 4],
-            user_pubkey: vec![0; 4],
+            user_key: vec![0; 2],
+            user_pubkey: vec![0; 2],
             routing_code_hash: VRF_CODE_HASH.to_string(),
             task_destination_network: TASK_DESTINATION_NETWORK.to_string().into(),
             handle: "request_random".to_string(),
@@ -718,17 +718,17 @@ pub struct Payload {
     /// Input values as JSON string.
     pub data: String,
     /// Destination contract address.
-    pub routing_info: Vec<u8>,
+    pub routing_info: String,
     /// Destination contract code hash.
     pub routing_code_hash: String,
     /// User public chain address.
-    pub user_address: Vec<u8>,
+    pub user_address: String,
     /// User public key from payload encryption (not their wallet public key).
-    pub user_key: Vec<u8>,
+    pub user_key: String,
     /// Callback address for the post execution message.
-    pub callback_address: Vec<u8>,
+    pub callback_address: String,
     /// Callback selector for the post execution message.
-    pub callback_selector: Vec<u8>,
+    pub callback_selector: String,
     /// Callback gas limit for the post execution message.
     pub callback_gas_limit: u32,
 }
