@@ -50,7 +50,7 @@ const TASK_SEED: &[u8] = b"task_state";
 const LAMPORTS_PER_COMPUTE_UNIT: f64 = 0.1;
 const TASK_STATE_SIZE: u64 = 296900;
 const LAMPORTS_PER_SIGNATURE: u64 = 5000;
-const MAX_TASKS: u64 = TASK_STATE_SIZE/33;
+const MAX_TASKS: u64 = TASK_STATE_SIZE/41;
 
 #[program]
 mod solana_gateway {
@@ -506,8 +506,8 @@ fn write_task_to_task_state(
         let start = index * 41;
         task_state.tasks[start..(start + 32)].copy_from_slice(&task.payload_hash);
         // Convert the u64 task_id to low endian bytes and copy
-        task_state.tasks[(start + 33)..(start + 41)].copy_from_slice(&task.task_id.to_le_bytes());
-        task_state.tasks[start + 41] = task.completed as u8;
+        task_state.tasks[(start + 32)..(start + 40)].copy_from_slice(&task.task_id.to_le_bytes());
+        task_state.tasks[start + 40] = task.completed as u8;
         Ok(())
     }
 }
@@ -527,11 +527,11 @@ fn get_task_from_task_state(
        
        // Convert the slice to fixed-size low endian bytes and then to u64
        let task_id: u64 = u64::from_le_bytes(
-        task_state.tasks[(start + 33)..(start + 41)]
+        task_state.tasks[(start + 32)..(start + 40)]
         .try_into()
         .map_err(|_| TaskError::InvalidTaskId)?
         );
-        let completed: bool = task_state.tasks[start + 41] != 0;
+        let completed: bool = task_state.tasks[start + 40] != 0;
         Ok(Task {
             payload_hash: payload_hash,
             task_id: task_id,
